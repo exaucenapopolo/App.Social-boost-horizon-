@@ -1,0 +1,142 @@
+{
+  "expo": {
+    "name": "Social Boost Horizon",
+    "slug": "social-boost-horizon",
+    "version": "1.15.0",
+    "owner": "mcexau",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "socialboost",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.socialboosthorizon.app"
+    },
+    "android": {
+      "package": "com.socialboosthorizon.app",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0A162B"
+      },
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#6C3AF5"
+      },
+      "versionCode": 32
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#6C3AF5",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "Social Boost Horizon",
+          "androidNotificationChannels": [
+            {
+              "id": "default",
+              "name": "Social Boost Horizon",
+              "importance": 5,
+              "vibrationPattern": [
+                0,
+                250,
+                250,
+                250
+              ],
+              "lightColor": "#6C3AF5",
+              "sound": "default",
+              "enableLights": true,
+              "showBadge": true,
+              "lockscreenVisibility": 1
+            },
+            {
+              "id": "orders",
+              "name": "Commandes",
+              "importance": 5,
+              "vibrationPattern": [
+                0,
+                250,
+                250,
+                250
+              ],
+              "lightColor": "#4CAF50",
+              "sound": "default",
+              "enableLights": true,
+              "showBadge": true,
+              "lockscreenVisibility": 1
+            },
+            {
+              "id": "wallet",
+              "name": "Portefeuille",
+              "importance": 5,
+              "vibrationPattern": [
+                0,
+                250,
+                250,
+                250
+              ],
+              "lightColor": "#2196F3",
+              "sound": "default",
+              "enableLights": true,
+              "showBadge": true,
+              "lockscreenVisibility": 1
+            },
+            {
+              "id": "parrainage",
+              "name": "Parrainage",
+              "importance": 5,
+              "vibrationPattern": [
+                0,
+                250,
+                250,
+                250
+              ],
+              "lightColor": "#FFD700",
+              "sound": "default",
+              "enableLights": true,
+              "showBadge": true,
+              "lockscreenVisibility": 1
+            }
+          ]
+        }
+      ]
+    ],
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/39b5dcbc-9b5a-401e-a6da-4827dade8764",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "39b5dcbc-9b5a-401e-a6da-4827dade8764"
+      }
+    }
+  }
+}

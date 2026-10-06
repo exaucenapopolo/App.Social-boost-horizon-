@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Espace Revendeur – Social Boost Horizon</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@600;700;800&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <style>
+    :root {
+      --primary-green: #22c55e;
+      --dark-green: #16a34a;
+      --gold: #fbbf24;
+      --gold-dark: #d97706;
+      --dark-bg: #0a1628;
+      --card-bg: rgba(16, 32, 52, 0.95);
+      --card-border: rgba(34, 197, 94, 0.3);
+      --text-white: #FFFFFF;
+      --text-light: rgba(255, 255, 255, 0.85);
+      --text-muted: rgba(255, 255, 255, 0.6);
+      --font: 'Roboto', sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font);
+      color: var(--text-white);
+      background: var(--dark-bg);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .animated-bg {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+      background: linear-gradient(135deg, #0a1628 0%, #0f2318 50%, #0a1628 100%);
+    }
+    .animated-bg::before {
+      content: ""; position: absolute; width: 100%; height: 100%;
+      background-image: radial-gradient(circle at 20% 50%, rgba(34, 197, 94, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 30%, rgba(251, 191, 36, 0.08) 0%, transparent 40%);
+    }
+
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: linear-gradient(135deg, var(--dark-green) 0%, #0f5132 100%);
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.8rem 2rem; box-shadow: 0 4px 30px rgba(34, 197, 94, 0.2);
+    }
+    .logo-text { display: flex; flex-direction: column; text-decoration: none; line-height: 1.1; font-family: 'Poppins', sans-serif; }
+    .logo-text .text-social, .logo-text .text-horizon { color: var(--text-white); font-size: 1rem; font-weight: 600; }
+    .logo-text .boost-line { display: flex; align-items: center; color: var(--gold); font-size: 1.4rem; font-weight: 800; }
+    .logo-text .boost-line img { height: 1.4rem; margin-right: 0.3rem; border-radius: 50%; }
+    .logo-text .pro-badge { display: inline-block; background: var(--gold); color: #0a1628; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 700; margin-left: 8px; }
+
+    .icon-hamburger { font-size: 1.5rem; color: var(--text-white); cursor: pointer; padding: 8px; }
+    .mobile-menu {
+      display: none; position: absolute; top: 62px; right: 1rem;
+      background: var(--card-bg); backdrop-filter: blur(20px);
+      border: 1px solid var(--card-border); border-radius: 15px;
+      padding: 1rem; flex-direction: column; z-index: 200; min-width: 220px;
+    }
+    header.open .mobile-menu { display: flex; }
+    .mobile-menu a {
+      color: var(--text-white); text-decoration: none; padding: 0.7rem 1rem;
+      font-weight: 500; border-radius: 8px; display: flex; align-items: center;
+      transition: all 0.3s;
+    }
+    .mobile-menu a i { margin-right: 10px; color: var(--primary-green); width: 20px; }
+    .mobile-menu a:hover { background: rgba(34, 197, 94, 0.15); }
+
+    .app-download-banner {
+      background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+      padding: 10px 20px; text-align: center;
+      display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;
+    }
+    .app-download-banner span { font-weight: 600; color: #0a1628; }
+    .app-download-banner a {
+      background: rgba(0,0,0,0.2); color: #0a1628; padding: 6px 18px;
+      border-radius: 20px; text-decoration: none; font-weight: 700;
+      display: flex; align-items: center; gap: 6px; transition: all 0.3s;
+    }
+    .app-download-banner a:hover { background: rgba(0,0,0,0.35); }
+
+    .reseller-stats {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px; padding: 20px; max-width: 800px; margin: 0 auto;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 32, 52, 0.9));
+      border: 1px solid var(--card-border); border-radius: 15px; padding: 18px;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--primary-green), var(--gold));
+    }
+    .stat-card .stat-icon { font-size: 1.3rem; color: var(--gold); margin-bottom: 8px; }
+    .stat-card .stat-value { font-size: 1.4rem; font-weight: 700; color: var(--text-white); }
+    .stat-card .stat-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 5px; }
+    .stat-card.discount .stat-value { color: var(--gold); }
+    .stat-card.level .stat-value { color: var(--primary-green); font-size: 1.1rem; }
+
+    .services-count {
+      text-align: center; padding: 15px; margin: 15px auto; max-width: 800px;
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(251, 191, 36, 0.05));
+      border-radius: 15px; border: 1px solid var(--card-border);
+    }
+    .services-count .count { font-size: 1.8rem; font-weight: 800; color: var(--gold); }
+    .services-count .label { color: var(--text-muted); font-size: 0.85rem; }
+
+    .platforms-section { max-width: 800px; margin: 15px auto; padding: 0 15px; }
+    .platforms-title { text-align: center; margin-bottom: 12px; font-size: 1rem; color: var(--text-muted); }
+    .platforms {
+      display: flex; justify-content: center; gap: 10px; padding: 15px;
+      background: var(--card-bg); border-radius: 18px; overflow-x: auto;
+      flex-wrap: wrap; border: 1px solid var(--card-border);
+    }
+    .platform-icon {
+      width: 50px; height: 50px; cursor: pointer; border-radius: 12px;
+      padding: 7px; transition: all 0.3s ease; position: relative;
+      background: rgba(255,255,255,0.03); display: flex; align-items: center; justify-content: center;
+    }
+    .platform-icon img { width: 34px; height: 34px; filter: brightness(0.75); transition: all 0.3s; }
+    .platform-icon:hover { transform: translateY(-4px); background: rgba(34, 197, 94, 0.15); }
+    .platform-icon:hover img { filter: brightness(1); }
+    .platform-icon.active {
+      background: linear-gradient(135deg, var(--primary-green), var(--dark-green));
+      box-shadow: 0 5px 20px rgba(34, 197, 94, 0.4);
+    }
+    .platform-icon.active img { filter: brightness(1.2); }
+    .platform-icon .platform-name {
+      position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%);
+      font-size: 0.65rem; color: var(--text-muted); white-space: nowrap;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .platform-icon:hover .platform-name, .platform-icon.active .platform-name { opacity: 1; }
+
+    .content {
+      max-width: 650px; width: 95%; margin: 25px auto; padding: 28px;
+      background: var(--card-bg); border-radius: 22px;
+      border: 1px solid var(--card-border); box-shadow: 0 15px 45px rgba(0,0,0,0.4);
+    }
+    .page-title { text-align: center; margin-bottom: 22px; }
+    .page-title h2 {
+      font-family: 'Montserrat', sans-serif; font-size: 1.5rem; font-weight: 700;
+      background: linear-gradient(90deg, var(--gold), var(--primary-green));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .page-title .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 5px; }
+
+    .balance-display {
+      text-align: center; padding: 18px; margin-bottom: 20px;
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 32, 52, 0.8));
+      border-radius: 15px; border: 1px solid var(--card-border);
+    }
+    .balance-display span { color: var(--text-muted); font-size: 0.9rem; }
+    .balance-display .balance-amount { display: block; font-size: 1.7rem; font-weight: 700; color: var(--primary-green); margin-top: 5px; }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; margin-bottom: 10px; font-weight: 600; color: var(--text-light); font-size: 0.9rem; }
+    .form-group label i { margin-right: 8px; color: var(--primary-green); }
+    .form-group select, .form-group input, .form-group textarea {
+      width: 100%; padding: 13px 16px; border: 2px solid var(--card-border);
+      border-radius: 12px; background: rgba(10, 22, 40, 0.9); color: var(--text-white);
+      font-size: 0.95rem; transition: all 0.3s;
+    }
+    .form-group select:focus, .form-group input:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--primary-green);
+      box-shadow: 0 0 18px rgba(34, 197, 94, 0.2);
+    }
+    .form-group select option { background: var(--dark-bg); }
+
+    .category-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .category-btn {
+      padding: 9px 18px; border: 2px solid var(--card-border);
+      border-radius: 22px; background: transparent; color: var(--text-light);
+      cursor: pointer; font-weight: 500; transition: all 0.3s; font-size: 0.85rem;
+    }
+    .category-btn:hover { border-color: var(--primary-green); background: rgba(34, 197, 94, 0.1); }
+    .category-btn.active {
+      background: linear-gradient(135deg, var(--primary-green), var(--dark-green));
+      border-color: transparent; color: white; box-shadow: 0 4px 15px rgba(34, 197, 94, 0.35);
+    }
+    .category-btn i { margin-right: 5px; }
+
+    .service-info {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(16, 32, 52, 0.8));
+      border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 16px; margin-bottom: 18px;
+    }
+    .service-info .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center; }
+    .service-info .info-row:last-child { margin-bottom: 0; }
+    .service-info .info-label { color: var(--text-muted); font-size: 0.85rem; }
+    .service-info .info-value { font-weight: 600; color: var(--text-white); }
+
+    .price-breakdown {
+      background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(34, 197, 94, 0.1));
+      border: 2px solid rgba(251, 191, 36, 0.3); border-radius: 15px; padding: 20px; margin: 18px 0;
+    }
+    .price-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.95rem; }
+    .price-row.original { color: var(--text-muted); text-decoration: line-through; }
+    .price-row.discount { color: var(--gold); font-weight: 600; }
+    .price-row.final {
+      font-size: 1.15rem; font-weight: 700; color: var(--primary-green);
+      border-top: 1px solid rgba(255,255,255,0.15); padding-top: 12px; margin-top: 12px;
+    }
+    .savings-badge {
+      display: block; background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.1));
+      color: var(--gold); padding: 10px 15px; border-radius: 20px;
+      font-size: 0.9rem; font-weight: 600; margin-top: 12px; text-align: center;
+    }
+
+    .quantity-error { color: #f87171; font-size: 0.85rem; margin-top: 8px; display: none; }
+    .comments-count { color: var(--primary-green); font-size: 0.9rem; margin-top: 8px; }
+
+    .contact-section { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--card-border); }
+    .contact-fields { display: none; margin-top: 10px; }
+    .contact-fields.active { display: block; }
+
+    .btn-submit {
+      width: 100%; padding: 16px; margin-top: 22px;
+      background: linear-gradient(135deg, var(--primary-green) 0%, var(--dark-green) 100%);
+      color: white; font-size: 1.05rem; font-weight: 700; border: none;
+      border-radius: 14px; cursor: pointer; transition: all 0.3s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      box-shadow: 0 8px 25px rgba(34, 197, 94, 0.35);
+    }
+    .btn-submit:hover { transform: translateY(-3px); box-shadow: 0 12px 35px rgba(34, 197, 94, 0.45); }
+    .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .btn-submit .spinner { display: none; }
+    .btn-submit.loading .spinner { display: inline-block; }
+    .btn-submit.loading .btn-text { display: none; }
+    
+    .boost-tips-btn {
+      width: 100%; padding: 15px; margin-top: 15px;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white; font-size: 1rem; font-weight: 600; border: none;
+      border-radius: 12px; cursor: pointer; transition: all 0.3s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      text-decoration: none;
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.3);
+    }
+    .boost-tips-btn:hover { 
+      transform: translateY(-2px); 
+      box-shadow: 0 10px 30px rgba(245, 158, 11, 0.4); 
+    }
+    .boost-tips-btn i { font-size: 1.2rem; }
+
+    .notification-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.88); z-index: 1000; align-items: center; justify-content: center;
+      backdrop-filter: blur(5px);
+    }
+    .notification-box {
+      background: var(--card-bg); border: 2px solid var(--primary-green);
+      border-radius: 22px; padding: 35px; max-width: 380px; text-align: center;
+      animation: slideUp 0.4s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .notification-icon { font-size: 3.5rem; margin-bottom: 18px; }
+    .notification-message { color: var(--text-light); margin-bottom: 22px; line-height: 1.6; font-size: 0.95rem; }
+    .notification-close {
+      padding: 12px 35px; background: linear-gradient(135deg, var(--primary-green), var(--dark-green));
+      color: white; border: none; border-radius: 22px; cursor: pointer; font-size: 1rem; font-weight: 600;
+    }
+    .notification-overlay.error .notification-box { border-color: #f87171; }
+    
+    .history-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 25px;
+      background: linear-gradient(45deg, #8B5CF6, #06B6D4);
+      color: white;
+      text-decoration: none;
+      border-radius: 25px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+    }
+    .history-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+    }
+
+    footer {
+      text-align: center; padding: 22px; margin-top: 35px;
+      background: linear-gradient(135deg, var(--dark-green), #0f5132);
+      color: rgba(255,255,255,0.9); font-size: 0.85rem;
+    }
+
+    .loading-skeleton {
+      background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+      background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 10px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    .service-description-box {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(251, 191, 36, 0.05));
+        border: 1px solid rgba(34, 197, 94, 0.25);
+        border-radius: 15px;
+        padding: 18px;
+        margin-bottom: 18px;
+        display: none;
+      }
+      .service-description-box.visible { display: block; }
+      .svc-desc-block { font-size: 0.88rem; line-height: 1.6; }
+      .svc-desc-title { font-size: 1rem; font-weight: 700; color: var(--primary-green); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+      .svc-desc-what { color: var(--text-light); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+      .svc-desc-what i { color: var(--primary-green); }
+      .svc-desc-text { color: var(--text-muted); margin-bottom: 14px; }
+      .svc-desc-quality { color: var(--text-light); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+      .svc-desc-quality i { color: var(--gold); }
+      .svc-desc-quality-detail { color: var(--text-muted); font-size: 0.82rem; margin-bottom: 12px; font-style: italic; }
+      .q-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 15px; font-size: 0.75rem; font-weight: 600; }
+      .q-badge i { font-size: 0.7rem; }
+      .q-nodrop { background: rgba(34, 197, 94, 0.15); color: var(--primary-green); }
+      .q-lifetime { background: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+      .q-guaranteed { background: rgba(251, 191, 36, 0.15); color: var(--gold); }
+      .q-refill { background: rgba(139, 92, 246, 0.15); color: #8B5CF6; }
+      .q-hq { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
+      .q-premium { background: rgba(251, 191, 36, 0.15); color: var(--gold); }
+      .q-real { background: rgba(34, 197, 94, 0.15); color: var(--primary-green); }
+      .q-active { background: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+      .q-instant { background: rgba(255, 107, 157, 0.15); color: #ff6b9d; }
+      .q-fast { background: rgba(251, 191, 36, 0.15); color: var(--gold); }
+      .q-slow { background: rgba(139, 92, 246, 0.15); color: #8B5CF6; }
+      .svc-desc-advantages { color: var(--text-light); margin-bottom: 12px; }
+      .svc-desc-advantages i { color: var(--gold); }
+      .svc-desc-advantages ul { list-style: none; padding-left: 20px; margin-top: 6px; }
+      .svc-desc-advantages ul li { color: var(--text-muted); margin-bottom: 4px; position: relative; }
+      .svc-desc-advantages ul li::before { content: "✓"; color: var(--primary-green); position: absolute; left: -18px; font-weight: bold; }
+      .svc-desc-target { color: var(--text-light); margin-bottom: 10px; padding: 8px 12px; background: rgba(34, 197, 94, 0.08); border-radius: 8px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .svc-desc-target i { color: var(--gold); }
+      .svc-desc-link-info { color: var(--text-light); margin-bottom: 10px; padding: 8px 12px; background: rgba(245, 158, 11, 0.08); border-radius: 8px; font-size: 0.85rem; display: flex; align-items: flex-start; gap: 8px; }
+      .svc-desc-link-info i { color: var(--gold); margin-top: 2px; }
+      .svc-desc-warning { color: #f59e0b; margin-top: 10px; padding: 10px 12px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; font-size: 0.83rem; display: flex; align-items: flex-start; gap: 8px; }
+      .svc-desc-warning i { color: #f59e0b; margin-top: 2px; }
+      .svc-desc-how { color: var(--text-light); }
+      .svc-desc-how i { color: var(--gold); }
+      .svc-desc-how p { color: var(--text-muted); margin-top: 6px; }
+      .drop-notice {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(239, 68, 68, 0.05));
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 18px;
+        display: none;
+      }
+      .drop-notice.visible { display: block; }
+      .drop-notice-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.9rem; color: var(--gold); }
+      .drop-notice p { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px; line-height: 1.5; }
+      .drop-notice-link {
+        display: inline-flex; align-items: center; gap: 6px;
+        color: var(--primary-green); text-decoration: none; font-weight: 600; font-size: 0.85rem;
+        padding: 6px 14px; border-radius: 8px; background: rgba(34, 197, 94, 0.1);
+        transition: all 0.3s ease;
+      }
+      .drop-notice-link:hover { background: rgba(34, 197, 94, 0.2); }
+
+    @media (max-width: 600px) {
+      header { padding: 0.7rem 1rem; }
+      .content { padding: 18px; margin: 12px; border-radius: 18px; }
+      .reseller-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 12px; }
+      .platforms { gap: 8px; padding: 12px; }
+      .platform-icon { width: 44px; height: 44px; }
+      .platform-icon img { width: 28px; height: 28px; }
+      .category-btn { padding: 7px 14px; font-size: 0.8rem; }
+      .balance-display .balance-amount { font-size: 1.4rem; }
+      .app-download-banner { flex-direction: column; gap: 8px; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="animated-bg"></div>
+
+  <header>
+    <a href="dashboard.html" class="logo-text">
+      <span class="text-social">SOCIAL</span>
+      <div class="boost-line">
+        <img src="https://raw.githubusercontent.com/exaucenapopolo/Social-Boost-Horizon-/refs/heads/main/assets/logos/Logo%20social%20Boost%20horizon.jpg" alt="Logo">
+        <span>BOOST</span>
+        <span class="pro-badge">PRO</span>
+      </div>
+      <span class="text-horizon">HORIZON</span>
+    </a>
+    <i class="fas fa-bars icon-hamburger" onclick="this.parentElement.classList.toggle('open')"></i>
+    <nav class="mobile-menu">
+      <a href="dashboard.html"><i class="fas fa-home"></i> Tableau de bord</a>
+      <a href="wallet.html"><i class="fas fa-wallet"></i> Portefeuille</a>
+      <a href="mes-commandes.html"><i class="fas fa-list"></i> Mes commandes</a>
+      <a href="commander.html"><i class="fas fa-shopping-cart"></i> Commande Standard</a>
+      <a href="#" onclick="firebase.auth().signOut()"><i class="fas fa-sign-out-alt"></i> Deconnexion</a>
+    </nav>
+  </header>
+
+  <div class="app-download-banner" data-aos="fade-down">
+    <span><i class="fas fa-mobile-alt"></i> Application mobile disponible</span>
+    <a href="https://web2apkpro.com/public_download.php?project_id=501&token=9553436f25" target="_blank">
+      <i class="fab fa-android"></i> Telecharger
+    </a>
+  </div>
+
+  <div class="reseller-stats" data-aos="fade-up">
+    <div class="stat-card discount">
+      <div class="stat-icon"><i class="fas fa-percentage"></i></div>
+      <div class="stat-value" id="discountRate">--%</div>
+      <div class="stat-label">Ta remise</div>
+    </div>
+    <div class="stat-card level">
+      <div class="stat-icon"><i class="fas fa-crown"></i></div>
+      <div class="stat-value" id="resellerLevel">--</div>
+      <div class="stat-label">Niveau</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon"><i class="fas fa-shopping-bag"></i></div>
+      <div class="stat-value" id="weeklyOrders">0</div>
+      <div class="stat-label">Cette semaine</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon"><i class="fas fa-piggy-bank"></i></div>
+      <div class="stat-value" id="totalSavings">0</div>
+      <div class="stat-label">Economise</div>
+    </div>
+  </div>
+
+  <div class="services-count" data-aos="fade-up" data-aos-delay="50">
+    <div class="count" id="totalServicesCount">--</div>
+    <div class="label">Services disponibles avec remise</div>
+  </div>
+
+  <div class="platforms-section" data-aos="fade-up" data-aos-delay="100">
+    <div class="platforms-title"><i class="fas fa-layer-group"></i> Choisis ta plateforme</div>
+    <div class="platforms" id="platformsContainer">
+      <div style="text-align: center; padding: 25px; width: 100%;">
+        <div class="loading-skeleton" style="height: 50px; width: 100%;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="content" data-aos="fade-up" data-aos-delay="150">
+    <div class="page-title">
+      <h2><i class="fas fa-crown"></i> Commande Revendeur</h2>
+      <div class="subtitle">Profite de tes remises exclusives</div>
+    </div>
+
+    <div class="balance-display">
+      <span>Ton solde actuel</span>
+      <span class="balance-amount" id="userBalance">-- FCFA</span>
+    </div>
+
+    <form id="orderForm">
+      <input type="hidden" id="userId" name="userId">
+
+      <div class="form-group" id="categorySection" style="display: none;">
+        <label><i class="fas fa-tags"></i> Categorie</label>
+        <div class="category-buttons" id="categoryButtons"></div>
+      </div>
+
+      <div class="form-group" id="serviceSection" style="display: none;">
+        <label><i class="fas fa-concierge-bell"></i> Service</label>
+        <select id="serviceSelect" required>
+          <option value="">Choisir un service</option>
+        </select>
+      </div>
+
+      <div class="service-info" id="serviceInfo" style="display: none;">
+        <div class="info-row">
+          <span class="info-label" id="priceLabel">Prix pour 1000 :</span>
+          <span class="info-value" id="pricePerK">-- FCFA</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Quantite min/max :</span>
+          <span class="info-value" id="minMaxQty">-- / --</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Temps estime :</span>
+          <span class="info-value" id="estimatedTime">--</span>
+        </div>
+      </div>
+
+        <div class="service-description-box" id="serviceDescriptionBox"></div>
+        <div class="drop-notice" id="dropNotice"></div>
+
+      <div class="form-group" id="linkSection" style="display: none;">
+        <label><i class="fas fa-link"></i> Lien (URL)</label>
+        <input type="url" id="linkInput" placeholder="https://..." required>
+      </div>
+
+      <div class="form-group" id="quantitySection" style="display: none;">
+        <label id="quantLabel"><i class="fas fa-sort-numeric-up"></i> Quantite</label>
+        <input type="number" id="quantityInput" min="1" placeholder="Ex: 1000">
+        <div class="quantity-error" id="quantityError"></div>
+        <div class="comments-count" id="commentsCount" style="display: none;">0 commentaire(s)</div>
+      </div>
+
+      <div class="price-breakdown" id="priceBreakdown" style="display: none;">
+        <div class="price-row original">
+          <span>Prix normal :</span>
+          <span id="originalPrice">0 FCFA</span>
+        </div>
+        <div class="price-row discount">
+          <span>Remise (<span id="discountPercent">0</span>%) :</span>
+          <span id="discountAmount">-0 FCFA</span>
+        </div>
+        <div class="price-row final">
+          <span>Prix final :</span>
+          <span id="finalPrice">0 FCFA</span>
+        </div>
+        <div class="savings-badge" id="savingsBadge">
+          <i class="fas fa-piggy-bank"></i> Tu economises 0 FCFA
+        </div>
+      </div>
+
+      <div class="contact-section" id="contactSection" style="display: none;">
+        <div class="form-group">
+          <label><i class="fas fa-address-book"></i> Contact pour suivi (optionnel)</label>
+          <select id="contactType">
+            <option value="">Aucun</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="email">Email</option>
+          </select>
+        </div>
+        <div class="contact-fields" id="whatsappField">
+          <input type="tel" id="contactInput" placeholder="+237 6XX XXX XXX">
+        </div>
+        <div class="contact-fields" id="emailField">
+          <input type="email" id="emailInput" placeholder="ton@email.com">
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn" style="display: none;">
+        <i class="fas fa-spinner fa-spin spinner"></i>
+        <span class="btn-text"><i class="fas fa-paper-plane"></i> Passer la commande</span>
+      </button>
+      
+      <a href="strategie-de-boost.html" class="boost-tips-btn" id="boostTipsBtn" style="display: none;">
+        <i class="fas fa-lightbulb"></i> Conseils de Boost Intelligents
+      </a>
+    </form>
+  </div>
+
+  <div class="notification-overlay" id="notification">
+    <div class="notification-box">
+      <div class="notification-icon" id="notificationIcon"></div>
+      <div class="notification-message" id="notificationMessage"></div>
+      <div id="notificationButtons">
+        <button class="notification-close" onclick="closeNotification()">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p><i class="fas fa-crown"></i> Espace Revendeur – Social Boost Horizon &copy; 2025</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+  <script src="service-descriptions.js"></script>
+  <script>
+    AOS.init({ duration: 500, once: true });
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD2JiDS0g8EkeNXxjO7_wGI3WznpPvcCCk",
+      authDomain: "social-boost-horizon.firebaseapp.com",
+      projectId: "social-boost-horizon",
+      storageBucket: "social-boost-horizon.appspot.com",
+      messagingSenderId: "43658165639",
+      appId: "1:43658165639:web:b8f492dc6a25cd12fc6722"
+    };
+    
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    let servicesData = {};
+    let categorizedServices = {};
+    let selectedPlatform = null;
+    let selectedCategory = null;
+    let selectedService = null;
+    let userBalance = 0;
+    let userBalanceXAF = 0;
+    
+    // Configuration des devises pour les 18 pays africains
+    const CURRENCY_CONFIG = {
+      'cm': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇲' },
+      'ga': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇬🇦' },
+      'cg': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇬' },
+      'td': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇹🇩' },
+      'cf': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇫' },
+      'gq': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇬🇶' },
+      'sn': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇸🇳' },
+      'ci': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇨🇮' },
+      'ml': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇲🇱' },
+      'bf': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇧🇫' },
+      'bj': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇧🇯' },
+      'tg': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇹🇬' },
+      'ne': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇳🇪' },
+      'gw': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇬🇼' },
+      'cd': { code: 'CDF', symbol: 'FC', rate: 4.27, flag: '🇨🇩' },
+      'gh': { code: 'GHS', symbol: 'GH₵', rate: 0.024, flag: '🇬🇭' },
+      'ng': { code: 'NGN', symbol: '₦', rate: 2.44, flag: '🇳🇬' },
+      'ke': { code: 'KES', symbol: 'KSh', rate: 0.20, flag: '🇰🇪' },
+      'ug': { code: 'UGX', symbol: 'USh', rate: 5.64, flag: '🇺🇬' },
+      'tz': { code: 'TZS', symbol: 'TSh', rate: 3.81, flag: '🇹🇿' },
+      'rw': { code: 'RWF', symbol: 'FRw', rate: 1.98, flag: '🇷🇼' },
+      'zm': { code: 'ZMW', symbol: 'ZK', rate: 0.041, flag: '🇿🇲' },
+      'mw': { code: 'MWK', symbol: 'MK', rate: 2.67, flag: '🇲🇼' },
+      'Cameroun': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇲' },
+      'RDC': { code: 'CDF', symbol: 'FC', rate: 4.27, flag: '🇨🇩' },
+      'RD Congo': { code: 'CDF', symbol: 'FC', rate: 4.27, flag: '🇨🇩' },
+      'Sénégal': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇸🇳' },
+      'Côte d\'Ivoire': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇨🇮' },
+      'Ghana': { code: 'GHS', symbol: 'GH₵', rate: 0.024, flag: '🇬🇭' },
+      'Nigeria': { code: 'NGN', symbol: '₦', rate: 2.44, flag: '🇳🇬' }
+    };
+    
+    let userCurrency = CURRENCY_CONFIG['Cameroun'];
+    
+    function convertFromXAF(amountXAF) {
+      return amountXAF * userCurrency.rate;
+    }
+    let resellerDiscount = 0;
+    let resellerLevel = 'Debutant';
+    let totalSavings = 0;
+    let weeklyOrders = 0;
+    let totalServicesCount = 0;
+
+    const platformIcons = {
+      tiktok: 'https://img.icons8.com/color/48/tiktok--v1.png',
+      instagram: 'https://img.icons8.com/color/48/instagram-new.png',
+      facebook: 'https://img.icons8.com/color/48/facebook.png',
+      youtube: 'https://img.icons8.com/color/48/youtube-play.png',
+      telegram: 'https://img.icons8.com/color/48/telegram-app.png',
+      twitter: 'https://img.icons8.com/ios-filled/50/ffffff/x.png',
+      whatsapp: 'https://img.icons8.com/color/48/whatsapp--v1.png',
+      spotify: 'https://img.icons8.com/color/48/spotify.png',
+      linkedin: 'https://img.icons8.com/color/48/linkedin.png',
+      threads: 'https://img.icons8.com/ios-filled/50/ffffff/threads.png',
+      snapchat: 'https://img.icons8.com/color/48/snapchat.png',
+      pinterest: 'https://img.icons8.com/color/48/pinterest.png',
+      discord: 'https://img.icons8.com/color/48/discord-logo.png',
+      twitch: 'https://img.icons8.com/color/48/twitch.png',
+      soundcloud: 'https://img.icons8.com/color/48/soundcloud.png'
+    };
+
+    // URL du serveur backend
+    const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname.includes('replit')
+      ? ''
+      : 'https://social-boost-exaucenapopolo2.replit.app';
+
+    const categoryIcons = {
+      followers: 'fa-users',
+      likes: 'fa-heart',
+      views: 'fa-eye',
+      comments: 'fa-comments',
+      shares: 'fa-share',
+      subscribers: 'fa-bell',
+      members: 'fa-user-plus',
+      reactions: 'fa-smile',
+      saves: 'fa-bookmark',
+      impressions: 'fa-chart-line',
+      plays: 'fa-play',
+      other: 'fa-star'
+    };
+
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      document.getElementById('userId').value = user.uid;
+      
+      const userDoc = await db.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        const data = userDoc.data();
+        userBalanceXAF = data.balance || 0;
+        userBalance = userBalanceXAF;
+        
+        // Détection de la devise selon le pays de l'utilisateur
+        const country = data.country || data.pays || 'Cameroun';
+        if (CURRENCY_CONFIG[country]) {
+          userCurrency = CURRENCY_CONFIG[country];
+        } else if (CURRENCY_CONFIG[country.toLowerCase()]) {
+          userCurrency = CURRENCY_CONFIG[country.toLowerCase()];
+        }
+        
+        document.getElementById('userBalance').textContent = formatPrice(userBalanceXAF);
+        
+        if (data.isReseller) {
+          resellerDiscount = data.discountRate || 5;
+          resellerLevel = data.resellerLevel || 'Debutant';
+          totalSavings = data.totalSavings || 0;
+          weeklyOrders = data.resellerWeeklyOrders || 0;
+        } else {
+          resellerDiscount = 0;
+          resellerLevel = 'Non revendeur';
+        }
+        
+        document.getElementById('discountRate').textContent = resellerDiscount + '%';
+        document.getElementById('resellerLevel').textContent = resellerLevel;
+        document.getElementById('weeklyOrders').textContent = weeklyOrders;
+        document.getElementById('totalSavings').textContent = formatPrice(totalSavings);
+      }
+      
+      loadServices();
+    });
+
+    function formatPrice(amountXAF) {
+      const localAmount = convertFromXAF(amountXAF);
+      if (userCurrency.rate === 1) {
+        return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(localAmount)) + ' ' + userCurrency.symbol;
+      } else {
+        return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(localAmount) + ' ' + userCurrency.symbol;
+      }
+    }
+
+    function decodeHTML(text) {
+      const el = document.createElement('textarea');
+      el.innerHTML = text;
+      return el.value;
+    }
+
+    function extractCategory(serviceName) {
+      const name = serviceName.toLowerCase();
+      if (name.includes('follower') || name.includes('abonne')) return 'followers';
+      if (name.includes('like') || name.includes('j\'aime')) return 'likes';
+      if (name.includes('view') || name.includes('vue')) return 'views';
+      if (name.includes('comment')) return 'comments';
+      if (name.includes('share') || name.includes('partage')) return 'shares';
+      if (name.includes('subscriber') || name.includes('abonnement')) return 'subscribers';
+      if (name.includes('member') || name.includes('membre')) return 'members';
+      if (name.includes('reaction')) return 'reactions';
+      if (name.includes('save') || name.includes('enregistr')) return 'saves';
+      if (name.includes('impression')) return 'impressions';
+      if (name.includes('play') || name.includes('stream')) return 'plays';
+      return 'other';
+    }
+
+    async function loadServices() {
+      const container = document.getElementById('platformsContainer');
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/exo-services`);
+        const data = await response.json();
+        
+        if (!data.success) throw new Error('Erreur chargement');
+        
+        servicesData = data.platforms;
+        container.innerHTML = '';
+        
+        totalServicesCount = 0;
+        Object.keys(servicesData).forEach(platform => {
+          if (servicesData[platform] && servicesData[platform].length > 0) {
+            totalServicesCount += servicesData[platform].length;
+            
+            const iconDiv = document.createElement('div');
+            iconDiv.className = 'platform-icon';
+            iconDiv.dataset.platform = platform;
+            iconDiv.onclick = () => selectPlatform(platform);
+            iconDiv.innerHTML = `
+              <img src="${platformIcons[platform] || `https://img.icons8.com/color/48/${platform}.png`}" alt="${platform}">
+              <span class="platform-name">${platform.charAt(0).toUpperCase() + platform.slice(1)}</span>
+            `;
+            container.appendChild(iconDiv);
+          }
+        });
+        
+        document.getElementById('totalServicesCount').textContent = totalServicesCount;
+        
+      } catch (error) {
+        container.innerHTML = `<div style="color:#f87171;padding:20px;text-align:center;width:100%;">
+          <i class="fas fa-exclamation-triangle" style="font-size:1.8rem;margin-bottom:10px;display:block;"></i>
+          Erreur de chargement des services.
+          <button onclick="loadServices()" style="margin-top:12px;padding:10px 22px;background:linear-gradient(135deg,var(--primary-green),var(--dark-green));color:white;border:none;border-radius:22px;cursor:pointer;font-weight:600;">
+            <i class="fas fa-redo"></i> Reessayer
+          </button>
+        </div>`;
+      }
+    }
+
+    function selectPlatform(platform) {
+      document.querySelectorAll('.platform-icon').forEach(i => i.classList.remove('active'));
+      const icon = document.querySelector(`.platform-icon[data-platform="${platform}"]`);
+      if (icon) icon.classList.add('active');
+      
+      selectedPlatform = platform;
+      selectedCategory = null;
+      selectedService = null;
+      
+      categorizedServices = {};
+      servicesData[platform].forEach(service => {
+        const category = extractCategory(service.name);
+        if (!categorizedServices[category]) categorizedServices[category] = [];
+        categorizedServices[category].push(service);
+      });
+      
+      const categoryButtons = document.getElementById('categoryButtons');
+      categoryButtons.innerHTML = '';
+      
+      Object.keys(categorizedServices).forEach(category => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'category-btn';
+        btn.dataset.category = category;
+        btn.onclick = () => selectCategory(category);
+        const icon = categoryIcons[category] || 'fa-star';
+        const count = categorizedServices[category].length;
+        btn.innerHTML = `<i class="fas ${icon}"></i> ${category.charAt(0).toUpperCase() + category.slice(1)} (${count})`;
+        categoryButtons.appendChild(btn);
+      });
+      
+      document.getElementById('categorySection').style.display = 'block';
+      document.getElementById('serviceSection').style.display = 'none';
+      document.getElementById('serviceInfo').style.display = 'none';
+      document.getElementById('linkSection').style.display = 'none';
+      document.getElementById('quantitySection').style.display = 'none';
+      document.getElementById('priceBreakdown').style.display = 'none';
+      document.getElementById('contactSection').style.display = 'none';
+      document.getElementById('submitBtn').style.display = 'none';
+      document.getElementById('boostTipsBtn').style.display = 'none';
+      document.getElementById('serviceDescriptionBox').classList.remove('visible');
+      document.getElementById('dropNotice').classList.remove('visible');
+    }
+
+    function selectCategory(category) {
+      document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.querySelector(`.category-btn[data-category="${category}"]`);
+      if (btn) btn.classList.add('active');
+      
+      selectedCategory = category;
+      selectedService = null;
+      
+      const select = document.getElementById('serviceSelect');
+      select.innerHTML = '<option value="">Choisir un service</option>';
+      
+      categorizedServices[category].forEach(service => {
+        const opt = document.createElement('option');
+        opt.value = service.id;
+        opt.textContent = decodeHTML(service.name);
+        opt.dataset.priceXAF = service.priceXAF;
+        opt.dataset.min = service.min;
+        opt.dataset.max = service.max;
+        opt.dataset.isPackage = service.isPackage;
+        opt.dataset.isPerOne = service.isPerOne;
+        opt.dataset.isCustomComments = service.isCustomComments;
+        opt.dataset.averageTime = service.averageTime || 'Rapide';
+        select.appendChild(opt);
+      });
+      
+      document.getElementById('serviceSection').style.display = 'block';
+      document.getElementById('serviceInfo').style.display = 'none';
+      document.getElementById('linkSection').style.display = 'none';
+      document.getElementById('quantitySection').style.display = 'none';
+      document.getElementById('priceBreakdown').style.display = 'none';
+      document.getElementById('contactSection').style.display = 'none';
+      document.getElementById('submitBtn').style.display = 'none';
+      document.getElementById('boostTipsBtn').style.display = 'none';
+      document.getElementById('serviceDescriptionBox').classList.remove('visible');
+      document.getElementById('dropNotice').classList.remove('visible');
+    }
+
+    document.getElementById('serviceSelect').addEventListener('change', function() {
+      const opt = this.options[this.selectedIndex];
+      if (!opt.value) {
+        document.getElementById('serviceInfo').style.display = 'none';
+        document.getElementById('linkSection').style.display = 'none';
+        document.getElementById('quantitySection').style.display = 'none';
+        document.getElementById('priceBreakdown').style.display = 'none';
+        document.getElementById('contactSection').style.display = 'none';
+        document.getElementById('submitBtn').style.display = 'none';
+        document.getElementById('boostTipsBtn').style.display = 'none';
+        document.getElementById('serviceDescriptionBox').classList.remove('visible');
+        document.getElementById('dropNotice').classList.remove('visible');
+        return;
+      }
+      
+      selectedService = {
+        id: opt.value,
+        name: opt.textContent,
+        priceXAF: parseFloat(opt.dataset.priceXAF) || 0,
+        min: parseInt(opt.dataset.min) || 1,
+        max: parseInt(opt.dataset.max) || 1000000,
+        isPackage: opt.dataset.isPackage === 'true',
+        isPerOne: opt.dataset.isPerOne === 'true',
+        isCustomComments: opt.dataset.isCustomComments === 'true',
+        averageTime: opt.dataset.averageTime
+      };
+      
+      document.getElementById('serviceInfo').style.display = 'block';
+      const isPerUnit = selectedService.isPerOne || selectedService.isPackage;
+      document.getElementById('priceLabel').textContent = isPerUnit ? 'Prix unitaire :' : 'Prix pour 1000 :';
+      document.getElementById('pricePerK').textContent = isPerUnit 
+        ? formatPrice(selectedService.priceXAF) + ' FCFA/unite'
+        : formatPrice(selectedService.priceXAF) + ' FCFA/1000';
+      document.getElementById('minMaxQty').textContent = `${selectedService.min.toLocaleString('fr-FR')} / ${selectedService.max.toLocaleString('fr-FR')}`;
+      document.getElementById('estimatedTime').textContent = selectedService.averageTime;
+      document.getElementById('discountPercent').textContent = resellerDiscount;
+      
+      document.getElementById('linkSection').style.display = 'block';
+      document.getElementById('quantitySection').style.display = 'block';
+      document.getElementById('priceBreakdown').style.display = 'block';
+      document.getElementById('contactSection').style.display = 'block';
+      document.getElementById('submitBtn').style.display = 'flex';
+      document.getElementById('boostTipsBtn').style.display = 'flex';
+
+        try {
+          const descBox = document.getElementById('serviceDescriptionBox');
+          const dropBox = document.getElementById('dropNotice');
+          if (typeof getServiceDescription === 'function') {
+            const platform = selectedPlatform || '';
+            descBox.innerHTML = getServiceDescription(selectedService.name, platform, '');
+            descBox.classList.add('visible');
+            dropBox.innerHTML = getDropNotice(selectedService.name);
+            dropBox.classList.add('visible');
+          }
+        } catch (descErr) {
+          console.warn('Erreur description service:', descErr);
+        }
+      
+      const qtySection = document.getElementById('quantitySection');
+      const qtyInput = document.getElementById('quantityInput');
+      
+      if (selectedService.isCustomComments) {
+        if (qtyInput.tagName !== 'TEXTAREA') {
+          const textarea = document.createElement('textarea');
+          textarea.id = 'quantityInput';
+          textarea.rows = 5;
+          textarea.placeholder = 'Un commentaire par ligne...';
+          qtyInput.parentNode.replaceChild(textarea, qtyInput);
+          document.getElementById('quantityInput').addEventListener('input', updatePrice);
+        }
+        document.getElementById('quantLabel').innerHTML = '<i class="fas fa-comments"></i> Tes commentaires';
+        document.getElementById('commentsCount').style.display = 'block';
+      } else {
+        if (qtyInput.tagName === 'TEXTAREA') {
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.id = 'quantityInput';
+          input.min = selectedService.min;
+          input.placeholder = `Min: ${selectedService.min}`;
+          qtyInput.parentNode.replaceChild(input, qtyInput);
+          document.getElementById('quantityInput').addEventListener('input', updatePrice);
+        }
+        document.getElementById('quantLabel').innerHTML = '<i class="fas fa-sort-numeric-up"></i> Quantite';
+        document.getElementById('commentsCount').style.display = 'none';
+      }
+      
+      document.getElementById('quantityInput').value = '';
+      updatePrice();
+    });
+
+    document.getElementById('quantityInput').addEventListener('input', updatePrice);
+
+    function updatePrice() {
+      if (!selectedService) return;
+      
+      const qtyInput = document.getElementById('quantityInput');
+      const errorEl = document.getElementById('quantityError');
+      const countEl = document.getElementById('commentsCount');
+      
+      let qty = 0;
+      if (selectedService.isCustomComments) {
+        const comments = qtyInput.value.split('\n').filter(c => c.trim());
+        qty = comments.length;
+        countEl.textContent = `${qty} commentaire(s)`;
+      } else {
+        qty = parseInt(qtyInput.value) || 0;
+      }
+      
+      if (qty > 0 && qty < selectedService.min) {
+        errorEl.textContent = `Minimum: ${selectedService.min}`;
+        errorEl.style.display = 'block';
+      } else if (qty > selectedService.max) {
+        errorEl.textContent = `Maximum: ${selectedService.max}`;
+        errorEl.style.display = 'block';
+      } else {
+        errorEl.style.display = 'none';
+      }
+      
+      const isPerUnit = selectedService.isPerOne || selectedService.isPackage;
+      let originalTotal = isPerUnit 
+        ? selectedService.priceXAF * qty 
+        : (selectedService.priceXAF / 1000) * qty;
+      
+      originalTotal = Math.round(originalTotal);
+      const discountAmt = Math.round(originalTotal * (resellerDiscount / 100));
+      const finalTotal = originalTotal - discountAmt;
+      
+      document.getElementById('originalPrice').textContent = formatPrice(originalTotal);
+      document.getElementById('discountAmount').textContent = '-' + formatPrice(discountAmt);
+      document.getElementById('finalPrice').textContent = formatPrice(finalTotal);
+      document.getElementById('savingsBadge').innerHTML = `<i class="fas fa-piggy-bank"></i> Tu economises ${formatPrice(discountAmt)}`;
+    }
+
+    document.getElementById('contactType').addEventListener('change', function() {
+      document.getElementById('whatsappField').classList.remove('active');
+      document.getElementById('emailField').classList.remove('active');
+      if (this.value === 'whatsapp') document.getElementById('whatsappField').classList.add('active');
+      if (this.value === 'email') document.getElementById('emailField').classList.add('active');
+    });
+
+    document.getElementById('orderForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      if (!selectedService) {
+        showNotification('Veuillez selectionner un service', 'error');
+        return;
+      }
+      
+      const qtyInput = document.getElementById('quantityInput');
+      const link = document.getElementById('linkInput').value.trim();
+      
+      let qty = 0;
+      let comments = [];
+      
+      if (selectedService.isCustomComments) {
+        comments = qtyInput.value.split('\n').filter(c => c.trim());
+        qty = comments.length;
+      } else {
+        qty = parseInt(qtyInput.value) || 0;
+      }
+      
+      if (qty < selectedService.min) {
+        showNotification(`Quantite minimum: ${selectedService.min}`, 'error');
+        return;
+      }
+      
+      if (!link) {
+        showNotification('Veuillez entrer un lien', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.classList.add('loading');
+      
+      try {
+        const token = await auth.currentUser.getIdToken();
+        const contactType = document.getElementById('contactType').value;
+        
+        const payload = {
+          exoServiceId: selectedService.id,
+          link: link,
+          quantity: qty,
+          comments: selectedService.isCustomComments ? comments : null,
+          contactType: contactType || null,
+          contact: contactType === 'email' 
+            ? document.getElementById('emailInput').value 
+            : (contactType === 'whatsapp' ? document.getElementById('contactInput').value : null),
+          isResellerOrder: true,
+          discountRate: resellerDiscount
+        };
+        
+        const res = await fetch(`${BACKEND_URL}/api/order-exo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(payload)
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          userBalance = result.newBalance;
+          document.getElementById('userBalance').textContent = formatPrice(userBalance);
+          
+          if (result.savings) {
+            totalSavings += result.savings;
+            document.getElementById('totalSavings').textContent = formatPrice(totalSavings);
+          }
+          weeklyOrders++;
+          document.getElementById('weeklyOrders').textContent = weeklyOrders;
+          
+          showNotification(`Commande envoyee avec succes !<br><br><strong>ID:</strong> ${result.orderId}<br><strong>Economie:</strong> ${formatPrice(result.savings || 0)}<br><strong>Nouveau solde:</strong> ${formatPrice(result.newBalance)}<br><br><a href="commandes.html" class="history-btn"><i class="fas fa-history"></i> Voir l'historique</a>`, 'success');
+          document.getElementById('orderForm').reset();
+          document.getElementById('serviceSection').style.display = 'none';
+          document.getElementById('serviceInfo').style.display = 'none';
+          document.getElementById('linkSection').style.display = 'none';
+          document.getElementById('quantitySection').style.display = 'none';
+          document.getElementById('priceBreakdown').style.display = 'none';
+          document.getElementById('contactSection').style.display = 'none';
+          document.getElementById('submitBtn').style.display = 'none';
+          document.getElementById('boostTipsBtn').style.display = 'none';
+          document.getElementById('serviceDescriptionBox').classList.remove('visible');
+          document.getElementById('dropNotice').classList.remove('visible');
+          document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+        } else {
+          if (result.adminContact) {
+            showNotification(`${result.error}<br><br>📞 <a href="https://wa.me/${result.adminContact.replace('+', '')}" target="_blank" style="color: #4CAF50; font-weight: bold;">${result.adminContact}</a>`, 'error');
+          } else {
+            throw new Error(result.error);
+          }
+        }
+        
+      } catch (error) {
+        showNotification(error.message || 'Erreur lors de la commande', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+      }
+    });
+
+    function showNotification(message, type) {
+      const notif = document.getElementById('notification');
+      document.getElementById('notificationIcon').textContent = type === 'success' ? '🎉' : '❌';
+      document.getElementById('notificationMessage').innerHTML = message;
+      notif.className = `notification-overlay ${type}`;
+      notif.style.display = 'flex';
+    }
+
+    function closeNotification() {
+      document.getElementById('notification').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

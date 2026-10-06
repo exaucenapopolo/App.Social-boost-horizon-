@@ -1,0 +1,2257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mon portefeuille - Social Boost Horizon</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@600;700;800&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+  <style>
+    :root {
+      --sbh-dark-blue: #0A162B;
+      --sbh-gradient-start: #1e3c72;
+      --sbh-gradient-end: #6a0dad;
+      --sbh-btn-color: #1E90FF;
+      --sbh-btn-hover: #187bcd;
+      --sbh-icon-color: #4CAF50;
+      --sbh-text-white: #FFFFFF;
+      --sbh-text-green: #4CAF50;
+      --sbh-card-bg: rgba(17, 32, 58, 0.6);
+      --sbh-card-border: rgba(255, 255, 255, 0.1);
+      --sbh-text-light: rgba(255, 255, 255, 0.9);
+      --sbh-accent: #FF6B6B;
+      --sbh-light-blue: #4DA6FF;
+      --sbh-cashback: #FFD700;
+      --sbh-glass: rgba(255, 255, 255, 0.05);
+      --sbh-glass-border: rgba(255, 255, 255, 0.1);
+      --sbh-success: #00D4AA;
+      --sbh-warning: #FFB800;
+      --sbh-purple: #8B5CF6;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      color: var(--sbh-text-white);
+      background: var(--sbh-dark-blue);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .background-animation {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      background: linear-gradient(135deg, #0A162B 0%, #1a2a4a 50%, #0A162B 100%);
+      overflow: hidden;
+    }
+
+    .background-animation::before {
+      content: "";
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(ellipse at 20% 80%, rgba(30, 60, 114, 0.3) 0%, transparent 50%),
+                  radial-gradient(ellipse at 80% 20%, rgba(106, 13, 173, 0.2) 0%, transparent 50%),
+                  radial-gradient(ellipse at 50% 50%, rgba(77, 166, 255, 0.1) 0%, transparent 60%);
+      animation: gradientPulse 8s ease-in-out infinite alternate;
+    }
+
+    @keyframes gradientPulse {
+      0% { opacity: 0.5; transform: scale(1); }
+      100% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .floating-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(60px);
+      animation: floatOrb 20s ease-in-out infinite;
+    }
+
+    .orb-1 {
+      width: 300px;
+      height: 300px;
+      background: linear-gradient(135deg, rgba(30, 144, 255, 0.3), rgba(138, 43, 226, 0.2));
+      top: 10%;
+      left: -5%;
+      animation-delay: 0s;
+    }
+
+    .orb-2 {
+      width: 250px;
+      height: 250px;
+      background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(30, 144, 255, 0.2));
+      bottom: 20%;
+      right: -5%;
+      animation-delay: -7s;
+    }
+
+    .orb-3 {
+      width: 200px;
+      height: 200px;
+      background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 107, 107, 0.15));
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      animation-delay: -14s;
+    }
+
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(30px, -30px) scale(1.05); }
+      50% { transform: translate(-20px, 20px) scale(0.95); }
+      75% { transform: translate(-30px, -20px) scale(1.02); }
+    }
+
+    .particles {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .particle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 50%;
+      animation: particleFloat 15s linear infinite;
+    }
+
+    @keyframes particleFloat {
+      0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
+    }
+
+    h1, h2, h3 {
+      font-family: 'Montserrat', sans-serif;
+      color: var(--sbh-text-white);
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      background: linear-gradient(135deg, rgba(30, 60, 114, 0.95), rgba(106, 13, 173, 0.95));
+      backdrop-filter: blur(20px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      z-index: 100;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid var(--sbh-glass-border);
+    }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      font-family: 'Poppins', sans-serif;
+      text-decoration: none;
+      line-height: 1.2;
+    }
+
+    .logo-text .text-social,
+    .logo-text .text-horizon {
+      color: var(--sbh-text-white);
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+
+    .logo-text .boost-line {
+      display: flex;
+      align-items: center;
+      color: var(--sbh-text-green);
+      font-size: 1.8rem;
+      font-weight: 800;
+    }
+
+    .logo-text .boost-line img {
+      height: 1.8rem;
+      margin-right: 0.4rem;
+      animation: rocketPulse 2s infinite;
+    }
+
+    @keyframes rocketPulse {
+      0%, 100% { transform: scale(1) rotate(0deg); }
+      50% { transform: scale(1.15) rotate(5deg); }
+    }
+
+    .icon-hamburger {
+      font-size: 1.8rem;
+      color: var(--sbh-text-white);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      padding: 8px;
+      border-radius: 8px;
+    }
+
+    .icon-hamburger:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: scale(1.1);
+    }
+
+    .mobile-menu {
+      display: none;
+      position: absolute;
+      top: 68px;
+      right: 2rem;
+      background: rgba(10, 22, 43, 0.98);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      padding: 1.5rem;
+      flex-direction: column;
+      z-index: 200;
+      min-width: 280px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    header.open .mobile-menu {
+      display: flex;
+    }
+
+    .mobile-menu a {
+      color: var(--sbh-text-white);
+      text-decoration: none;
+      padding: 1rem 1.2rem;
+      font-weight: 500;
+      border-radius: 10px;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+
+    .mobile-menu a i {
+      margin-right: 12px;
+      color: var(--sbh-light-blue);
+      width: 24px;
+      text-align: center;
+      font-size: 1.1rem;
+    }
+
+    .mobile-menu a:hover {
+      background: linear-gradient(135deg, rgba(30, 60, 114, 0.5), rgba(106, 13, 173, 0.3));
+      transform: translateX(8px);
+    }
+
+    .balance-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 28px;
+      margin: 20px;
+      background: linear-gradient(135deg, rgba(30, 60, 114, 0.6), rgba(106, 13, 173, 0.4));
+      border: 1px solid var(--sbh-glass-border);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(10px);
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .balance-section::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .balance-section:hover::before {
+      left: 100%;
+    }
+
+    .balance-section:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(30, 144, 255, 0.3);
+      border-color: rgba(77, 166, 255, 0.4);
+    }
+
+    .balance-section span {
+      font-family: 'Montserrat', sans-serif;
+      color: var(--sbh-text-white);
+      font-size: 1.3rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .balance-section span i {
+      color: var(--sbh-light-blue);
+    }
+
+    .balance-section button {
+      background: linear-gradient(135deg, var(--sbh-btn-color), var(--sbh-purple));
+      border: none;
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 50px;
+      cursor: pointer;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      box-shadow: 0 4px 20px rgba(30, 144, 255, 0.4);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .balance-section button:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 8px 30px rgba(30, 144, 255, 0.5);
+    }
+
+    main {
+      padding: 0 20px 40px;
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .page-title {
+      text-align: center;
+      margin-bottom: 40px;
+      padding-top: 20px;
+    }
+
+    .page-title h1 {
+      font-size: 2.2rem;
+      background: linear-gradient(135deg, #fff, #4DA6FF);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+
+    .page-title p {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 1rem;
+    }
+
+    .wallet-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 25px;
+      margin-bottom: 40px;
+    }
+
+    .balance-card {
+      background: var(--sbh-glass);
+      border: 1px solid var(--sbh-glass-border);
+      border-radius: 24px;
+      padding: 30px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .balance-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--sbh-gradient-start), var(--sbh-gradient-end));
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.5s ease;
+    }
+
+    .balance-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .balance-card::after {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 0%, transparent 60%);
+      transition: all 0.5s ease;
+    }
+
+    .balance-card:hover::after {
+      top: -30%;
+      right: -30%;
+    }
+
+    .balance-card:hover {
+      transform: translateY(-12px) scale(1.02);
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+      border-color: rgba(77, 166, 255, 0.4);
+    }
+
+    .balance-card.main-balance {
+      background: linear-gradient(135deg, rgba(30, 60, 114, 0.8), rgba(106, 13, 173, 0.6));
+    }
+
+    .balance-card.affiliate-balance {
+      background: linear-gradient(135deg, rgba(0, 212, 170, 0.2), rgba(30, 60, 114, 0.7));
+    }
+
+    .balance-card.withdrawal-balance {
+      background: linear-gradient(135deg, rgba(255, 184, 0, 0.2), rgba(30, 60, 114, 0.7));
+    }
+
+    .balance-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 25px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .balance-icon {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 18px;
+      font-size: 1.8rem;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .main-balance .balance-icon {
+      color: var(--sbh-light-blue);
+    }
+
+    .affiliate-balance .balance-icon {
+      color: var(--sbh-success);
+    }
+
+    .withdrawal-balance .balance-icon {
+      color: var(--sbh-warning);
+    }
+
+    .balance-card:hover .balance-icon {
+      transform: scale(1.1) rotate(5deg);
+    }
+
+    .balance-header-text h2 {
+      font-size: 1.2rem;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .balance-header-text p {
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin: 0;
+    }
+
+    .balance-amount {
+      font-size: 2.8rem;
+      font-weight: 800;
+      margin-bottom: 30px;
+      text-align: center;
+      font-family: 'Montserrat', sans-serif;
+      color: var(--sbh-text-white);
+      text-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      position: relative;
+      z-index: 1;
+      animation: pulseGlow 3s ease-in-out infinite;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { text-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
+      50% { text-shadow: 0 4px 25px rgba(77, 166, 255, 0.3); }
+    }
+
+    .balance-actions {
+      margin-top: auto;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .balance-btn {
+      display: inline-flex;
+      align-items: center;
+      background: linear-gradient(135deg, var(--sbh-btn-color), var(--sbh-purple));
+      color: #fff;
+      padding: 14px 32px;
+      border: none;
+      border-radius: 50px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1rem;
+      box-shadow: 0 6px 25px rgba(30, 144, 255, 0.4);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .balance-btn::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .balance-btn:hover::before {
+      left: 100%;
+    }
+
+    .balance-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .balance-btn:hover:not(:disabled) {
+      transform: translateY(-5px) scale(1.05);
+      box-shadow: 0 12px 35px rgba(30, 144, 255, 0.5);
+    }
+
+    .balance-btn i {
+      margin-right: 10px;
+      font-size: 1.1rem;
+    }
+
+    .balance-btn.withdraw-btn {
+      background: linear-gradient(135deg, var(--sbh-warning), #FF9500);
+      color: #000;
+      box-shadow: 0 6px 25px rgba(255, 184, 0, 0.4);
+    }
+
+    .balance-btn.withdraw-btn:hover:not(:disabled) {
+      box-shadow: 0 12px 35px rgba(255, 184, 0, 0.5);
+    }
+
+    .balance-btn.transfer-btn {
+      background: linear-gradient(135deg, var(--sbh-success), #00B894);
+      box-shadow: 0 6px 25px rgba(0, 212, 170, 0.4);
+    }
+
+    .balance-btn.transfer-btn:hover:not(:disabled) {
+      box-shadow: 0 12px 35px rgba(0, 212, 170, 0.5);
+    }
+
+    .activities-container {
+      background: var(--sbh-glass);
+      border: 1px solid var(--sbh-glass-border);
+      border-radius: 24px;
+      padding: 30px;
+      backdrop-filter: blur(10px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .activities-container::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--sbh-light-blue), var(--sbh-success), var(--sbh-warning), var(--sbh-accent));
+      background-size: 300% 100%;
+      animation: gradientShift 5s linear infinite;
+    }
+
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 300% 50%; }
+    }
+
+    .activities-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+    }
+
+    .activities-header h2 {
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .activities-header h2 i {
+      color: var(--sbh-light-blue);
+      font-size: 1.3rem;
+    }
+
+    .activities-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .activity-item {
+      display: flex;
+      align-items: center;
+      padding: 18px 20px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      cursor: default;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .activity-item::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      border-radius: 4px 0 0 4px;
+      transition: all 0.3s ease;
+    }
+
+    .activity-item.type-recharge::before { background: var(--sbh-success); }
+    .activity-item.type-transfert::before { background: var(--sbh-light-blue); }
+    .activity-item.type-retrait::before { background: var(--sbh-warning); }
+    .activity-item.type-bonus::before { background: var(--sbh-purple); }
+    .activity-item.type-pending::before { background: var(--sbh-warning); }
+    .activity-item.type-failed::before { background: var(--sbh-accent); }
+
+    .activity-item:hover {
+      transform: translateX(8px);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+      border-color: rgba(77, 166, 255, 0.3);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .activity-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 18px;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      transition: all 0.3s ease;
+    }
+
+    .activity-item:hover .activity-icon {
+      transform: scale(1.1) rotate(5deg);
+    }
+
+    .activity-icon.recharge {
+      background: linear-gradient(135deg, rgba(0, 212, 170, 0.2), rgba(0, 212, 170, 0.1));
+      color: var(--sbh-success);
+    }
+
+    .activity-icon.transfert {
+      background: linear-gradient(135deg, rgba(77, 166, 255, 0.2), rgba(77, 166, 255, 0.1));
+      color: var(--sbh-light-blue);
+    }
+
+    .activity-icon.retrait {
+      background: linear-gradient(135deg, rgba(255, 184, 0, 0.2), rgba(255, 184, 0, 0.1));
+      color: var(--sbh-warning);
+    }
+
+    .activity-icon.bonus {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.1));
+      color: var(--sbh-purple);
+    }
+
+    .activity-icon.pending {
+      background: linear-gradient(135deg, rgba(255, 184, 0, 0.2), rgba(255, 184, 0, 0.1));
+      color: var(--sbh-warning);
+    }
+
+    .activity-icon.failed {
+      background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 107, 107, 0.1));
+      color: var(--sbh-accent);
+    }
+
+    .activity-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .activity-label {
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 5px;
+      color: var(--sbh-text-white);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .activity-date {
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.5);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .activity-date i {
+      font-size: 0.75rem;
+    }
+
+    .activity-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 5px;
+    }
+
+    .activity-amount {
+      font-weight: 700;
+      font-size: 1.1rem;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .activity-amount.positive {
+      color: var(--sbh-success);
+    }
+
+    .activity-amount.negative {
+      color: var(--sbh-accent);
+    }
+
+    .activity-status {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-success {
+      background: rgba(0, 212, 170, 0.2);
+      color: var(--sbh-success);
+    }
+
+    .status-pending {
+      background: rgba(255, 184, 0, 0.2);
+      color: var(--sbh-warning);
+    }
+
+    .status-failed {
+      background: rgba(255, 107, 107, 0.2);
+      color: var(--sbh-accent);
+    }
+
+    .loading {
+      text-align: center;
+      padding: 50px;
+    }
+
+    .loading i {
+      font-size: 3rem;
+      color: var(--sbh-light-blue);
+      margin-bottom: 20px;
+      animation: spin 1s infinite linear;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .loading p {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 1.1rem;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .empty-state i {
+      font-size: 4rem;
+      color: rgba(255, 255, 255, 0.2);
+      margin-bottom: 20px;
+    }
+
+    .empty-state h3 {
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 10px;
+    }
+
+    .empty-state p {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .transfer-modal, .withdraw-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .transfer-modal.active, .withdraw-modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: linear-gradient(135deg, rgba(20, 35, 60, 0.98), rgba(30, 45, 80, 0.98));
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 24px;
+      padding: 35px;
+      max-width: 450px;
+      width: 100%;
+      text-align: center;
+      animation: modalSlideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      position: relative;
+      overflow: hidden;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    @keyframes modalSlideIn {
+      from { opacity: 0; transform: scale(0.9) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-content::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--sbh-gradient-start), var(--sbh-gradient-end));
+    }
+
+    .modal-header {
+      margin-bottom: 25px;
+    }
+
+    .modal-header h3 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .modal-header h3 i {
+      color: var(--sbh-warning);
+    }
+
+    .modal-header p {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.95rem;
+    }
+
+    .modal-options {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .modal-option {
+      background: rgba(30, 60, 114, 0.4);
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .modal-option:hover {
+      border-color: var(--sbh-light-blue);
+      transform: translateY(-3px);
+      background: rgba(30, 60, 114, 0.6);
+    }
+
+    .modal-option.selected {
+      border-color: var(--sbh-success);
+      background: rgba(0, 212, 170, 0.15);
+    }
+
+    .modal-option-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      background: rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+
+    .modal-option-text {
+      text-align: left;
+    }
+
+    .modal-option-text h4 {
+      margin: 0 0 5px;
+      font-size: 1.1rem;
+      color: var(--sbh-text-white);
+    }
+
+    .modal-option-text p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .form-group label i {
+      margin-right: 8px;
+      color: var(--sbh-light-blue);
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 14px 18px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      font-family: 'Roboto', sans-serif;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--sbh-light-blue);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 20px rgba(77, 166, 255, 0.2);
+    }
+
+    .form-group input::placeholder {
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .form-group select option {
+      background: #1a2a4a;
+      color: #fff;
+    }
+
+    .form-note {
+      background: rgba(255, 184, 0, 0.1);
+      border: 1px solid rgba(255, 184, 0, 0.3);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 25px;
+      text-align: left;
+    }
+
+    .form-note p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: rgba(255, 255, 255, 0.9);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .form-note p i {
+      color: var(--sbh-warning);
+      margin-top: 3px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 14px 30px;
+      border-radius: 50px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    .modal-close:hover {
+      border-color: rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .modal-confirm {
+      background: linear-gradient(135deg, var(--sbh-btn-color), var(--sbh-purple));
+      border: none;
+      color: #fff;
+      padding: 14px 30px;
+      border-radius: 50px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 20px rgba(30, 144, 255, 0.4);
+    }
+
+    .modal-confirm:hover:not(:disabled) {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 30px rgba(30, 144, 255, 0.5);
+    }
+
+    .modal-confirm:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .modal-confirm.withdraw-confirm {
+      background: linear-gradient(135deg, var(--sbh-warning), #FF9500);
+      color: #000;
+      box-shadow: 0 4px 20px rgba(255, 184, 0, 0.4);
+    }
+
+    .wallet-notification {
+      position: fixed;
+      top: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10, 22, 43, 0.95);
+      backdrop-filter: blur(10px);
+      color: #fff;
+      padding: 16px 28px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1rem;
+      z-index: 200;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      transform: translateX(-50%) translateY(-20px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .wallet-notification.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .wallet-notification.success {
+      border-left: 4px solid var(--sbh-success);
+    }
+
+    .wallet-notification.error {
+      border-left: 4px solid var(--sbh-accent);
+    }
+
+    footer {
+      background: linear-gradient(135deg, rgba(30, 60, 114, 0.95), rgba(106, 13, 173, 0.95));
+      color: var(--sbh-text-white);
+      padding: 3rem 1rem 1.5rem;
+      margin-top: 50px;
+      position: relative;
+      overflow: hidden;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2rem;
+    }
+
+    .footer-section {
+      padding: 0 1rem;
+    }
+
+    .footer-section h3 {
+      font-size: 1.3rem;
+      margin-bottom: 1.2rem;
+      text-align: left;
+      position: relative;
+      padding-bottom: 10px;
+    }
+
+    .footer-section h3::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 50px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--sbh-light-blue), var(--sbh-success));
+      border-radius: 2px;
+    }
+
+    .footer-logo {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 1.2rem;
+    }
+
+    .footer-logo .text-social,
+    .footer-logo .text-horizon {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      color: var(--sbh-text-white);
+    }
+
+    .footer-logo .boost-line {
+      display: flex;
+      align-items: center;
+      color: var(--sbh-text-green);
+      font-weight: 800;
+    }
+
+    .footer-logo .boost-line img {
+      height: 1.6rem;
+      margin-right: 0.4rem;
+    }
+
+    .footer-about p {
+      text-align: left;
+      font-size: 0.9rem;
+      line-height: 1.7;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .footer-links ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .footer-links li {
+      margin-bottom: 0.7rem;
+    }
+
+    .footer-links a {
+      color: rgba(255, 255, 255, 0.8);
+      text-decoration: none;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      font-size: 0.95rem;
+    }
+
+    .footer-links a i {
+      margin-right: 10px;
+      color: var(--sbh-light-blue);
+      transition: transform 0.3s;
+      font-size: 0.8rem;
+    }
+
+    .footer-links a:hover {
+      color: var(--sbh-text-white);
+      transform: translateX(8px);
+    }
+
+    .footer-contact p {
+      text-align: left;
+      margin-bottom: 0.8rem;
+      display: flex;
+      align-items: center;
+      font-size: 0.95rem;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .footer-contact i {
+      margin-right: 12px;
+      color: var(--sbh-light-blue);
+      width: 18px;
+      text-align: center;
+    }
+
+    .social-icons {
+      display: flex;
+      gap: 12px;
+      margin-top: 1.2rem;
+    }
+
+    .social-icons a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      color: white;
+      font-size: 1.1rem;
+      transition: all 0.3s ease;
+    }
+
+    .social-icons a:hover {
+      background: linear-gradient(135deg, var(--sbh-light-blue), var(--sbh-purple));
+      transform: translateY(-4px) scale(1.1);
+      box-shadow: 0 8px 20px rgba(77, 166, 255, 0.3);
+    }
+
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 2rem auto 0;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .footer-bottom p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .footer-bottom a {
+      color: rgba(255, 255, 255, 0.6);
+      text-decoration: none;
+      transition: color 0.3s;
+      margin: 0 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .footer-bottom a:hover {
+      color: var(--sbh-text-white);
+    }
+
+    #logoutBtn {
+      background: transparent;
+      border: 1px solid rgba(255, 107, 107, 0.5);
+      color: var(--sbh-accent);
+      padding: 8px 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.3s ease;
+    }
+
+    #logoutBtn:hover {
+      background: rgba(255, 107, 107, 0.2);
+      border-color: var(--sbh-accent);
+    }
+
+    .payment-methods {
+      display: flex;
+      gap: 15px;
+    }
+
+    .payment-methods i {
+      font-size: 1.5rem;
+      color: rgba(255, 255, 255, 0.5);
+      transition: color 0.3s;
+    }
+
+    .payment-methods i:hover {
+      color: var(--sbh-text-white);
+    }
+
+    @media (max-width: 768px) {
+      .wallet-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .balance-amount {
+        font-size: 2.2rem;
+      }
+
+      .balance-section {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+      }
+
+      .modal-content {
+        padding: 25px 20px;
+      }
+
+      .modal-actions {
+        flex-direction: column;
+      }
+
+      .activity-item {
+        flex-wrap: wrap;
+      }
+
+      .activity-right {
+        width: 100%;
+        flex-direction: row;
+        justify-content: space-between;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="background-animation">
+    <div class="floating-orb orb-1"></div>
+    <div class="floating-orb orb-2"></div>
+    <div class="floating-orb orb-3"></div>
+    <div class="particles" id="particles"></div>
+  </div>
+
+  <header>
+    <a href="dashboard.html" class="logo-text">
+      <span class="text-social">SOCIAL</span>
+      <div class="boost-line">
+        <img src="https://raw.githubusercontent.com/exaucenapopolo/Social-Boost-Horizon-/refs/heads/main/assets/logos/Logo%20social%20Boost%20horizon.jpg" alt="Logo">
+        <span class="text-boost">BOOST</span>
+      </div>
+      <span class="text-horizon">HORIZON</span>
+    </a>
+    <i class="fa-solid fa-bars icon-hamburger"></i>
+    <nav class="mobile-menu">
+      <a href="dashboard.html"><i class="fa-solid fa-house"></i> Accueil</a>
+      <a href="services.html"><i class="fa-solid fa-rocket"></i> Services</a>
+      <a href="commander.html"><i class="fa-solid fa-cart-plus"></i> Commander</a>
+      <a href="commandes.html"><i class="fa-solid fa-list-check"></i> Mes Commandes</a>
+      <a href="fonds.html"><i class="fa-solid fa-wallet"></i> Ajouter des fonds</a>
+      <a href="profil.html"><i class="fa-solid fa-user"></i> Mon Profil</a>
+      <a href="https://chat.whatsapp.com/HRgWJFxTgkiEkEC0Ou2028" target="_blank"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
+    </nav>
+  </header>
+
+  <section class="balance-section" data-aos="fade-down">
+    <span><i class="fa-solid fa-wallet"></i> <span id="balance">Solde : 0 FCFA</span></span>
+    <button id="quickDeposit" onclick="window.location.href='fonds.html'">
+      <i class="fa-solid fa-plus"></i> Recharger
+    </button>
+  </section>
+
+  <main>
+    <div class="page-title" data-aos="fade-up">
+      <h1><i class="fa-solid fa-wallet"></i> Mon Portefeuille</h1>
+      <p id="welcome">Gerez vos fonds en toute securite</p>
+    </div>
+
+    <div class="wallet-grid">
+      <div class="balance-card main-balance" data-aos="fade-up" data-aos-delay="100">
+        <div class="balance-header">
+          <div class="balance-icon">
+            <i class="fa-solid fa-coins"></i>
+          </div>
+          <div class="balance-header-text">
+            <h2>Solde Principal</h2>
+            <p>Disponible pour vos commandes</p>
+          </div>
+        </div>
+        <div class="balance-amount" id="mainBalance">0 <span class="currency-symbol">FCFA</span></div>
+        <div class="balance-actions">
+          <a href="fonds.html" class="balance-btn" id="addFunds">
+            <i class="fa-solid fa-plus-circle"></i> Recharger
+          </a>
+        </div>
+      </div>
+
+      <div class="balance-card affiliate-balance" data-aos="fade-up" data-aos-delay="200">
+        <div class="balance-header">
+          <div class="balance-icon">
+            <i class="fa-solid fa-gift"></i>
+          </div>
+          <div class="balance-header-text">
+            <h2>Solde Parrainage</h2>
+            <p>Vos bonus de parrainage</p>
+          </div>
+        </div>
+        <div class="balance-amount" id="referralBalance">0 <span class="currency-symbol">FCFA</span></div>
+        <div class="balance-actions">
+          <button class="balance-btn transfer-btn" id="transferFunds" disabled>
+            <i class="fa-solid fa-arrow-right-arrow-left"></i> Transferer
+          </button>
+        </div>
+      </div>
+
+      <div class="balance-card withdrawal-balance" data-aos="fade-up" data-aos-delay="300">
+        <div class="balance-header">
+          <div class="balance-icon">
+            <i class="fa-solid fa-money-bill-transfer"></i>
+          </div>
+          <div class="balance-header-text">
+            <h2>Solde de Retrait</h2>
+            <p>Disponible pour retrait (min 1000 FCFA)</p>
+          </div>
+        </div>
+        <div class="balance-amount" id="withdrawalBalance">0 <span class="currency-symbol">FCFA</span></div>
+        <div class="balance-actions">
+          <button class="balance-btn withdraw-btn" id="withdrawFunds" disabled>
+            <i class="fa-solid fa-money-bill-wave"></i> Retirer
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="activities-container" data-aos="fade-up" data-aos-delay="400">
+      <div class="activities-header">
+        <h2><i class="fa-solid fa-clock-rotate-left"></i> Activites Recentes</h2>
+      </div>
+      <div class="activities-list" id="activityList">
+        <div class="loading">
+          <i class="fa-solid fa-spinner"></i>
+          <p>Chargement des activites...</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="transfer-modal" id="transferModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-arrow-right-arrow-left"></i> Transferer vos fonds</h3>
+        <p id="transferAmount">0 FCFA disponible</p>
+      </div>
+      <div class="modal-options">
+        <div class="modal-option" data-target="main">
+          <div class="modal-option-icon" style="color: var(--sbh-light-blue);">
+            <i class="fa-solid fa-coins"></i>
+          </div>
+          <div class="modal-option-text">
+            <h4>Solde Principal</h4>
+            <p>Utilisez vos fonds pour passer des commandes</p>
+          </div>
+        </div>
+        <div class="modal-option" data-target="withdrawal">
+          <div class="modal-option-icon" style="color: var(--sbh-warning);">
+            <i class="fa-solid fa-money-bill-transfer"></i>
+          </div>
+          <div class="modal-option-text">
+            <h4>Solde de Retrait</h4>
+            <p>Retirez vos gains en especes</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-close" id="closeModal">Annuler</button>
+        <button class="modal-confirm" id="confirmTransfer" disabled>Confirmer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="withdraw-modal" id="withdrawModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-money-bill-wave"></i> Demande de Retrait</h3>
+        <p id="withdrawAvailable">0 FCFA disponible</p>
+      </div>
+      
+      <div class="form-group">
+        <label><i class="fa-solid fa-user"></i> Nom complet</label>
+        <input type="text" id="withdrawName" placeholder="Ex: Jean Dupont" required>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fa-solid fa-phone"></i> Numero de compte Mobile Money</label>
+        <input type="tel" id="withdrawAccount" placeholder="Ex: 699853665" required>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fa-brands fa-whatsapp"></i> Numero WhatsApp</label>
+        <input type="tel" id="withdrawWhatsapp" placeholder="Ex: 699853665" required>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fa-solid fa-money-check-alt"></i> Montant a retirer (min 1000 FCFA)</label>
+        <input type="number" id="withdrawAmount" placeholder="Ex: 5000" min="1000" required>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fa-solid fa-credit-card"></i> Methode de paiement</label>
+        <select id="withdrawMethod" required>
+          <option value="">-- Choisir une methode --</option>
+          <optgroup label="Cameroun">
+            <option value="MTN Mobile Money (Cameroun)">MTN Mobile Money</option>
+            <option value="Orange Money (Cameroun)">Orange Money</option>
+          </optgroup>
+          <optgroup label="Autres pays CEMAC">
+            <option value="MTN Mobile Money (Gabon)">MTN Mobile Money (Gabon)</option>
+            <option value="Airtel Money (Gabon)">Airtel Money (Gabon)</option>
+            <option value="MTN Mobile Money (Congo)">MTN Mobile Money (Congo)</option>
+            <option value="Airtel Money (Congo)">Airtel Money (Congo)</option>
+          </optgroup>
+          <optgroup label="Afrique de l'Ouest">
+            <option value="Orange Money (Senegal)">Orange Money (Senegal)</option>
+            <option value="Wave (Senegal)">Wave (Senegal)</option>
+            <option value="Orange Money (Cote d'Ivoire)">Orange Money (Cote d'Ivoire)</option>
+            <option value="MTN Mobile Money (Cote d'Ivoire)">MTN Mobile Money (Cote d'Ivoire)</option>
+            <option value="Orange Money (Mali)">Orange Money (Mali)</option>
+            <option value="Orange Money (Burkina Faso)">Orange Money (Burkina Faso)</option>
+            <option value="MTN Mobile Money (Benin)">MTN Mobile Money (Benin)</option>
+            <option value="Flooz (Togo)">Flooz (Togo)</option>
+            <option value="TMoney (Togo)">TMoney (Togo)</option>
+          </optgroup>
+          <optgroup label="Afrique de l'Est">
+            <option value="M-Pesa (Kenya)">M-Pesa (Kenya)</option>
+            <option value="M-Pesa (Tanzania)">M-Pesa (Tanzania)</option>
+            <option value="MTN Mobile Money (Uganda)">MTN Mobile Money (Uganda)</option>
+            <option value="Airtel Money (Uganda)">Airtel Money (Uganda)</option>
+            <option value="MTN Mobile Money (Rwanda)">MTN Mobile Money (Rwanda)</option>
+          </optgroup>
+          <optgroup label="Autres">
+            <option value="MTN Mobile Money (Ghana)">MTN Mobile Money (Ghana)</option>
+            <option value="Vodafone Cash (Ghana)">Vodafone Cash (Ghana)</option>
+            <option value="Airtel Money (Nigeria)">Airtel Money (Nigeria)</option>
+            <option value="MTN Mobile Money (Zambia)">MTN Mobile Money (Zambia)</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="form-note">
+        <p>
+          <i class="fa-solid fa-info-circle"></i>
+          <span>Votre demande sera traitee manuellement. Nous vous contacterons via WhatsApp pour confirmer et effectuer le transfert. Delai: 24-48h ouvrables.</span>
+        </p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="modal-close" id="closeWithdrawModal">Annuler</button>
+        <button class="modal-confirm withdraw-confirm" id="confirmWithdraw">
+          <i class="fa-solid fa-paper-plane"></i> Envoyer la demande
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wallet-notification" id="walletNotification"></div>
+
+  <footer id="contact">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <div class="footer-logo">
+            <span class="text-social">SOCIAL</span>
+            <div class="boost-line">
+              <img src="https://raw.githubusercontent.com/exaucenapopolo/Social-Boost-Horizon-/refs/heads/main/assets/logos/Logo%20social%20Boost%20horizon.jpg" alt="Logo">
+              <span class="text-boost">BOOST</span>
+            </div>
+            <span class="text-horizon">HORIZON</span>
+          </div>
+          <div class="footer-about">
+            <p>Social Boost Horizon est votre partenaire pour developper votre presence sur les reseaux sociaux. Nous offrons des solutions innovantes et fiables pour booster votre audience et votre engagement.</p>
+            <div class="social-icons">
+              <a href="https://www.facebook.com/share/1ACQ14Cg9h/?mibextid=wwXIfr" target="_blank"><i class="fa-brands fa-facebook-f"></i></a>
+              <a href="https://www.instagram.com/social.boost.horizon" target="_blank"><i class="fa-brands fa-instagram"></i></a>
+              <a href="https://x.com/mcexau" target="_blank"><i class="fa-brands fa-twitter"></i></a>
+              <a href="https://www.tiktok.com/@social.boost.hori" target="_blank"><i class="fa-brands fa-tiktok"></i></a>
+              <a href="http://www.youtube.com/@SocialBoostHorizon-d7t" target="_blank"><i class="fa-brands fa-youtube"></i></a>
+            </div>
+          </div>
+        </div>
+        
+        <div class="footer-section footer-links">
+          <h3>Liens Rapides</h3>
+          <ul>
+            <li><a href="dashboard.html"><i class="fa-solid fa-chevron-right"></i> Accueil</a></li>
+            <li><a href="services.html"><i class="fa-solid fa-chevron-right"></i> Services</a></li>
+            <li><a href="commander.html"><i class="fa-solid fa-chevron-right"></i> Commander</a></li>
+            <li><a href="commandes.html"><i class="fa-solid fa-chevron-right"></i> Mes commandes</a></li>
+            <li><a href="profil.html"><i class="fa-solid fa-chevron-right"></i> Mon profil</a></li>
+            <li><a href="https://chat.whatsapp.com/HRgWJFxTgkiEkEC0Ou2028" target="_blank"><i class="fa-solid fa-chevron-right"></i> Rejoindre WhatsApp</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-section footer-contact">
+          <h3>Contactez-nous</h3>
+          <p><i class="fa-solid fa-envelope"></i> socialboosthorizon984@gmail.com</p>
+          <p><i class="fa-solid fa-phone"></i> +237 699 85 36 65</p>
+          <p><i class="fa-solid fa-location-dot"></i> Douala, Cameroun</p>
+          <p><i class="fa-solid fa-clock"></i> Support 24/7</p>
+          <a href="https://chat.whatsapp.com/HRgWJFxTgkiEkEC0Ou2028" target="_blank" class="btn btn-whatsapp" style="margin-top: 15px; display: inline-flex; align-items: center; gap: 8px; background: #25D366; color: #fff; padding: 10px 20px; border-radius: 25px; text-decoration: none; font-weight: 600;">
+            <i class="fab fa-whatsapp"></i> Rejoindre notre groupe
+          </a>
+        </div>
+      </div>
+      
+      <div class="footer-bottom">
+        <p>2025 Social Boost Horizon. Mc Exau - Tous droits reserves.</p>
+        <div>
+          <a href="legal.html">Mentions legales</a>
+          <a href="terms.html">CGV</a>
+          <a href="privacy.html">Confidentialite</a>
+          <a href="cookies.html">Cookies</a>
+        </div>
+        <button id="logoutBtn">Deconnexion</button>
+        <div class="payment-methods">
+          <i class="fa-brands fa-cc-visa"></i>
+          <i class="fa-brands fa-cc-mastercard"></i>
+          <i class="fa-solid fa-money-bill-wave"></i>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      if (typeof AOS !== 'undefined') {
+        AOS.init({ duration: 800, once: true, offset: 100 });
+      }
+
+      (function initParticles() {
+        const particlesContainer = document.getElementById('particles');
+        if (!particlesContainer) return;
+        for (let i = 0; i < 30; i++) {
+          const particle = document.createElement('div');
+          particle.className = 'particle';
+          particle.style.left = Math.random() * 100 + '%';
+          particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+          particle.style.animationDelay = (Math.random() * 15) + 's';
+          particle.style.width = (Math.random() * 3 + 2) + 'px';
+          particle.style.height = particle.style.width;
+          particlesContainer.appendChild(particle);
+        }
+      })();
+
+      (function initHamburgerMenu() {
+        const header = document.querySelector("header");
+        const hamburger = document.querySelector(".icon-hamburger");
+        if (!header || !hamburger) return;
+        hamburger.addEventListener("click", () => {
+          header.classList.toggle("open");
+        });
+        document.addEventListener("click", (e) => {
+          if (!header.contains(e.target) && header.classList.contains("open")) {
+            header.classList.remove("open");
+          }
+        });
+      })();
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyD2JiDS0g8EkeNXxjO7_wGI3WznpPvcCCk",
+        authDomain: "social-boost-horizon.firebaseapp.com",
+        projectId: "social-boost-horizon",
+        storageBucket: "social-boost-horizon.appspot.com",
+        messagingSenderId: "43658165639",
+        appId: "1:43658165639:web:b8f492dc6a25cd12fc6722"
+      };
+      if (typeof firebase === 'undefined') {
+        console.error("Firebase SDK non charge.");
+        return;
+      }
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      const auth = firebase.auth();
+      const db = firebase.firestore();
+      
+      const BACKEND_URL = 'https://social-boost-exaucenapopolo2.replit.app';
+
+      const CURRENCY_CONFIG = {
+        'cm': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇲' },
+        'ga': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇬🇦' },
+        'cg': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇬' },
+        'td': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇹🇩' },
+        'cf': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇫' },
+        'gq': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇬🇶' },
+        'sn': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇸🇳' },
+        'ci': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇨🇮' },
+        'ml': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇲🇱' },
+        'bf': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇧🇫' },
+        'bj': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇧🇯' },
+        'tg': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇹🇬' },
+        'ne': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇳🇪' },
+        'gw': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇬🇼' },
+        'cd': { code: 'CDF', symbol: 'FC', rate: 4.27, flag: '🇨🇩' },
+        'gh': { code: 'GHS', symbol: 'GH₵', rate: 0.024, flag: '🇬🇭' },
+        'ng': { code: 'NGN', symbol: '₦', rate: 2.44, flag: '🇳🇬' },
+        'ke': { code: 'KES', symbol: 'KSh', rate: 0.20, flag: '🇰🇪' },
+        'ug': { code: 'UGX', symbol: 'USh', rate: 5.64, flag: '🇺🇬' },
+        'tz': { code: 'TZS', symbol: 'TSh', rate: 3.81, flag: '🇹🇿' },
+        'rw': { code: 'RWF', symbol: 'FRw', rate: 1.98, flag: '🇷🇼' },
+        'zm': { code: 'ZMW', symbol: 'ZK', rate: 0.041, flag: '🇿🇲' },
+        'mw': { code: 'MWK', symbol: 'MK', rate: 2.67, flag: '🇲🇼' },
+        'ca': { code: 'CAD', symbol: 'C$', rate: 0.0021, flag: '🇨🇦' },
+        'Cameroun': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇲' },
+        'Cameroon': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇲' },
+        'Gabon': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇬🇦' },
+        'Congo': { code: 'XAF', symbol: 'FCFA', rate: 1, flag: '🇨🇬' },
+        'Senegal': { code: 'XOF', symbol: 'FCFA', rate: 1, flag: '🇸🇳' },
+        'Kenya': { code: 'KES', symbol: 'KSh', rate: 0.20, flag: '🇰🇪' },
+        'Ghana': { code: 'GHS', symbol: 'GH₵', rate: 0.024, flag: '🇬🇭' },
+        'Nigeria': { code: 'NGN', symbol: '₦', rate: 2.44, flag: '🇳🇬' }
+      };
+
+      let userCountry = 'cm';
+      let userCurrency = CURRENCY_CONFIG['cm'];
+      let currentUserData = null;
+
+      function convertFromXAF(amountXAF) {
+        return Math.round(amountXAF * userCurrency.rate);
+      }
+
+      function formatAmount(amountXAF) {
+        const localAmount = convertFromXAF(amountXAF);
+        return localAmount.toLocaleString('fr-FR') + ' ' + userCurrency.symbol;
+      }
+
+      function updateAllCurrencySymbols() {
+        document.querySelectorAll('.currency-symbol').forEach(el => {
+          el.textContent = userCurrency.symbol;
+        });
+      }
+
+      const logoutBtn = document.getElementById('logoutBtn');
+      const quickDeposit = document.getElementById('quickDeposit');
+      const addFundsBtn = document.getElementById('addFunds');
+      const transferBtn = document.getElementById('transferFunds');
+      const withdrawBtn = document.getElementById('withdrawFunds');
+      const balanceEl = document.getElementById('balance');
+      const mainBalEl = document.getElementById('mainBalance');
+      const referralBalEl = document.getElementById('referralBalance');
+      const withdrawalBalEl = document.getElementById('withdrawalBalance');
+      const activityList = document.getElementById('activityList');
+      const walletNotification = document.getElementById('walletNotification');
+      const transferModal = document.getElementById('transferModal');
+      const closeModalBtn = document.getElementById('closeModal');
+      const confirmTransferBtn = document.getElementById('confirmTransfer');
+      const transferAmountEl = document.getElementById('transferAmount');
+      const modalOptions = document.querySelectorAll('.modal-option');
+      
+      const withdrawModal = document.getElementById('withdrawModal');
+      const closeWithdrawModalBtn = document.getElementById('closeWithdrawModal');
+      const confirmWithdrawBtn = document.getElementById('confirmWithdraw');
+      const withdrawAvailableEl = document.getElementById('withdrawAvailable');
+      const withdrawNameInput = document.getElementById('withdrawName');
+      const withdrawAccountInput = document.getElementById('withdrawAccount');
+      const withdrawWhatsappInput = document.getElementById('withdrawWhatsapp');
+      const withdrawAmountInput = document.getElementById('withdrawAmount');
+      const withdrawMethodSelect = document.getElementById('withdrawMethod');
+
+      let currentUid = null;
+      let currentReferralBalance = 0;
+      let currentWithdrawalBalance = 0;
+      let selectedTransferTarget = null;
+
+      function showWalletNotification(message, type = 'success') {
+        if (!walletNotification) return;
+        walletNotification.textContent = '';
+        const emoji = type === 'success' ? '✅' : '❌';
+        walletNotification.innerHTML = `<i class="fa-solid fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
+        walletNotification.className = 'wallet-notification show ' + (type === 'success' ? 'success' : 'error');
+        setTimeout(() => {
+          walletNotification.classList.remove('show');
+        }, 5000);
+      }
+
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+          auth.signOut().then(() => {
+            window.location.href = 'login.html';
+          });
+        });
+      }
+
+      auth.onAuthStateChanged(user => {
+        if (!user) {
+          window.location.href = 'login.html';
+          return;
+        }
+        currentUid = user.uid;
+
+        const welcomeEl = document.getElementById('welcome');
+        
+        const userDocRef = db.collection('users').doc(currentUid);
+        userDocRef.onSnapshot(docSnap => {
+          if (!docSnap.exists) return;
+          const data = docSnap.data() || {};
+          currentUserData = data;
+          
+          if (welcomeEl) {
+            welcomeEl.textContent = `Bienvenue ${data.username || ''} sur votre portefeuille`;
+          }
+          
+          const country = data.country || data.pays || 'cm';
+          if (CURRENCY_CONFIG[country]) {
+            userCountry = country;
+            userCurrency = CURRENCY_CONFIG[country];
+          } else {
+            userCountry = 'cm';
+            userCurrency = CURRENCY_CONFIG['cm'];
+          }
+          updateAllCurrencySymbols();
+          
+          const bal = data.balance || 0;
+          const refBal = data.referralBalance || 0;
+          const withBal = data.withdrawalBalance || 0;
+          currentReferralBalance = refBal;
+          currentWithdrawalBalance = withBal;
+          
+          balanceEl.textContent = `Solde : ${formatAmount(bal)}`;
+          mainBalEl.innerHTML = formatAmount(bal);
+          referralBalEl.innerHTML = formatAmount(refBal);
+          if (withdrawalBalEl) withdrawalBalEl.innerHTML = formatAmount(withBal);
+          
+          if (transferBtn) transferBtn.disabled = !(refBal > 0);
+          if (withdrawBtn) withdrawBtn.disabled = !(withBal >= 1000);
+        }, err => {
+          console.error("Erreur snapshot user:", err);
+        });
+
+        loadActivities();
+      });
+
+      if (transferBtn) {
+        transferBtn.addEventListener('click', () => {
+          if (!currentUid || currentReferralBalance <= 0) return;
+          transferAmountEl.textContent = formatAmount(currentReferralBalance) + ' disponible';
+          transferModal.classList.add('active');
+          selectedTransferTarget = null;
+          modalOptions.forEach(opt => opt.classList.remove('selected'));
+          confirmTransferBtn.disabled = true;
+        });
+      }
+
+      modalOptions.forEach(opt => {
+        opt.addEventListener('click', () => {
+          modalOptions.forEach(o => o.classList.remove('selected'));
+          opt.classList.add('selected');
+          selectedTransferTarget = opt.dataset.target;
+          confirmTransferBtn.disabled = false;
+        });
+      });
+
+      if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+          transferModal.classList.remove('active');
+        });
+      }
+
+      if (confirmTransferBtn) {
+        confirmTransferBtn.addEventListener('click', async () => {
+          if (!currentUid || !selectedTransferTarget) return;
+          confirmTransferBtn.disabled = true;
+          confirmTransferBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+          try {
+            const userRef = db.collection('users').doc(currentUid);
+            await db.runTransaction(async tx => {
+              const doc = await tx.get(userRef);
+              const data = doc.data();
+              const refBal = data.referralBalance || 0;
+              if (refBal <= 0) throw new Error('Aucun solde a transferer');
+              if (selectedTransferTarget === 'main') {
+                tx.update(userRef, {
+                  balance: (data.balance || 0) + refBal,
+                  referralBalance: 0
+                });
+              } else {
+                tx.update(userRef, {
+                  withdrawalBalance: (data.withdrawalBalance || 0) + refBal,
+                  referralBalance: 0
+                });
+              }
+              const txColRef = db.collection('fapshiTransactions').doc();
+              tx.set(txColRef, {
+                userId: currentUid,
+                date: firebase.firestore.FieldValue.serverTimestamp(),
+                type: "Transfert",
+                label: selectedTransferTarget === 'main' ? "Transfert vers solde principal" : "Transfert vers solde de retrait",
+                amount: refBal
+              });
+            });
+            transferModal.classList.remove('active');
+            showWalletNotification('Transfert reussi!', 'success');
+            loadActivities();
+          } catch (err) {
+            showWalletNotification('Erreur: ' + err.message, 'error');
+          }
+          confirmTransferBtn.disabled = false;
+          confirmTransferBtn.innerHTML = 'Confirmer';
+        });
+      }
+
+      if (withdrawBtn) {
+        withdrawBtn.addEventListener('click', () => {
+          if (!currentUid || currentWithdrawalBalance < 1000) return;
+          withdrawAvailableEl.textContent = formatAmount(currentWithdrawalBalance) + ' disponible';
+          withdrawAmountInput.max = currentWithdrawalBalance;
+          
+          if (currentUserData) {
+            if (currentUserData.fullName) withdrawNameInput.value = currentUserData.fullName;
+            if (currentUserData.phone) {
+              withdrawAccountInput.value = currentUserData.phone;
+              withdrawWhatsappInput.value = currentUserData.phone;
+            }
+          }
+          
+          withdrawModal.classList.add('active');
+        });
+      }
+
+      if (closeWithdrawModalBtn) {
+        closeWithdrawModalBtn.addEventListener('click', () => {
+          withdrawModal.classList.remove('active');
+        });
+      }
+
+      if (confirmWithdrawBtn) {
+        confirmWithdrawBtn.addEventListener('click', async () => {
+          const name = withdrawNameInput.value.trim();
+          const account = withdrawAccountInput.value.trim();
+          const whatsapp = withdrawWhatsappInput.value.trim();
+          const amount = parseInt(withdrawAmountInput.value) || 0;
+          const method = withdrawMethodSelect.value;
+
+          if (!name) {
+            showWalletNotification('Veuillez entrer votre nom complet', 'error');
+            return;
+          }
+          if (!account) {
+            showWalletNotification('Veuillez entrer votre numero de compte Mobile Money', 'error');
+            return;
+          }
+          if (!whatsapp) {
+            showWalletNotification('Veuillez entrer votre numero WhatsApp', 'error');
+            return;
+          }
+          if (amount < 1000) {
+            showWalletNotification('Le montant minimum de retrait est de 1000 FCFA', 'error');
+            return;
+          }
+          if (amount > currentWithdrawalBalance) {
+            showWalletNotification('Montant superieur a votre solde disponible', 'error');
+            return;
+          }
+          if (!method) {
+            showWalletNotification('Veuillez choisir une methode de paiement', 'error');
+            return;
+          }
+
+          confirmWithdrawBtn.disabled = true;
+          confirmWithdrawBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Envoi...';
+
+          try {
+            const idToken = await auth.currentUser.getIdToken();
+            
+            const response = await fetch(BACKEND_URL + '/api/withdraw-request', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: JSON.stringify({
+                userId: currentUid,
+                fullName: name,
+                accountNumber: account,
+                whatsappNumber: whatsapp,
+                amount: amount,
+                paymentMethod: method,
+                username: currentUserData?.username || 'N/A',
+                email: currentUserData?.email || 'N/A'
+              })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              withdrawModal.classList.remove('active');
+              showWalletNotification('Demande de retrait envoyee! Nous vous contacterons sous peu.', 'success');
+              
+              withdrawNameInput.value = '';
+              withdrawAccountInput.value = '';
+              withdrawWhatsappInput.value = '';
+              withdrawAmountInput.value = '';
+              withdrawMethodSelect.value = '';
+              
+              loadActivities();
+            } else {
+              throw new Error(result.error || 'Erreur lors de l\'envoi');
+            }
+          } catch (err) {
+            showWalletNotification('Erreur: ' + err.message, 'error');
+          }
+
+          confirmWithdrawBtn.disabled = false;
+          confirmWithdrawBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Envoyer la demande';
+        });
+      }
+
+      async function loadActivities() {
+        if (!currentUid) return;
+        activityList.innerHTML = `
+          <div class="loading">
+            <i class="fa-solid fa-spinner"></i>
+            <p>Chargement des activites...</p>
+          </div>
+        `;
+        try {
+          const allTransactions = [];
+          const queryLimit = 100;
+
+          const transQuery = db.collection('fapshiTransactions')
+                              .where('userId', '==', currentUid)
+                              .limit(queryLimit);
+          const transSnapshot = await transQuery.get();
+          
+          transSnapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            let timestamp = 0;
+            if (data.dateConfirmed && typeof data.dateConfirmed.toDate === 'function') {
+              timestamp = data.dateConfirmed.toDate().getTime();
+            } else if (data.date && typeof data.date.toDate === 'function') {
+              timestamp = data.date.toDate().getTime();
+            }
+            allTransactions.push({
+              __id: docSnap.id,
+              __ts: timestamp,
+              __type: 'transaction',
+              ...data
+            });
+          });
+
+          const rechargesQuery = db.collection('recharges')
+                                   .where('userId', '==', currentUid)
+                                   .limit(queryLimit);
+          const rechargesSnapshot = await rechargesQuery.get();
+          
+          rechargesSnapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            let timestamp = 0;
+            if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+              timestamp = data.createdAt.toDate().getTime();
+            }
+            allTransactions.push({
+              __id: docSnap.id,
+              __ts: timestamp,
+              __type: 'recharge',
+              ...data
+            });
+          });
+
+          const referralsQuery = db.collection('users')
+                                   .doc(currentUid)
+                                   .collection('referrals')
+                                   .limit(queryLimit);
+          const referralsSnapshot = await referralsQuery.get();
+
+          const refereePromises = [];
+          referralsSnapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            let timestamp = 0;
+            if (data.date && typeof data.date.toDate === 'function') {
+              timestamp = data.date.toDate().getTime();
+            }
+            
+            const refereeUid = data.refereeUid;
+            const refereePromise = refereeUid 
+              ? db.collection('users').doc(refereeUid).get()
+                  .then(doc => doc.exists ? doc.data().username : null)
+                  .catch(() => null)
+              : Promise.resolve(null);
+            
+            refereePromises.push(
+              refereePromise.then(username => ({
+                __id: docSnap.id,
+                __ts: timestamp,
+                __type: 'referral_bonus',
+                __refereeUsername: username,
+                ...data
+              }))
+            );
+          });
+
+          const referralBonuses = await Promise.all(refereePromises);
+          allTransactions.push(...referralBonuses);
+
+          if (allTransactions.length === 0) {
+            activityList.innerHTML = `
+              <div class="empty-state">
+                <i class="fa-solid fa-inbox"></i>
+                <h3>Aucune activite</h3>
+                <p>Vos transactions apparaitront ici</p>
+              </div>
+            `;
+            return;
+          }
+
+          allTransactions.sort((a, b) => b.__ts - a.__ts);
+          const recent = allTransactions.slice(0, 20);
+
+          activityList.innerHTML = '';
+          
+          recent.forEach((item, index) => {
+            const activityItem = document.createElement('div');
+            activityItem.className = 'activity-item';
+            activityItem.style.animationDelay = `${index * 0.1}s`;
+            
+            let iconClass = 'recharge';
+            let iconName = 'fa-arrow-down';
+            let label = 'Transaction';
+            let amountClass = 'positive';
+            let statusClass = 'status-success';
+            let statusText = 'Succes';
+            let amount = 0;
+            let typeClass = 'type-recharge';
+
+            if (item.__type === 'transaction') {
+              const type = (item.type || '').toLowerCase();
+              amount = item.amount || 0;
+              label = item.label || item.type || 'Transaction';
+              
+              if (type.includes('transfert')) {
+                iconClass = 'transfert';
+                iconName = 'fa-arrow-right-arrow-left';
+                typeClass = 'type-transfert';
+              } else if (type.includes('retrait') || type.includes('withdrawal')) {
+                iconClass = 'retrait';
+                iconName = 'fa-arrow-up';
+                amountClass = 'negative';
+                typeClass = 'type-retrait';
+              } else if (type.includes('recharge') || type.includes('depot')) {
+                iconClass = 'recharge';
+                iconName = 'fa-arrow-down';
+              }
+              
+              const status = (item.status || '').toLowerCase();
+              if (status.includes('pending') || status.includes('attente')) {
+                statusClass = 'status-pending';
+                statusText = 'En attente';
+                typeClass = 'type-pending';
+              } else if (status.includes('failed') || status.includes('echoue')) {
+                statusClass = 'status-failed';
+                statusText = 'Echoue';
+                typeClass = 'type-failed';
+              }
+            } else if (item.__type === 'recharge') {
+              amount = item.amount || item.montant || 0;
+              label = `Recharge ${item.method || 'Mobile Money'}`;
+              iconClass = 'recharge';
+              iconName = 'fa-wallet';
+              
+              const status = (item.status || '').toLowerCase();
+              if (status === 'pending' || status === 'en attente') {
+                statusClass = 'status-pending';
+                statusText = 'En attente';
+                typeClass = 'type-pending';
+              } else if (status === 'validated' || status === 'valide') {
+                statusClass = 'status-success';
+                statusText = 'Valide';
+              } else if (status === 'rejected' || status === 'rejete') {
+                statusClass = 'status-failed';
+                statusText = 'Rejete';
+                typeClass = 'type-failed';
+                amountClass = 'negative';
+              }
+            } else if (item.__type === 'referral_bonus') {
+              amount = item.bonus || item.amount || 0;
+              const refUsername = item.__refereeUsername || 'un ami';
+              label = `Bonus parrainage (${refUsername})`;
+              iconClass = 'bonus';
+              iconName = 'fa-gift';
+              typeClass = 'type-bonus';
+            }
+
+            const dateStr = item.__ts ? new Date(item.__ts).toLocaleDateString('fr-FR', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }) : 'Date inconnue';
+
+            activityItem.classList.add(typeClass);
+            activityItem.innerHTML = `
+              <div class="activity-icon ${iconClass}">
+                <i class="fa-solid ${iconName}"></i>
+              </div>
+              <div class="activity-content">
+                <div class="activity-label">${label}</div>
+                <div class="activity-date"><i class="fa-regular fa-clock"></i> ${dateStr}</div>
+              </div>
+              <div class="activity-right">
+                <div class="activity-amount ${amountClass}">${amountClass === 'positive' ? '+' : '-'}${formatAmount(Math.abs(amount))}</div>
+                <span class="activity-status ${statusClass}">${statusText}</span>
+              </div>
+            `;
+
+            activityList.appendChild(activityItem);
+          });
+
+        } catch (err) {
+          console.error("Erreur chargement activites:", err);
+          activityList.innerHTML = `
+            <div class="empty-state">
+              <i class="fa-solid fa-exclamation-triangle"></i>
+              <h3>Erreur de chargement</h3>
+              <p>${err.message}</p>
+            </div>
+          `;
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parrainage – Social Boost Horizon</title>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@600;700;800&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+  <style>
+    :root {
+      --sbh-dark-blue: #0A162B;
+      --sbh-gradient-start: #1e3c72;
+      --sbh-gradient-end: #6a0dad;
+      --sbh-btn-color: #1E90FF;
+      --sbh-btn-hover: #187bcd;
+      --sbh-icon-color: #4CAF50;
+      --sbh-text-white: #FFFFFF;
+      --sbh-text-green: #4CAF50;
+      --sbh-card-bg: rgba(17, 32, 58, 0.6);
+      --sbh-card-border: rgba(255, 255, 255, 0.1);
+      --sbh-text-light: rgba(255, 255, 255, 0.9);
+      --sbh-accent: #FF6B6B;
+      --sbh-light-blue: #4DA6FF;
+      --sbh-card-radius: 12px;
+      --gold-primary: #FFD700;
+      --gold-secondary: #D4AF37;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      color: var(--sbh-text-white);
+      background: var(--sbh-dark-blue);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .background-animation {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      background-color: var(--sbh-dark-blue);
+      overflow: hidden;
+    }
+    .background-animation::before {
+      content: "";
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.4);
+      box-shadow:
+        100px 50px 0 0 white, 200px 150px 0 0 white, 300px 250px 0 0 white,
+        400px 70px 0 0 white, 50px 300px 0 0 white, 350px 100px 0 0 white,
+        500px 400px 0 0 white, 600px 120px 0 0 white, 700px 350px 0 0 white;
+      animation: twinkle 5s infinite alternate;
+    }
+    @keyframes twinkle {
+      0% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+      100% { opacity: 0.3; transform: scale(1); }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      background: linear-gradient(45deg, var(--sbh-gradient-start), var(--sbh-gradient-end));
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      z-index: 100;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    .header-icons {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      font-family: 'Poppins', sans-serif;
+      text-decoration: none;
+      line-height: 1.2;
+    }
+    .logo-text .text-social,
+    .logo-text .text-horizon {
+      color: var(--sbh-text-white);
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+    .logo-text .boost-line {
+      display: flex;
+      align-items: center;
+      color: var(--sbh-text-green);
+      font-size: 1.8rem;
+      font-weight: 800;
+    }
+    .logo-text .boost-line img {
+      height: 1.8rem;
+      margin-right: 0.4rem;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    .icon-hamburger {
+      font-size: 1.8rem;
+      color: var(--sbh-text-white);
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+    .icon-hamburger:hover {
+      transform: scale(1.1);
+    }
+    .snap-avatar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fffc00, #ffdc00 50%, #ffbc00);
+      font-size: 1.4rem;
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(255, 220, 0, 0.5);
+    }
+
+    .mobile-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: linear-gradient(135deg, var(--sbh-gradient-start), var(--sbh-gradient-end));
+      padding: 1rem;
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      z-index: 200;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-width: 220px;
+    }
+    .mobile-menu.active {
+      display: flex;
+    }
+    .mobile-menu a {
+      color: var(--sbh-text-white);
+      text-decoration: none;
+      padding: 0.8rem 1rem;
+      border-radius: 8px;
+      transition: background 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .mobile-menu a:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    main {
+      flex: 1;
+      padding: 2rem 1rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .page-title h1 {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(90deg, var(--gold-primary), var(--gold-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .page-title p {
+      color: var(--sbh-text-light);
+      font-size: 1.1rem;
+    }
+
+    .referral-card {
+      background: var(--sbh-card-bg);
+      border: 1px solid var(--sbh-card-border);
+      border-radius: var(--sbh-card-radius);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+    .referral-card h2 {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: var(--sbh-text-white);
+    }
+    .referral-card h2::after {
+      display: none;
+    }
+
+    .referral-code-box {
+      background: rgba(0,0,0,0.3);
+      border: 2px dashed var(--gold-primary);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .referral-code-label {
+      font-size: 0.9rem;
+      color: var(--sbh-text-light);
+      margin-bottom: 0.5rem;
+    }
+    .referral-code {
+      font-family: 'Montserrat', monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--gold-primary);
+      letter-spacing: 3px;
+    }
+
+    .referral-link-box {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--sbh-card-border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin: 1.5rem 0;
+    }
+    .referral-link-label {
+      font-size: 0.9rem;
+      color: var(--sbh-text-light);
+      margin-bottom: 0.5rem;
+    }
+    .referral-link {
+      font-size: 0.85rem;
+      color: var(--sbh-light-blue);
+      word-break: break-all;
+      padding: 0.5rem;
+      background: rgba(0,0,0,0.3);
+      border-radius: 5px;
+      display: block;
+      margin-bottom: 1rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0.8rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--sbh-btn-color), var(--sbh-gradient-end));
+      color: white;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(30, 144, 255, 0.4);
+    }
+    .btn-gold {
+      background: linear-gradient(135deg, var(--gold-primary), var(--gold-secondary));
+      color: #000;
+    }
+    .btn-gold:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+    }
+    .btn-whatsapp {
+      background: #25D366;
+      color: white;
+    }
+    .btn-whatsapp:hover {
+      background: #128C7E;
+    }
+
+    .share-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 1rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .stat-item {
+      background: rgba(0,0,0,0.2);
+      border-radius: 10px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--gold-primary);
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--sbh-text-light);
+      margin-top: 0.3rem;
+    }
+
+    .how-it-works {
+      background: var(--sbh-card-bg);
+      border: 1px solid var(--sbh-card-border);
+      border-radius: var(--sbh-card-radius);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      backdrop-filter: blur(10px);
+    }
+    .how-it-works h2 {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .how-it-works h2::after {
+      display: none;
+    }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1rem;
+      background: rgba(0,0,0,0.2);
+      border-radius: 10px;
+    }
+    .step-number {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold-primary), var(--gold-secondary));
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .step-content h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.3rem;
+      text-align: left;
+    }
+    .step-content p {
+      font-size: 0.9rem;
+      color: var(--sbh-text-light);
+      margin: 0;
+    }
+
+    .referral-history {
+      background: var(--sbh-card-bg);
+      border: 1px solid var(--sbh-card-border);
+      border-radius: var(--sbh-card-radius);
+      padding: 2rem;
+      backdrop-filter: blur(10px);
+    }
+    .referral-history h2 {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    .referral-history h2::after {
+      display: none;
+    }
+    .referral-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .referral-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.8rem 1rem;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+    }
+    .referral-item:last-child {
+      margin-bottom: 0;
+    }
+    .referral-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .referral-user i {
+      color: var(--gold-primary);
+    }
+    .referral-bonus {
+      color: var(--sbh-text-green);
+      font-weight: 600;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: var(--sbh-text-light);
+    }
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--sbh-text-green);
+      color: white;
+      padding: 1rem 2rem;
+      border-radius: 10px;
+      display: none;
+      z-index: 1000;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .notification.active {
+      display: block;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translate(-50%, 100%); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
+    }
+
+    @media (max-width: 600px) {
+      .page-title h1 {
+        font-size: 1.8rem;
+      }
+      .referral-code {
+        font-size: 1.5rem;
+      }
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="background-animation"></div>
+
+  <header data-aos="fade-down">
+    <a href="dashboard.html" class="logo-text">
+      <span class="text-social">SOCIAL</span>
+      <div class="boost-line">
+        <img src="https://raw.githubusercontent.com/exaucenapopolo/Social-Boost-Horizon-/refs/heads/main/assets/logos/Logo%20social%20Boost%20horizon.jpg" alt="Logo">
+        <span>BOOST</span>
+      </div>
+      <span class="text-horizon">HORIZON</span>
+    </a>
+    <div class="header-icons">
+      <a href="profil.html" class="snap-avatar">
+        <span id="userInitial"></span>
+      </a>
+      <i class="fa-solid fa-bars icon-hamburger" id="hamburgerBtn"></i>
+    </div>
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="dashboard.html"><i class="fa-solid fa-house"></i> Accueil</a>
+      <a href="wallet.html"><i class="fa-solid fa-wallet"></i> Mon portefeuille</a>
+      <a href="commander.html"><i class="fa-solid fa-rocket"></i> Commander</a>
+      <a href="commandes.html"><i class="fa-solid fa-shopping-cart"></i> Mes commandes</a>
+      <a href="parrainage.html"><i class="fa-solid fa-handshake"></i> Parrainage</a>
+      <a href="assistant.html"><i class="fa-solid fa-headset"></i> Assistance</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-title" data-aos="fade-up">
+      <h1><i class="fas fa-handshake"></i> Parrainage</h1>
+      <p>Parrainez vos amis et gagnez des bonus sur chaque recharge !</p>
+    </div>
+
+    <div class="referral-card" data-aos="fade-up" data-aos-delay="100">
+      <h2><i class="fas fa-gift"></i> Votre Code de Parrainage</h2>
+      
+      <div class="referral-code-box">
+        <div class="referral-code-label">Code unique</div>
+        <div class="referral-code" id="referralCode">--------</div>
+      </div>
+
+      <div class="referral-link-box">
+        <div class="referral-link-label">Lien de parrainage</div>
+        <div class="referral-link" id="referralLink">Chargement...</div>
+        <button class="btn btn-primary" onclick="copyLink()">
+          <i class="fas fa-copy"></i> Copier le lien
+        </button>
+      </div>
+
+      <div class="share-buttons">
+        <button class="btn btn-whatsapp" onclick="shareWhatsApp()">
+          <i class="fab fa-whatsapp"></i> Partager sur WhatsApp
+        </button>
+        <button class="btn btn-gold" onclick="shareFacebook()">
+          <i class="fab fa-facebook"></i> Partager sur Facebook
+        </button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value" id="totalReferrals">0</div>
+          <div class="stat-label">Filleuls</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="totalEarnings">0</div>
+          <div class="stat-label">FCFA gagnés</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="how-it-works" data-aos="fade-up" data-aos-delay="200">
+      <h2><i class="fas fa-info-circle"></i> Comment ça marche ?</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Partagez votre lien</h3>
+            <p>Envoyez votre lien de parrainage unique à vos amis par WhatsApp, Facebook ou autres.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Vos amis s'inscrivent</h3>
+            <p>Quand ils s'inscrivent avec votre lien, ils deviennent vos filleuls.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Gagnez des bonus</h3>
+            <p>Recevez 10% de bonus sur chaque recharge effectuee par vos filleuls !</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="referral-history" data-aos="fade-up" data-aos-delay="300">
+      <h2><i class="fas fa-users"></i> Vos Filleuls</h2>
+      <div class="referral-list" id="referralList">
+        <div class="empty-state">
+          <i class="fas fa-user-friends"></i>
+          <p>Aucun filleul pour le moment.<br>Partagez votre lien pour commencer !</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="notification" id="notification">Lien copie !</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+  <script>
+    AOS.init({ duration: 800, once: true });
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD2JiDS0g8EkeNXxjO7_wGI3WznpPvcCCk",
+      authDomain: "social-boost-horizon.firebaseapp.com",
+      projectId: "social-boost-horizon",
+      storageBucket: "social-boost-horizon.appspot.com",
+      messagingSenderId: "43658165639",
+      appId: "1:43658165639:web:b8f492dc6a25cd12fc6722"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    const FRONTEND_DOMAIN = 'https://socialboosthorizon.com';
+    const BACKEND_URL = 'https://social-boost-exaucenapopolo2.replit.app';
+
+    let currentUser = null;
+    let userData = null;
+
+    document.getElementById('hamburgerBtn').addEventListener('click', () => {
+      document.getElementById('mobileMenu').classList.toggle('active');
+    });
+
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      currentUser = user;
+      await loadUserData();
+    });
+
+    async function loadUserData() {
+      try {
+        const userDoc = await db.collection('users').doc(currentUser.uid).get();
+        if (userDoc.exists) {
+          userData = userDoc.data();
+          
+          const initial = (userData.username || currentUser.email || '?').charAt(0).toUpperCase();
+          document.getElementById('userInitial').textContent = initial;
+          
+          const code = userData.referralCode || '--------';
+          document.getElementById('referralCode').textContent = code;
+          
+          const link = `${FRONTEND_DOMAIN}/register.html?ref=${code}`;
+          document.getElementById('referralLink').textContent = link;
+          
+          await loadReferralStats();
+          await loadReferralHistory();
+        }
+      } catch (error) {
+        console.error('Erreur chargement donnees:', error);
+      }
+    }
+
+    async function loadReferralStats() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/referrals/${currentUser.uid}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          document.getElementById('totalReferrals').textContent = data.totalReferrals;
+          document.getElementById('totalEarnings').textContent = data.totalEarnings.toLocaleString('fr-FR');
+          
+          // Stocker les données pour l'historique
+          window.referralsData = data.referrals;
+        } else {
+          document.getElementById('totalReferrals').textContent = '0';
+          document.getElementById('totalEarnings').textContent = '0';
+        }
+      } catch (error) {
+        console.error('Erreur stats:', error);
+        document.getElementById('totalReferrals').textContent = '0';
+        document.getElementById('totalEarnings').textContent = '0';
+      }
+    }
+
+    async function loadReferralHistory() {
+      try {
+        const listEl = document.getElementById('referralList');
+        
+        // Utiliser les données déjà chargées ou les récupérer
+        let referrals = window.referralsData;
+        
+        if (!referrals) {
+          const response = await fetch(`${BACKEND_URL}/api/referrals/${currentUser.uid}`);
+          const data = await response.json();
+          if (data.success) {
+            referrals = data.referrals;
+          } else {
+            referrals = [];
+          }
+        }
+        
+        if (!referrals || referrals.length === 0) {
+          listEl.innerHTML = `
+            <div class="empty-state">
+              <i class="fas fa-user-friends"></i>
+              <p>Aucun filleul pour le moment.<br>Partagez votre lien pour commencer !</p>
+            </div>
+          `;
+          return;
+        }
+        
+        let html = '';
+        for (const referral of referrals) {
+          const username = referral.username || 'Utilisateur';
+          const bonus = referral.bonus || 0;
+          const country = referral.country || '';
+          
+          html += `
+            <div class="referral-item">
+              <div class="referral-user">
+                <i class="fas fa-user-check"></i>
+                <span>${username}</span>
+                ${country ? `<small style="opacity:0.7">${country}</small>` : ''}
+              </div>
+              <span class="referral-bonus">${bonus > 0 ? '+' + bonus.toLocaleString('fr-FR') + ' FCFA' : 'Inscrit'}</span>
+            </div>
+          `;
+        }
+        
+        listEl.innerHTML = html;
+      } catch (error) {
+        console.error('Erreur historique:', error);
+      }
+    }
+
+    function copyLink() {
+      const link = document.getElementById('referralLink').textContent;
+      navigator.clipboard.writeText(link).then(() => {
+        showNotification('Lien copie !');
+      }).catch(() => {
+        const input = document.createElement('input');
+        input.value = link;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        showNotification('Lien copie !');
+      });
+    }
+
+    function shareWhatsApp() {
+      const code = document.getElementById('referralCode').textContent;
+      const link = `${FRONTEND_DOMAIN}/register.html?ref=${code}`;
+      const text = encodeURIComponent(`Rejoins Social Boost Horizon et booste tes reseaux sociaux ! Inscris-toi avec mon lien : ${link}`);
+      window.open(`https://wa.me/?text=${text}`, '_blank');
+    }
+
+    function shareFacebook() {
+      const code = document.getElementById('referralCode').textContent;
+      const link = encodeURIComponent(`${FRONTEND_DOMAIN}/register.html?ref=${code}`);
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${link}`, '_blank');
+    }
+
+    function showNotification(msg) {
+      const el = document.getElementById('notification');
+      el.textContent = msg;
+      el.classList.add('active');
+      setTimeout(() => {
+        el.classList.remove('active');
+      }, 2500);
+    }
+  </script>
+</body>
+</html>
