@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Response as ExpressResponse } from "express";
-import type { Transaction } from "firebase-admin/firestore";
+import type { Transaction, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
@@ -718,7 +718,7 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
     const db  = getFirestore();
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    let pendingDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    let pendingDocs: QueryDocumentSnapshot[] = [];
     try {
       const snap = await db.collection("rechargements")
         .where("status", "==", "pending")
@@ -729,7 +729,7 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
       console.warn("[audit] Impossible de lire rechargements (quota?):", (e as Error).message);
     }
 
-    let actPendingDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    let actPendingDocs: QueryDocumentSnapshot[] = [];
     try {
       const snap = await db.collection("activites")
         .where("status", "==", "pending")
