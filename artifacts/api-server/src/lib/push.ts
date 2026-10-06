@@ -27,7 +27,7 @@ export async function sendExpoPush(
   if (imageUrl) payload.imageUrl = imageUrl;
 
   try {
-    const r = await fetch(EXPO_PUSH_URL, {
+    const r: any = await fetch(EXPO_PUSH_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
