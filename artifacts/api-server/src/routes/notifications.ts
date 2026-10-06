@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
@@ -12,7 +12,7 @@ import {
   asNumber,
 } from "../lib/firebase-admin.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // ── Cache notifications par utilisateur — 2 min TTL ───────────────────────
 const notifCache = new Map<string, { data: unknown[]; ts: number }>();

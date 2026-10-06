@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
@@ -17,7 +17,7 @@ import {
 } from "../lib/firebase-admin.js";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-const router = Router();
+const router: IRouter = Router();
 
 const ADMIN_WHATSAPP_CANCEL = process.env.MY_PHONE_NUMBER ?? "+237699853665";
 
@@ -379,6 +379,10 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   // ── Vérification + déduction atomique du solde ──────────────────────────
   // Utilise une transaction Firestore pour éviter les race conditions.
   // C'est le seul endroit qui décide si une commande peut partir.
+  //
+  // ✅ FIX TS: la transaction RETOURNE l'erreur au lieu de l'assigner à une variable
+  //    capturée dans la closure. TypeScript ne peut pas tracker les affectations
+  //    faites à l'intérieur d'un callback → il réduisait `balanceCheckError` à `never`.
   let balanceCheckError: string | null = null;
 
   let orderUserEmail = "";
@@ -388,7 +392,7 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
     const fb = getFirebaseAdmin();
     const db = fb.firestore();
 
-    await db.runTransaction(async (tx) => {
+    balanceCheckError = await db.runTransaction(async (tx): Promise<string | null> => {
       const userRef = db.doc(`users/${uid}`);
       const userDoc = await tx.get(userRef);
       const userData = userDoc.data() ?? {};
@@ -397,26 +401,24 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
 
       // 1. Compte bloqué ?
       if (userData.blocked === true) {
-        balanceCheckError = "BLOCKED";
-        return;
+        return "BLOCKED";
       }
 
       // 2. Dette non remboursée ?
       const frozenDebt = Number(userData.frozenDebt ?? 0);
       if (frozenDebt > 0) {
-        balanceCheckError = `DEBT:${frozenDebt}`;
-        return;
+        return `DEBT:${frozenDebt}`;
       }
 
       // 3. Solde suffisant ?
       const currentBalance = Number(userData.balance ?? 0);
       if (currentBalance < orderPrice) {
-        balanceCheckError = `INSUFFICIENT:${currentBalance}`;
-        return;
+        return `INSUFFICIENT:${currentBalance}`;
       }
 
       // 4. Tout OK → déduire atomiquement
       tx.update(userRef, { balance: FieldValue.increment(-orderPrice) });
+      return null;
     });
   } catch (txErr) {
     console.error("[orders/create] Transaction erreur:", txErr);
@@ -696,7 +698,11 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
 //   Si la requête est envoyée 100 fois, seule la première passera ; les suivantes
 //   recevront "déjà annulée".
 router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  // ✅ FIX TS: req.params.id peut être typé `string | string[]` en Express 5.
+  //    On garantit un `string` avant de le passer à notifyAdminCancelRefund.
+  const rawId = req.params.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
+
   const uid     = req.uid!;
   const idToken = req.idToken!;
 

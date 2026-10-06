@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Response } from "express";
 import { randomBytes } from "crypto";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asIsoDate, asNumber, asString, asStringOrNull, firestoreGet, firestoreUpdate, getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore } from "firebase-admin/firestore";
 
-const router = Router();
+const router: IRouter = Router();
 
 // ── In-memory profile cache — TTL 90 s ────────────────────────────────────
 // Prevents repeated Firestore reads when the mobile app fetches /me on every focus.

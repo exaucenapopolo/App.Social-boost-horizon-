@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import {
@@ -9,7 +9,7 @@ import {
   asNumber,
 } from "../lib/firebase-admin.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 const ADMIN_WHATSAPP = process.env.MY_PHONE_NUMBER ?? "+237699853665";
 

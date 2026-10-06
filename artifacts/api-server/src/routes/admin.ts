@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
@@ -6,9 +6,9 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
 import { enqueuePendingCredit, getPendingCount } from "../lib/pendingCredits.js";
 
-const router = Router();
+const router: IRouter = Router();
 
-const ADMIN_EMAIL = "mcexauofficiel@gmail.com";
+const ADMIN_EMAIL = "mcexauofficiel@gmail.com"; "exaucenapopolo2@gmail.com";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 // Expo accepts up to 100 messages per batch request
 const EXPO_BATCH_SIZE = 100;
@@ -929,7 +929,11 @@ router.post("/api/admin/set-version", requireAuth, async (req: AuthRequest, res)
     return;
   }
 
-  const db = getFirestore(getFirebaseAdmin());
+  // ✅ FIX: getFirebaseAdmin() initialise l'app par défaut, puis getFirestore() l'utilise.
+  //    (avant: getFirestore(getFirebaseAdmin()) — mauvais type passé à getFirestore)
+  getFirebaseAdmin();
+  const db = getFirestore();
+
   await db.collection("config").doc("appVersion").set({
     latestVersion,
     minVersion,

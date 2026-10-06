@@ -1,9 +1,9 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // ── Vérification solde/blocage avant envoi fournisseur ─────────────────────
 async function checkUserCanOrder(uid: string): Promise<{ allowed: boolean; errorCode?: string; errorMsg?: string; userEmail?: string; userName?: string }> {

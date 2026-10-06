@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirestore } from "firebase-admin/firestore";
@@ -14,7 +14,7 @@ import {
   getFirebaseAdmin,
 } from "../lib/firebase-admin.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // ── Cache leaderboard — évite de lire TOUS les users à chaque visite ──
 let leaderboardCache: { data: unknown[]; ts: number } | null = null;

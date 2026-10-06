@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import {
@@ -10,7 +10,7 @@ import {
 import { saveNotifAndSendPush } from "../lib/push.js";
 import { sendWelcomeEmail } from "../lib/email.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // ── Cache check-referral — évite 1 lecture Firestore par frappe clavier ──
 // Clé = code referral, valeur = { valid, name, expiresAt }

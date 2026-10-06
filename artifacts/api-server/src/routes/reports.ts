@@ -18,13 +18,13 @@
  *   Bénéfice NET     = CA − Coût  =  CA × (1 − 1/mult)
  */
 
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin, asString, asNumber } from "../lib/firebase-admin.js";
 import { sendConsolidatedAdminReport } from "../lib/email.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ADMIN_WA   = process.env.MY_PHONE_NUMBER ?? "+237699853665";

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
@@ -23,7 +23,7 @@ const FAPSHI_BASE   = "https://live.fapshi.com";
 const INTL_PAYMENT_BACKEND = "https://social-boost-exaucenapopolo2.replit.app";
 const ADMIN_WHATSAPP = "+237699853665";
 
-const router = Router();
+const router: IRouter = Router();
 
 // ── Caches wallet par utilisateur ─────────────────────────────────────────
 // GET /wallet (solde + rechargements) : 3 min TTL

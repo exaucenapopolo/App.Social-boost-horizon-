@@ -1,6 +1,6 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 
-const router = Router();
+const router: IRouter = Router();
 
 router.get("/expo-qr", (_req, res) => {
   const expoDomain = process.env.REPLIT_EXPO_DEV_DOMAIN ?? "";
