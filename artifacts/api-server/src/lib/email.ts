@@ -2,7 +2,7 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY ?? "");
 const FROM   = process.env.RESEND_FROM_EMAIL ?? "Social Boost Horizon <Support@socialboosthorizon.com>";
-const APP_URL = "https://socialboosthorizon-app.replit.app";
+const APP_URL = "https://api-server-gilt-pi.vercel.app/";
 
 // ── Base layout ────────────────────────────────────────────────────────────────
 function layout(body: string): string {

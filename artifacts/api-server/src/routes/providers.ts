@@ -442,7 +442,7 @@ router.post("/create-fapshi-checkout", async (req: Request, res: Response) => {
   }
 });
 
-const INTL_PAYMENT_BACKEND = "https://social-boost-exaucenapopolo2.replit.app";
+const INTL_PAYMENT_BACKEND = "https://api-server-gilt-pi.vercel.app/";
 
 router.post("/create-payment", async (req: Request, res: Response) => {
   try {
@@ -458,7 +458,7 @@ router.post("/create-payment", async (req: Request, res: Response) => {
       return;
     }
 
-    const API_BASE = (process.env.API_BASE_URL ?? "https://socialboosthorizon-app.replit.app/").replace(/\/$/, "");
+    const API_BASE = (process.env.API_BASE_URL ?? "https://api-server-gilt-pi.vercel.app/").replace(/\/$/, "");
     const payload: Record<string, unknown> = {
       amount: finalAmount,
       email: email ?? `${userId}@sbh.local`,
