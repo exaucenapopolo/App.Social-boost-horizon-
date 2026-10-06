@@ -1,10 +1,10 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { firestoreGet, asString } from "../lib/firebase-admin.js";
 import { sendServiceRequestConfirmEmail } from "../lib/email.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
 const ADMIN_WHATSAPP = process.env.MY_PHONE_NUMBER ?? "+237699853665";
 
@@ -45,11 +45,6 @@ async function sendTwilioWhatsApp(body: string): Promise<void> {
   }
 }
 
-/**
- * POST /support/contact
- * Sends a support request via Twilio directly to admin WhatsApp.
- * Body: { category, message, details, whatsappCountryCode, whatsappPhone }
- */
 router.post("/support/contact", requireAuth, async (req: AuthRequest, res: Response) => {
   const {
     category,
@@ -87,7 +82,6 @@ router.post("/support/contact", requireAuth, async (req: AuthRequest, res: Respo
 
     await sendTwilioWhatsApp(adminMsg);
 
-    // Fire-and-forget confirmation email
     if (userEmail) {
       const detailsMap: Record<string, string> = { "Catégorie": category ?? "", "Message": (message ?? "").substring(0, 200) };
       sendServiceRequestConfirmEmail(userEmail, userName, "🆘", "Support Client", waNumber, detailsMap).catch(() => {});
@@ -100,11 +94,6 @@ router.post("/support/contact", requireAuth, async (req: AuthRequest, res: Respo
   }
 });
 
-/**
- * POST /support/site-request
- * Sends a site creation / API integration request via Twilio to admin WhatsApp.
- * Body: { hasWebsite, siteUrl, requestType, description, whatsappCountryCode, whatsappPhone }
- */
 router.post("/support/site-request", requireAuth, async (req: AuthRequest, res: Response) => {
   const {
     hasWebsite,
@@ -139,7 +128,6 @@ router.post("/support/site-request", requireAuth, async (req: AuthRequest, res: 
 
     await sendTwilioWhatsApp(adminMsg);
 
-    // Fire-and-forget confirmation email
     if (userEmail) {
       const detailsMap: Record<string, string> = {
         "Type": hasWebsite ? "Intégration API sur site existant" : "Création de site SMM complet",
@@ -157,11 +145,6 @@ router.post("/support/site-request", requireAuth, async (req: AuthRequest, res: 
   }
 });
 
-/**
- * POST /support/service-request
- * Generic endpoint for other service requests (website, app, ads, accounts/Canva).
- * Body: { serviceType, fields, whatsappCountryCode, whatsappPhone }
- */
 router.post("/support/service-request", requireAuth, async (req: AuthRequest, res: Response) => {
   const {
     serviceType,
@@ -215,7 +198,6 @@ router.post("/support/service-request", requireAuth, async (req: AuthRequest, re
 
     await sendTwilioWhatsApp(adminMsg);
 
-    // Fire-and-forget confirmation email
     if (userEmail) {
       const detailsMap: Record<string, string> = {};
       if (fields && typeof fields === "object") {
@@ -233,11 +215,6 @@ router.post("/support/service-request", requireAuth, async (req: AuthRequest, re
   }
 });
 
-/**
- * POST /support/login-help
- * Public endpoint (no auth required) for login-page support requests.
- * Body: { email, category, message, whatsappCountryCode, whatsappPhone }
- */
 router.post("/support/login-help", async (req: any, res: Response) => {
   const {
     email,
@@ -252,10 +229,8 @@ router.post("/support/login-help", async (req: any, res: Response) => {
     return;
   }
 
-  // Répondre IMMÉDIATEMENT — ne pas attendre Twilio (évite tout timeout réseau côté client)
   res.json({ success: true });
 
-  // Envoyer WhatsApp en arrière-plan (fire-and-forget)
   try {
     const waNumber = `${whatsappCountryCode ?? ""} ${whatsappPhone ?? ""}`.trim() || "Non fourni";
 
