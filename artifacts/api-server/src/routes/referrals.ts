@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirestore } from "firebase-admin/firestore";
@@ -14,11 +14,10 @@ import {
   getFirebaseAdmin,
 } from "../lib/firebase-admin.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
-// ── Cache leaderboard — évite de lire TOUS les users à chaque visite ──
 let leaderboardCache: { data: unknown[]; ts: number } | null = null;
-const LEADERBOARD_CACHE_MS = 30 * 60 * 1000; // 30 min
+const LEADERBOARD_CACHE_MS = 30 * 60 * 1000;
 
 router.get("/referrals", requireAuth, async (req: AuthRequest, res: Response) => {
   const user = await firestoreGet(`users/${req.uid}`, req.idToken!);
@@ -38,7 +37,6 @@ router.get("/referrals", requireAuth, async (req: AuthRequest, res: Response) =>
     req.idToken!
   ).catch(() => []);
 
-  // Load parent's parrainage activities once, grouped by fromUserId
   const parentActivities = await firestoreQuery(
     "activites",
     [{ field: "userId", value: req.uid! }],
@@ -63,7 +61,6 @@ router.get("/referrals", requireAuth, async (req: AuthRequest, res: Response) =>
     commissionEarned: commissionByFilleul[u.id] ?? 0,
   }));
 
-  // Sync referralCount in Firestore for existing users
   if (asNumber(user.referralCount) !== list.length) {
     firestoreUpdate(`users/${req.uid}`, { referralCount: list.length }, req.idToken!).catch(() => {});
   }
@@ -79,7 +76,6 @@ router.get("/referrals", requireAuth, async (req: AuthRequest, res: Response) =>
 });
 
 router.get("/leaderboard", requireAuth, async (req: AuthRequest, res: Response) => {
-  // Serve from cache — économise 200+ lectures Firestore par visite
   if (leaderboardCache && Date.now() - leaderboardCache.ts < LEADERBOARD_CACHE_MS) {
     res.json({ success: true, data: leaderboardCache.data });
     return;
@@ -87,8 +83,6 @@ router.get("/leaderboard", requireAuth, async (req: AuthRequest, res: Response) 
   try {
     getFirebaseAdmin();
     const db = getFirestore();
-    // Pas de limite — tous les users sont nécessaires pour le classement exact.
-    // Opération mise en cache 30 min — lectures Firestore amorties.
     const snap = await db.collection("users").get();
     const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
