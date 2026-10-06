@@ -1,16 +1,14 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { randomBytes } from "crypto";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asIsoDate, asNumber, asString, asStringOrNull, firestoreGet, firestoreUpdate, getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore } from "firebase-admin/firestore";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
-// ── In-memory profile cache — TTL 90 s ────────────────────────────────────
-// Prevents repeated Firestore reads when the mobile app fetches /me on every focus.
 const profileCache = new Map<string, { data: Record<string, unknown>; expiresAt: number }>();
-const PROFILE_CACHE_TTL_MS = 5 * 60_000; // 5 minutes (was 90s — réduit les reads par utilisateur actif)
+const PROFILE_CACHE_TTL_MS = 5 * 60_000;
 
 function getCachedProfile(uid: string): Record<string, unknown> | null {
   const entry = profileCache.get(uid);
@@ -27,7 +25,6 @@ export function invalidateProfileCache(uid: string): void {
   profileCache.delete(uid);
 }
 
-// ── Prune expired entries every 5 min ─────────────────────────────────────
 setInterval(() => {
   const now = Date.now();
   for (const [uid, entry] of profileCache) {
@@ -39,12 +36,10 @@ function maskApiKey(key: string): string {
   return "sbh_" + "*".repeat(8) + key.slice(-6);
 }
 
-// ── GET /api/me ────────────────────────────────────────────────────────────
 router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
   const uid     = req.uid!;
-  const noCache = req.query.refresh === "1"; // ?refresh=1 forces a fresh read
+  const noCache = req.query.refresh === "1";
 
-  // Serve from cache when possible to save Firestore quota
   if (!noCache) {
     const cached = getCachedProfile(uid);
     if (cached) {
@@ -58,7 +53,6 @@ router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
 
   let user = await firestoreGet(`users/${uid}`, req.idToken!);
   if (!user) {
-    // If Firestore is throttled and cache has stale data, return it anyway
     const stale = profileCache.get(uid);
     if (stale) {
       res.set("X-Cache", "STALE");
@@ -66,21 +60,16 @@ router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Admin auto-recovery: if profile not found for admin email, search by email or create it
     if (req.email === ADMIN_EMAIL) {
       try {
-        getFirebaseAdmin(); // ensure SDK is initialized
+        getFirebaseAdmin();
         const db = getFirestore();
-        // Try to find admin profile by email in case UID changed
         const snap = await db.collection("users").where("email", "==", ADMIN_EMAIL).limit(1).get();
         if (!snap.empty) {
           const docData = snap.docs[0].data();
-          // If found under a different document, use it but also update the current UID doc
           user = { id: uid, ...docData };
-          // Mirror the profile to the current UID for future lookups
           await db.doc(`users/${uid}`).set({ ...docData, email: ADMIN_EMAIL }, { merge: true });
         } else {
-          // No admin profile anywhere — create one with isAdmin flag and 0 balances
           const newAdminProfile = {
             name: "Admin",
             email: ADMIN_EMAIL,
@@ -115,10 +104,8 @@ router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
   const isAdmin = req.email === ADMIN_EMAIL;
   const rawApiKey = asStringOrNull(user.apiKey);
 
-  // Anciens profils utilisent "username" au lieu de "name"
   const name = asString(user.name) || asString(user.username);
 
-  // Champs potentiellement manquants chez les anciens utilisateurs
   const missingFields: Record<string, unknown> = {};
   if (!user.name && user.username) missingFields.name = asString(user.username);
   if (user.totalOrders == null) missingFields.totalOrders = 0;
@@ -127,7 +114,6 @@ router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
   if (user.referralCount == null) missingFields.referralCount = asNumber(user.referralsCount);
   if (user.referralOrdersUsed == null) missingFields.referralOrdersUsed = 0;
 
-  // Migration silencieuse : on comble les champs manquants sans bloquer la réponse
   if (Object.keys(missingFields).length > 0) {
     firestoreUpdate(`users/${uid}`, missingFields, req.idToken!).catch(() => {});
   }
@@ -159,7 +145,6 @@ router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: profileData });
 });
 
-// ── PATCH /api/me ──────────────────────────────────────────────────────────
 router.patch("/me", requireAuth, async (req: AuthRequest, res: Response) => {
   const allowed = ["name", "phone", "photoURL", "country"];
   const updates: Record<string, unknown> = {};
@@ -175,11 +160,10 @@ router.patch("/me", requireAuth, async (req: AuthRequest, res: Response) => {
     res.status(500).json({ success: false, error: "Erreur de mise à jour" });
     return;
   }
-  invalidateProfileCache(req.uid!); // Invalidate after update
+  invalidateProfileCache(req.uid!);
   res.json({ success: true });
 });
 
-// ── POST /api/generate-api-key ─────────────────────────────────────────────
 router.post("/generate-api-key", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     getFirebaseAdmin();
@@ -203,7 +187,6 @@ router.post("/generate-api-key", requireAuth, async (req: AuthRequest, res: Resp
   }
 });
 
-// ── POST /api/revoke-api-key ───────────────────────────────────────────────
 router.post("/revoke-api-key", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     getFirebaseAdmin();
