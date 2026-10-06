@@ -1,6 +1,12 @@
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { saveNotifAndSendPush } from "../lib/push.js";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import {
+  getFirestore,
+  FieldValue,
+  Transaction,
+  QueryDocumentSnapshot,
+  QuerySnapshot,
+} from "firebase-admin/firestore";
 import { invalidateOrdersCache } from "../routes/orders.js";
 import { invalidateWalletCache } from "../routes/wallet.js";
 import { invalidateNotifCache } from "../routes/notifications.js";
@@ -51,6 +57,15 @@ interface OrderDetails {
   charge: number;
 }
 
+// Type minimal pour contourner le conflit de `Response`
+type HttpRes = {
+  ok: boolean;
+  status: number;
+  headers: { get(name: string): string | null };
+  json: () => Promise<unknown>;
+  text: () => Promise<string>;
+};
+
 async function fetchOrderDetails(
   base: string,
   key: string,
@@ -59,15 +74,15 @@ async function fetchOrderDetails(
   if (!key || !orderId) return null;
   try {
     const params = new URLSearchParams({ key, action: "status", order: orderId });
-    const r = await fetch(base, {
+    const r = (await fetch(base, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: params.toString(),
       signal: AbortSignal.timeout(12000),
-    });
+    })) as unknown as HttpRes;
     const ct = r.headers.get("content-type") ?? "";
     let data: Record<string, unknown> = {};
-    try { data = ct.includes("json") ? await r.json() : JSON.parse(await r.text()); } catch { /**/ }
+    try { data = ct.includes("json") ? (await r.json()) as Record<string, unknown> : JSON.parse(await r.text()); } catch { /**/ }
     if (!r.ok || data.error) return null;
     return {
       status:  String(data.status ?? "Pending"),
@@ -100,7 +115,7 @@ async function getCachedUserInfo(db: ReturnType<typeof getFirestore>, uid: strin
 // ── Traitement d'une commande individuelle ────────────────────────────────
 async function processOrder(
   db: ReturnType<typeof getFirestore>,
-  doc: FirebaseFirestore.QueryDocumentSnapshot,
+  doc: QueryDocumentSnapshot,
   now: number
 ): Promise<void> {
   const order = doc.data();
@@ -180,7 +195,7 @@ async function processOrder(
 
     if (refundAmt > 0 && uid) {
       try {
-        await db.runTransaction(async (t) => {
+        await db.runTransaction(async (t: Transaction) => {
           const orderRef = db.doc(`commandes/${doc.id}`);
           const snap = await t.get(orderRef);
           if (snap.data()?.refundProcessed) return; // Déjà traité
@@ -219,7 +234,7 @@ async function processOrder(
              !order.refundProcessed) {
     if (price > 0 && uid) {
       try {
-        await db.runTransaction(async (t) => {
+        await db.runTransaction(async (t: Transaction) => {
           const orderRef = db.doc(`commandes/${doc.id}`);
           const snap = await t.get(orderRef);
           if (snap.data()?.refundProcessed) return; // Déjà traité
@@ -269,7 +284,7 @@ async function pollOnce(): Promise<void> {
 
   // Requête simple à 1 filtre uniquement → pas d'index composite requis
   // Inclut toutes les variantes de statut "actif" possibles (majuscule ou non)
-  let snap: FirebaseFirestore.QuerySnapshot | null = null;
+  let snap: QuerySnapshot | null = null;
   try {
     snap = await db.collection("commandes")
       .where("status", "in", ["En attente", "en cours", "en attente", "En cours", "pending", "in_progress"])

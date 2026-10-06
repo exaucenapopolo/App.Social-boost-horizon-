@@ -1,5 +1,5 @@
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Transaction, DocumentReference } from "firebase-admin/firestore";
 import { getUserPushToken, sendExpoPush } from "../lib/push.js";
 import { sendRechargeEmail } from "../lib/email.js";
 
@@ -12,14 +12,23 @@ const MAX_PER_RUN      = 20;              // max pending recharges per run
 const SKIP_IF_CHECKED_WITHIN_MS = 12 * 60 * 1000; // skip if checked < 12 min ago
 const EXPIRE_AFTER_MS = 24 * 60 * 60 * 1000; // abandon after 24h
 
+// Type minimal pour contourner le conflit de `Response`
+type HttpRes = {
+  ok: boolean;
+  status: number;
+  headers: { get(name: string): string | null };
+  json: () => Promise<unknown>;
+  text: () => Promise<string>;
+};
+
 async function checkFapshiStatus(transId: string): Promise<"SUCCESSFUL" | "FAILED" | "PENDING" | null> {
   try {
-    const r = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
+    const r = (await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
       headers: { apiuser: FAPSHI_USER, apikey: FAPSHI_SECRET },
       signal: AbortSignal.timeout(12000),
-    });
+    })) as unknown as HttpRes;
     if (!r.ok) return null;
-    const raw = await r.json() as Record<string, unknown>;
+    const raw = (await r.json()) as Record<string, unknown>;
     const statusObj = (raw?.data ?? raw) as Record<string, unknown>;
     const st = String(statusObj?.status ?? raw?.status ?? "").toUpperCase();
     if (st === "SUCCESSFUL") return "SUCCESSFUL";
@@ -64,7 +73,7 @@ async function pollOnce(): Promise<void> {
     transId: string;
     userId: string;
     amount: number;
-    docRef: FirebaseFirestore.DocumentReference;
+    docRef: DocumentReference;
     docType: "rechargement" | "activite";
     createdAt: string;
   }
@@ -107,7 +116,7 @@ async function pollOnce(): Promise<void> {
   console.log(`[fapshi-poller] ${pending.size} paiement(s) en attente à vérifier`);
 
   const promises = Array.from(pending.values()).map(async (entry) => {
-    const { transId, userId, amount, docRef, docType, createdAt } = entry;
+    const { transId, userId, amount, docRef, createdAt } = entry;
 
     // Skip if no userId
     if (!userId) return;
@@ -123,9 +132,9 @@ async function pollOnce(): Promise<void> {
     }
 
     // Skip if we just checked this one
-    const lastChecked = (docRef as any)._lastFapshiCheck ?? 0;
+    const lastChecked = (docRef as unknown as { _lastFapshiCheck?: number })._lastFapshiCheck ?? 0;
     if (now - lastChecked < SKIP_IF_CHECKED_WITHIN_MS) return;
-    (docRef as any)._lastFapshiCheck = now;
+    (docRef as unknown as { _lastFapshiCheck?: number })._lastFapshiCheck = now;
 
     // Check if already credited (idempotency check)
     const confirmRef = db.collection("rechargements").doc(`fapshi_${transId}`);
@@ -155,7 +164,7 @@ async function pollOnce(): Promise<void> {
     let newBalance = 0;
 
     try {
-      await db.runTransaction(async (t) => {
+      await db.runTransaction(async (t: Transaction) => {
         // Idempotency check inside transaction
         const existingDoc = await t.get(confirmRef);
         if (existingDoc.exists) {
@@ -194,7 +203,7 @@ async function pollOnce(): Promise<void> {
         t.update(userRef, userUpdates);
         newBalance = currentBal + creditToBalance;
 
-        const now = new Date().toISOString();
+        const nowIso = new Date().toISOString();
         t.set(confirmRef, {
           amount,
           method: "Fapshi Mobile Money",
@@ -202,7 +211,7 @@ async function pollOnce(): Promise<void> {
           transId,
           status: "confirmed",
           userId,
-          createdAt: now,
+          createdAt: nowIso,
           creditedBy: "server-poller",
           depositNotifSent: true, // notification sent below by sendExpoPush
         });

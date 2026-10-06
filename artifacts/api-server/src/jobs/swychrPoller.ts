@@ -1,5 +1,5 @@
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Transaction } from "firebase-admin/firestore";
 import { getUserPushToken, sendExpoPush } from "../lib/push.js";
 
 const POLL_INTERVAL_MS = 3 * 60 * 1000;   // toutes les 3 minutes
@@ -66,7 +66,7 @@ async function pollOnce(): Promise<void> {
     let alreadyDone = false;
 
     try {
-      await db.runTransaction(async (t) => {
+      await db.runTransaction(async (t: Transaction) => {
         const existing = await t.get(rechargeRef);
         if (existing.exists && (existing.data()?.status === "confirmed" || existing.data()?.processed === true)) {
           alreadyDone = true;

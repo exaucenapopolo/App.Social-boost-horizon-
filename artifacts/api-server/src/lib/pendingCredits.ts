@@ -15,7 +15,11 @@
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { resolve } from "path";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import {
+  getFirestore,
+  Transaction,
+  QueryDocumentSnapshot,
+} from "firebase-admin/firestore";
 import { getFirebaseAdmin } from "./firebase-admin.js";
 import { sendRechargeEmail } from "./email.js";
 import { getUserPushToken, sendExpoPush } from "./push.js";
@@ -28,6 +32,15 @@ const RETRY_INTERVAL_MS = 30_000; // 30 secondes
 
 // Créer le dossier si absent
 try { mkdirSync(DATA_DIR, { recursive: true }); } catch { /* existe déjà */ }
+
+// Type minimal pour contourner le conflit de `Response` (Next.js shadow)
+type HttpRes = {
+  ok: boolean;
+  status: number;
+  headers: { get(name: string): string | null };
+  json: () => Promise<unknown>;
+  text: () => Promise<string>;
+};
 
 export interface PendingCredit {
   id: string;           // identifiant unique (ex: fapshi_TRANSID)
@@ -89,7 +102,7 @@ async function processSingle(credit: PendingCredit): Promise<boolean> {
     let userEmail = "";
     let newBalanceAfter = 0;
 
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const existing = await t.get(rechargeRef);
       if (existing.exists) {
         alreadyDone = true;
@@ -226,7 +239,7 @@ async function startupAudit(): Promise<void> {
     const db = getFirestore();
 
     // Lire les rechargements pending
-    let pendingDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    let pendingDocs: QueryDocumentSnapshot[] = [];
     try {
       const snap = await db.collection("rechargements")
         .where("status", "==", "pending")
@@ -236,7 +249,7 @@ async function startupAudit(): Promise<void> {
     } catch { /* quota dépassé — skip */ }
 
     // Lire les activites depot pending
-    let actDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    let actDocs: QueryDocumentSnapshot[] = [];
     try {
       const snap = await db.collection("activites")
         .where("status", "==", "pending")
@@ -288,12 +301,12 @@ async function startupAudit(): Promise<void> {
 
       // Vérifier chez Fapshi
       try {
-        const r = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
+        const r = (await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
           headers: { apiuser: FAPSHI_USER, apikey: FAPSHI_SECRET },
           signal: AbortSignal.timeout(10000),
-        });
+        })) as unknown as HttpRes;
         if (!r.ok) continue;
-        const raw = await r.json() as Record<string, unknown>;
+        const raw = (await r.json()) as Record<string, unknown>;
         const statusObj = (raw?.data ?? raw) as Record<string, unknown>;
         const st = String(statusObj?.status ?? raw?.status ?? "").toUpperCase();
 

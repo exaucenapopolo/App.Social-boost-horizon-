@@ -24,7 +24,12 @@
  */
 
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import {
+  getFirestore,
+  FieldValue,
+  Firestore,
+  QuerySnapshot,
+} from "firebase-admin/firestore";
 import { getUserPushToken, sendExpoPush } from "../lib/push.js";
 
 const POLL_INTERVAL_MS = 45 * 60 * 1000; // 45 minutes (quota ×4.5 réduit)
@@ -39,11 +44,11 @@ function asString(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
-async function promotePendingSwychr(db: FirebaseFirestore.Firestore): Promise<void> {
+async function promotePendingSwychr(db: Firestore): Promise<void> {
   // Find pending rechargements older than 5 minutes (swychr_ prefix = international)
   const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
-  let pendingSnap: FirebaseFirestore.QuerySnapshot;
+  let pendingSnap: QuerySnapshot;
   try {
     pendingSnap = await db.collection("rechargements")
       .where("status", "==", "pending")
@@ -123,7 +128,7 @@ async function pollOnce(): Promise<void> {
 
   // PHASE 1: Query confirmed rechargements that still need at least one of the two tasks.
   // We filter in memory to avoid needing a composite index.
-  let snap: FirebaseFirestore.QuerySnapshot;
+  let snap: QuerySnapshot;
   try {
     snap = await db.collection("rechargements")
       .where("status", "==", "confirmed")
