@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import {
@@ -10,18 +10,11 @@ import {
 import { saveNotifAndSendPush } from "../lib/push.js";
 import { sendWelcomeEmail } from "../lib/email.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
-// ── Cache check-referral — évite 1 lecture Firestore par frappe clavier ──
-// Clé = code referral, valeur = { valid, name, expiresAt }
-// TTL 24h: les codes changent rarement, et on invalide si jamais c'est faux.
 const referralCache = new Map<string, { valid: boolean; name?: string; expiresAt: number }>();
-const REFERRAL_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+const REFERRAL_CACHE_TTL = 24 * 60 * 60 * 1000;
 
-/**
- * GET /auth/check-referral?code=SBH-XXXXXX
- * Public — checks if a referral code exists and returns the parrain's first name.
- */
 router.get("/auth/check-referral", async (req: Request, res: Response) => {
   const code = String(req.query.code ?? "").trim().toUpperCase();
   if (!code || code.length < 4) {
@@ -29,7 +22,6 @@ router.get("/auth/check-referral", async (req: Request, res: Response) => {
     return;
   }
 
-  // Serve from cache if available (0 Firestore reads)
   const cached = referralCache.get(code);
   if (cached && Date.now() < cached.expiresAt) {
     res.json(cached.valid ? { valid: true, name: cached.name } : { valid: false });
@@ -37,11 +29,10 @@ router.get("/auth/check-referral", async (req: Request, res: Response) => {
   }
 
   try {
-    // firestoreQuery has Admin SDK + REST fallback — much more reliable than raw Admin SDK
     const results = await firestoreQuery(
       "users",
       [{ field: "referralCode", value: code }],
-      ""  // no user token needed — admin credentials used automatically
+      ""
     );
     if (!results || results.length === 0) {
       referralCache.set(code, { valid: false, expiresAt: Date.now() + REFERRAL_CACHE_TTL });
@@ -49,7 +40,6 @@ router.get("/auth/check-referral", async (req: Request, res: Response) => {
       return;
     }
     const data = results[0];
-    // Support both old docs (username) and new docs (name)
     const fullName = String(data.username ?? data.name ?? "");
     const firstName = fullName.split(" ")[0] || "Utilisateur";
     referralCache.set(code, { valid: true, name: firstName, expiresAt: Date.now() + REFERRAL_CACHE_TTL });
@@ -60,10 +50,6 @@ router.get("/auth/check-referral", async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /auth/parrain-info
- * Authenticated — returns the logged-in user's parrain's name and code.
- */
 router.get("/auth/parrain-info", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const fb = getFirebaseAdmin();
@@ -82,7 +68,6 @@ router.get("/auth/parrain-info", requireAuth, async (req: AuthRequest, res: Resp
       res.json({ success: true, data: null });
     } else {
       const parentData = snap.docs[0].data();
-      // Support both old docs (username) and new docs (name)
       const parentName = String(parentData.username ?? parentData.name ?? "");
       res.json({ success: true, data: { name: parentName, code: referredBy } });
     }
@@ -107,7 +92,6 @@ router.post(
       return;
     }
 
-    // Resolve parrain's name before creating profile
     let referredByName = "";
     if (referredBy) {
       try {
@@ -120,12 +104,9 @@ router.post(
           const pd = snap.docs[0].data();
           referredByName = String(pd?.username ?? pd?.name ?? "");
         }
-      } catch { /* ignore */ }
+      } catch { }
     }
 
-    // ── Détection de fraude par nom ──────────────────────────────────────
-    // Si un compte bloqué a le même prénom ou le même nom complet,
-    // le nouveau compte est automatiquement bloqué avec la même dette.
     let autoBlocked = false;
     let autoFrozenDebt = 0;
     let autoBlockReason = "";
@@ -136,7 +117,6 @@ router.post(
       const newFirstName = String(name).split(" ")[0].toLowerCase();
       const newFullName  = String(name).toLowerCase().trim();
 
-      // Cherche par nom complet exact (insensible à la casse)
       const blockedByFullName = await db.collection("users")
         .where("blocked", "==", true)
         .where("name", "==", name)
@@ -150,7 +130,6 @@ router.post(
         autoBlockReason = `Nom identique au compte bloqué ${blockedByFullName.docs[0].id}`;
       }
 
-      // Si pas trouvé par nom complet, cherche par prénom parmi les comptes bloqués
       if (!autoBlocked) {
         const blockedSnap = await db.collection("users")
           .where("blocked", "==", true)
@@ -215,10 +194,8 @@ router.post(
       return;
     }
 
-    // Fire-and-forget welcome email
     sendWelcomeEmail(email, name, referralCode ?? "").catch(() => {});
 
-    // If user registered with a referral code, increment parent's referralCount + notify parent
     if (referredBy) {
       try {
         const fb = getFirebaseAdmin();
@@ -238,7 +215,6 @@ router.post(
           });
           console.log(`[auth] referralCount +1 for parent with code ${referredBy}`);
 
-          // Save to Firestore activites AND send push to parent
           saveNotifAndSendPush(
             parentId,
             "nouveau_filleul",
@@ -249,7 +225,6 @@ router.post(
             { filleulName: newUserFirstName }
           ).catch((e) => console.error("[auth] saveNotifAndSendPush error:", e));
 
-          // Notify the new user (filleul) about their referral welcome bonus
           saveNotifAndSendPush(
             req.uid!,
             "parrainage_bienvenue",
