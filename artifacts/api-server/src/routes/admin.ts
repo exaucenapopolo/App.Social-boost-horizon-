@@ -929,7 +929,11 @@ router.post("/api/admin/set-version", requireAuth, async (req: AuthRequest, res)
     return;
   }
 
-  const db = getFirestore(getFirebaseAdmin());
+  // ✅ FIX: initialiser l'app PUIS récupérer Firestore sans argument (pattern aligné
+  //         sur le reste du fichier — évite "Argument of type [...] not assignable to 'App'")
+  getFirebaseAdmin();
+  const db = getFirestore();
+
   await db.collection("config").doc("appVersion").set({
     latestVersion,
     minVersion,
