@@ -1,13 +1,15 @@
 // artifacts/api-server/api/index.ts
 // ─────────────────────────────────────────────────────────────────
 // Point d'entrée Vercel Serverless Function.
-// Vercel détecte automatiquement tout fichier dans `api/` comme une
-// fonction serverless et l'exécute à la demande.
 //
-// On ré-exporte l'app Express (défini dans src/app.ts) pour que Vercel
-// puisse la servir en tant que handler HTTP (req, res) => void.
+// On importe le BUNDLE esbuild (dist/index.cjs) et non le code source,
+// car Vercel ne résout pas les dépendances "workspace:*" du monorepo
+// pnpm lors de la compilation des fonctions serverless.
+//
+// Le bundle contient TOUT : app Express + dépendances + packages workspace.
 // ─────────────────────────────────────────────────────────────────
 
-import app from "../src/app.js";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const app = require("../dist/index.cjs");
 
-export default app;
+export default app.default ?? app;
