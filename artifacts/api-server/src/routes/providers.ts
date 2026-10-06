@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { Request, Response as ExpressResponse } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 
@@ -165,7 +165,7 @@ function formatService(raw: RawSvc, provider?: string, xafRate: number = USD_TO_
 }
 
 async function fetchServices(url: string): Promise<RawSvc[]> {
-  const r = await fetch(url, {
+  const r: any = await fetch(url, {
     headers: { "Accept": "application/json" },
     signal: AbortSignal.timeout(15000),
   });
@@ -204,7 +204,7 @@ async function smmPanelOrder(
   link: string,
   quantity: number,
   comments?: string,
-  res?: Response
+  res?: ExpressResponse
 ): Promise<{ ok: boolean; orderId?: string; error?: string }> {
   try {
     const params: Record<string, string> = {
@@ -216,7 +216,7 @@ async function smmPanelOrder(
     };
     if (comments) params.comments = comments;
 
-    const r = await fetch(base, {
+    const r: any = await fetch(base, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -250,7 +250,7 @@ async function smmPanelOrder(
   }
 }
 
-router.get("/exo-services", async (_req: Request, res: Response) => {
+router.get("/exo-services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${EXO_BASE}?key=${encodeURIComponent(EXO_KEY)}&action=services`);
     const svcs = raw.map((s) => formatService(s));
@@ -260,7 +260,7 @@ router.get("/exo-services", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/order-exo", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/order-exo", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { serviceId, link, quantity, comments } = req.body ?? {};
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
@@ -274,7 +274,7 @@ router.post("/order-exo", requireAuth, async (req: AuthRequest, res: Response) =
   await smmPanelOrder(EXO_BASE, EXO_KEY, String(serviceId), String(link), Number(quantity), comments, res);
 });
 
-router.get("/mtp/services", async (_req: Request, res: Response) => {
+router.get("/mtp/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${MTP_BASE}?key=${encodeURIComponent(MTP_KEY)}&action=services`);
     const svcs = raw.map((s) => formatService(s, "mtp", USD_TO_XAF_AUTO));
@@ -284,7 +284,7 @@ router.get("/mtp/services", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/mtp/order", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/mtp/order", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { serviceId, link, quantity, comments } = req.body ?? {};
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
@@ -298,7 +298,7 @@ router.post("/mtp/order", requireAuth, async (req: AuthRequest, res: Response) =
   await smmPanelOrder(MTP_BASE, MTP_KEY, String(serviceId), String(link), Number(quantity), comments, res);
 });
 
-router.get("/smmgen/services", async (_req: Request, res: Response) => {
+router.get("/smmgen/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${SMMGEN_BASE}?key=${encodeURIComponent(SMMGEN_KEY)}&action=services`);
     const svcs = raw.map((s) => formatService(s, "smmgen", USD_TO_XAF_AUTO));
@@ -308,7 +308,7 @@ router.get("/smmgen/services", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/smmgen/order", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/smmgen/order", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { serviceId, link, quantity, comments } = req.body ?? {};
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
@@ -322,7 +322,7 @@ router.post("/smmgen/order", requireAuth, async (req: AuthRequest, res: Response
   await smmPanelOrder(SMMGEN_BASE, SMMGEN_KEY, String(serviceId), String(link), Number(quantity), comments, res);
 });
 
-router.get("/afriqueboost/services", async (_req: Request, res: Response) => {
+router.get("/afriqueboost/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${AFB_BASE}?key=${encodeURIComponent(AFB_KEY)}&action=services`);
     const svcs = raw.map((s) => formatService(s, "afriqueboost", 1));
@@ -332,7 +332,7 @@ router.get("/afriqueboost/services", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/afriqueboost/order", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/afriqueboost/order", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { serviceId, link, quantity, comments } = req.body ?? {};
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
@@ -346,7 +346,7 @@ router.post("/afriqueboost/order", requireAuth, async (req: AuthRequest, res: Re
   await smmPanelOrder(AFB_BASE, AFB_KEY, String(serviceId), String(link), Number(quantity), comments, res);
 });
 
-router.get("/services/auto", async (_req: Request, res: Response) => {
+router.get("/services/auto", async (_req: Request, res: ExpressResponse) => {
   try {
     const [mtpRes, smmRes] = await Promise.allSettled([
       fetchServices(`${MTP_BASE}?key=${encodeURIComponent(MTP_KEY)}&action=services`),
@@ -378,7 +378,7 @@ router.get("/services/auto", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/create-fapshi-checkout", async (req: Request, res: Response) => {
+router.post("/create-fapshi-checkout", async (req: Request, res: ExpressResponse) => {
   try {
     const { amount, description, message, redirectUrl, externalId } = req.body ?? {};
     if (!amount || Number(amount) < 100) {
@@ -393,7 +393,7 @@ router.post("/create-fapshi-checkout", async (req: Request, res: Response) => {
     };
     if (externalId) payload.externalId = String(externalId);
 
-    const r = await fetch(`${FAPSHI_BASE}/initiate-pay`, {
+    const r: any = await fetch(`${FAPSHI_BASE}/initiate-pay`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -428,7 +428,7 @@ router.post("/create-fapshi-checkout", async (req: Request, res: Response) => {
 
 const INTL_PAYMENT_BACKEND = "https://api-server-gilt-pi.vercel.app/";
 
-router.post("/create-payment", async (req: Request, res: Response) => {
+router.post("/create-payment", async (req: Request, res: ExpressResponse) => {
   try {
     const { amount, amountXAF, currency, email, userId, username, phone, country, message } = req.body ?? {};
 
@@ -455,7 +455,7 @@ router.post("/create-payment", async (req: Request, res: Response) => {
       callbackUrl: `${API_BASE}/api/webhook/swychr`,
     };
 
-    const r = await fetch(`${INTL_PAYMENT_BACKEND}/create-payment`, {
+    const r: any = await fetch(`${INTL_PAYMENT_BACKEND}/create-payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload),
@@ -487,10 +487,10 @@ router.post("/create-payment", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/fapshi/status/:transId", async (req: Request, res: Response) => {
+router.get("/fapshi/status/:transId", async (req: Request, res: ExpressResponse) => {
   try {
     const { transId } = req.params;
-    const r = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
+    const r: any = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
       headers: {
         "Accept": "application/json",
         "apiuser": FAPSHI_USER,
