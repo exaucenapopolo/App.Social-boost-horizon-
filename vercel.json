@@ -3,4 +3,8 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "framework": null,
   "outputDirectory": "artifacts/api-server/dist"
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> dc0101c29f9a7d60752997f0184afe5df7e5b7a7
