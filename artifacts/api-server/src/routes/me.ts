@@ -101,6 +101,14 @@ router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
     }
   }
 
+  // ✅ FIX TypeScript : après le bloc ci-dessus, `user` devrait toujours être défini
+  //    (toutes les branches soit retournent, soit réassignent `user`).
+  //    Mais TypeScript ne peut pas le prouver à cause du try/catch → on l'aide.
+  if (!user) {
+    res.status(404).json({ success: false, error: "Profil introuvable" });
+    return;
+  }
+
   const isAdmin = req.email === ADMIN_EMAIL;
   const rawApiKey = asStringOrNull(user.apiKey);
 
