@@ -12,7 +12,8 @@
     "declarationMap": true,
     "outDir": "dist",
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    "skipLibCheck": true
   },
   "include": ["src", "api"],
   "references": [
