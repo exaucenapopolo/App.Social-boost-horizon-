@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import {
@@ -9,7 +9,7 @@ import {
   asNumber,
 } from "../lib/firebase-admin.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
 const ADMIN_WHATSAPP = process.env.MY_PHONE_NUMBER ?? "+237699853665";
 
@@ -70,14 +70,9 @@ function isHighQuality(serviceName: string): boolean {
   );
 }
 
-/**
- * POST /claims/verify
- * Verifies if an order is eligible for a free refill claim.
- */
 router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Response) => {
-  // Normalize: trim whitespace, remove invisible/control chars, uppercase
   const rawId = String(req.body?.orderId ?? "")
-    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")  // strip zero-width & nbsp
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")
     .trim()
     .toUpperCase();
 
@@ -90,7 +85,6 @@ router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Respons
   const idToken = req.idToken!;
 
   try {
-    // Try multiple formats to be resilient against whitespace issues
     const rawWithSpaces = rawId.replace(/([A-Z]+)-([A-Z]+)-(\d+)/, "$1-$2-$3");
     const queries = [
       firestoreQuery("commandes", [{ field: "orderId", value: rawId }], idToken),
@@ -99,7 +93,6 @@ router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Respons
     const results = await Promise.all(queries);
     const allOrders = results.flat();
 
-    // Deduplicate by document ID
     const seen = new Set<string>();
     const unique = allOrders.filter((o) => {
       const id = asString(o.orderId ?? o.id);
@@ -108,13 +101,11 @@ router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Respons
       return true;
     });
 
-    // First check if order exists at all
     const orderExists = unique.find((o) =>
       asString(o.orderId, "").toUpperCase() === rawId ||
       asString(o.orderId, "").toUpperCase().trim() === rawId
     );
 
-    // Then check ownership
     const found = orderExists
       ? (asString(orderExists.userId) === uid ? orderExists : null)
       : null;
@@ -125,7 +116,6 @@ router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Respons
     }
 
     if (!found) {
-      // Order exists but belongs to someone else
       res.json({ success: true, eligible: false, reason: "Cette commande ne vous appartient pas. Vous ne pouvez réclamer que vos propres commandes." });
       return;
     }
@@ -186,10 +176,6 @@ router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Respons
   }
 });
 
-/**
- * POST /claims/submit
- * Saves claim to Firestore + sends Twilio WhatsApp notification to admin.
- */
 router.post("/claims/submit", requireAuth, async (req: AuthRequest, res: Response) => {
   const { orderId, quantityLost, description } = req.body ?? {};
 
@@ -217,14 +203,12 @@ router.post("/claims/submit", requireAuth, async (req: AuthRequest, res: Respons
       firestoreQuery("commandes", [{ field: "orderId", value: String(orderId).trim() }], idToken),
     ]);
 
-    // Re-verify ownership at submit time
     const order = [...byUpper, ...byRaw].find((o) => asString(o.userId) === uid);
     if (!order) {
       res.status(403).json({ success: false, error: "Cette commande ne vous appartient pas ou est introuvable." });
       return;
     }
 
-    // Verify not already claimed
     const existingClaim = await firestoreQuery("reclamations", [{ field: "orderId", value: rawId }], idToken);
     if (existingClaim.length > 0) {
       res.status(409).json({ success: false, error: "Une réclamation a déjà été soumise pour cette commande." });
@@ -250,10 +234,8 @@ router.post("/claims/submit", requireAuth, async (req: AuthRequest, res: Respons
 
     await firestoreCreate("reclamations", claimData, idToken);
 
-    // Répondre immédiatement — Twilio en arrière-plan
     res.json({ success: true, reclamationId });
 
-    // WhatsApp admin notification (fire-and-forget)
     const adminMsg =
       `🔄 *RÉCLAMATION — Social Boost Horizon*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -277,7 +259,6 @@ router.post("/claims/submit", requireAuth, async (req: AuthRequest, res: Respons
     );
   } catch (e: any) {
     console.error("[claims/submit] error:", e);
-    // Only send 500 if we haven't responded yet
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: "Erreur serveur: " + (e?.message ?? "inconnue") });
     }
