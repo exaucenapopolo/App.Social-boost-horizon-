@@ -421,12 +421,12 @@ export async function sendMonthlyReport(): Promise<void> {
   const topUsers = Object.entries(spendMap)
     .sort((a, b) => b[1] - a[1]).slice(0, 3)
     .map(([uid, spent]) => {
-      const u    = users.find((x) => x.id === uid);
+      const u    = users.find((x: any) => x.id === uid);
       const name = asString((u as any)?.name ?? (u as any)?.username, "Inconnu");
       return { name, spent };
     });
 
-  const newUsers = users.filter((u) => asString((u as any).createdAt) >= from.toISOString()).length;
+  const newUsers = users.filter((u: any) => asString((u as any).createdAt) >= from.toISOString()).length;
 
   const now        = new Date();
   const monthLabel = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric", timeZone: "Africa/Douala" }).toUpperCase();
