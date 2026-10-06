@@ -3,21 +3,17 @@
   "compilerOptions": {
     "module": "esnext",
     "moduleResolution": "bundler",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
-    "composite": true,
-    "noEmit": false,
-    "emitDeclarationOnly": true,
-    "declarationMap": true,
-    "outDir": "dist",
-    "rootDir": ".",
+    "skipLibCheck": true,
+    "noEmit": true,
     "types": ["node"],
-    "skipLibCheck": true
+    "strict": true,
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src", "api"],
-  "references": [
-    { "path": "../../lib/db" },
-    { "path": "../../lib/api-zod" }
-  ]
+  "exclude": ["node_modules", "dist"]
 }
