@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
+import type { Transaction, DocumentData } from "firebase-admin/firestore";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
 import {
@@ -247,7 +248,7 @@ async function getNextOrderNumber(orderType: string, idToken: string): Promise<n
     const fb = getFirebaseAdmin();
     const db = fb.firestore();
     const counterRef = db.doc(docPath);
-    const result = await db.runTransaction(async (tx) => {
+    const result = await db.runTransaction(async (tx: Transaction) => {
       const doc = await tx.get(counterRef);
       const current = doc.exists ? (doc.data()?.count ?? MIN_ORDER_NUMBER - 1) : MIN_ORDER_NUMBER - 1;
       const next = Math.max(Number(current), MIN_ORDER_NUMBER - 1) + 1;
@@ -286,7 +287,7 @@ async function incrementUserTotalOrders(uid: string, idToken: string): Promise<v
   }
 }
 
-router.get("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/orders", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const uid     = req.uid!;
   const idToken = req.idToken!;
 
@@ -343,7 +344,7 @@ router.get("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: orders });
 });
 
-router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/orders", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const {
     serviceId, serviceName, platform, platformColor, type, quantity,
     price, link, orderId: providerOrderId, comments, provider,
@@ -368,7 +369,7 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
     const fb = getFirebaseAdmin();
     const db = fb.firestore();
 
-    balanceCheckError = await db.runTransaction(async (tx): Promise<string | null> => {
+    balanceCheckError = await db.runTransaction(async (tx: Transaction): Promise<string | null> => {
       const userRef = db.doc(`users/${uid}`);
       const userDoc = await tx.get(userRef);
       const userData = userDoc.data() ?? {};
@@ -483,7 +484,7 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   res.status(201).json({ success: true, data: order });
 });
 
-router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { id } = req.params;
   const uid     = req.uid!;
   const idToken = req.idToken!;
@@ -565,7 +566,7 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
     if (refundAmt > 0) {
       try {
         const db = getFirestore();
-        await db.runTransaction(async (t) => {
+        await db.runTransaction(async (t: Transaction) => {
           const orderRef = db.doc(`commandes/${id}`);
           const snap = await t.get(orderRef);
           if (snap.data()?.refundProcessed) return;
@@ -645,7 +646,7 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
   });
 });
 
-router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const rawId = req.params.id;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
@@ -656,10 +657,10 @@ router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Res
   const db = getFirestore();
 
   let price     = 0;
-  let existing: FirebaseFirestore.DocumentData | null = null;
+  let existing: DocumentData | null = null;
 
   try {
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const orderRef = db.doc(`commandes/${id}`);
       const orderSnap = await t.get(orderRef);
 
@@ -703,7 +704,7 @@ router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Res
     return;
   }
 
-  const ord      = existing as FirebaseFirestore.DocumentData;
+  const ord      = existing as DocumentData;
   const userName  = asString(ord.userName  ?? ord.name, "Inconnu");
   const userEmail = asString(ord.userEmail ?? ord.email, "Non renseigné");
   const userPhone = asString(ord.userPhone ?? ord.phone, "Non renseigné");
