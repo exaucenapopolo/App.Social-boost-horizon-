@@ -15,7 +15,8 @@ const DEFAULT_VERSION = {
 // GET /api/version — public, no auth required
 router.get("/api/version", async (_req, res) => {
   try {
-    const db = getFirestore(getFirebaseAdmin());
+    getFirebaseAdmin();
+    const db = getFirestore();
     const doc = await db.collection("config").doc("appVersion").get();
     const data = doc.exists ? doc.data() : DEFAULT_VERSION;
     res.json({ success: true, data });
