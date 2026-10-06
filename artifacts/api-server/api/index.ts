@@ -1,15 +1,39 @@
 // artifacts/api-server/api/index.ts
 // ─────────────────────────────────────────────────────────────────
-// Point d'entrée Vercel Serverless Function.
+// Vercel Serverless Function — point d'entrée.
 //
-// On importe le BUNDLE esbuild (dist/index.cjs) et non le code source,
-// car Vercel ne résout pas les dépendances "workspace:*" du monorepo
-// pnpm lors de la compilation des fonctions serverless.
+// ⚠️  package.json a "type": "module" → ce fichier est ESM → PAS de require().
+// On utilise import() dynamique (async) pour charger le bundle CJS esbuild.
 //
-// Le bundle contient TOUT : app Express + dépendances + packages workspace.
+// Vercel compile api/*.ts en ESM et supporte le top-level await (Node 18+).
 // ─────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const app = require("../dist/index.cjs");
+import type { IncomingMessage, ServerResponse } from "http";
 
-export default app.default ?? app;
+type ExpressHandler = (req: IncomingMessage, res: ServerResponse) => void;
+
+// import() dynamique du bundle CJS généré par `pnpm run build`
+// (esbuild → dist/index.cjs). Le bundle contient TOUT : Express + app + deps.
+const mod = (await import("../dist/index.cjs")) as Record<string, unknown>;
+
+// Interop CJS → ESM (Node.js) :
+//   Si dist/index.cjs fait `module.exports = { default: app }`
+//      → mod.default.default = app
+//   Si dist/index.cjs fait `module.exports = app`
+//      → mod.default = app
+const inner = (mod?.default as Record<string, unknown> | undefined)?.default;
+const candidate = inner ?? mod?.default ?? mod;
+
+if (typeof candidate !== "function") {
+  const defaultType = typeof mod?.default;
+  const defaultKeys =
+    mod?.default && typeof mod.default === "object"
+      ? Object.keys(mod.default as object).join(",")
+      : "n/a";
+  throw new Error(
+    `[api/index] Bundle invalide — attendu un handler Express (fonction). ` +
+      `typeof mod.default=${defaultType}, keys(mod.default)=${defaultKeys}`
+  );
+}
+
+export default candidate as ExpressHandler;
