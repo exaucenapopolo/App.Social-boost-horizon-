@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import {
   firestoreQuery,
@@ -27,7 +27,7 @@ async function sendTwilioWhatsApp(body: string): Promise<void> {
       To:   `whatsapp:${ADMIN_WHATSAPP}`,
       Body: body,
     });
-    const r = await fetch(
+    const r: any = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`,
       {
         method: "POST",
@@ -70,7 +70,7 @@ function isHighQuality(serviceName: string): boolean {
   );
 }
 
-router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const rawId = String(req.body?.orderId ?? "")
     .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")
     .trim()
@@ -176,7 +176,7 @@ router.post("/claims/verify", requireAuth, async (req: AuthRequest, res: Respons
   }
 });
 
-router.post("/claims/submit", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/claims/submit", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { orderId, quantityLost, description } = req.body ?? {};
 
   if (!orderId || !quantityLost || Number(quantityLost) < 1) {

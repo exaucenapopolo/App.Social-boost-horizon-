@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin, asString, asNumber } from "../lib/firebase-admin.js";
 import { sendConsolidatedAdminReport } from "../lib/email.js";
@@ -47,7 +47,7 @@ async function sendWhatsAppOnce(body: string): Promise<void> {
     To:   `whatsapp:${ADMIN_WA}`,
     Body: body,
   });
-  const r = await fetch(
+  const r: any = await fetch(
     `https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`,
     {
       method: "POST",
@@ -246,7 +246,7 @@ export async function sendDailyOrderReport(): Promise<void> {
   const from = startOfDayWAT();
   const snap = await db.collection("commandes")
     .where("createdAt", ">=", from.toISOString()).get().catch(() => null);
-  const orders: Order[] = snap ? snap.docs.map((d) => d.data() as Order) : [];
+  const orders: Order[] = snap ? snap.docs.map((d: any) => d.data() as Order) : [];
   const s   = buildOrderStats(orders);
   const now = new Date();
 
@@ -278,7 +278,7 @@ export async function sendDailyPaymentReport(): Promise<void> {
   const from = startOfDayWAT();
   const snap = await db.collection("activites")
     .where("createdAt", ">=", from.toISOString()).get().catch(() => null);
-  const acts = snap ? snap.docs.map((d) => d.data()) : [];
+  const acts = snap ? snap.docs.map((d: any) => d.data()) : [];
 
   let depots = 0, nbDepots = 0;
   let retraits = 0, nbRetraits = 0;
@@ -318,7 +318,7 @@ export async function sendWeeklyOrderReport(): Promise<void> {
   const from = startOfWeekWAT();
   const snap = await db.collection("commandes")
     .where("createdAt", ">=", from.toISOString()).get().catch(() => null);
-  const orders: Order[] = snap ? snap.docs.map((d) => d.data() as Order) : [];
+  const orders: Order[] = snap ? snap.docs.map((d: any) => d.data() as Order) : [];
   const s   = buildOrderStats(orders);
   const now = new Date();
 
@@ -350,7 +350,7 @@ export async function sendWeeklyPaymentReport(): Promise<void> {
   const from = startOfWeekWAT();
   const snap = await db.collection("activites")
     .where("createdAt", ">=", from.toISOString()).get().catch(() => null);
-  const acts = snap ? snap.docs.map((d) => d.data()) : [];
+  const acts = snap ? snap.docs.map((d: any) => d.data()) : [];
 
   let depots = 0, nbDepots = 0;
   let retraits = 0, nbRetraits = 0;
@@ -395,9 +395,9 @@ export async function sendMonthlyReport(): Promise<void> {
     db.collection("users").get().catch(() => null),
   ]);
 
-  const orders: Order[] = ordersSnap ? ordersSnap.docs.map((d) => d.data() as Order) : [];
-  const acts   = actsSnap   ? actsSnap.docs.map((d) => d.data()) : [];
-  const users  = usersSnap  ? usersSnap.docs.map((d) => ({ id: d.id, ...d.data() as Record<string, unknown> })) : [];
+  const orders: Order[] = ordersSnap ? ordersSnap.docs.map((d: any) => d.data() as Order) : [];
+  const acts   = actsSnap   ? actsSnap.docs.map((d: any) => d.data()) : [];
+  const users  = usersSnap  ? usersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() as Record<string, unknown> })) : [];
 
   const s = buildOrderStats(orders);
 
@@ -506,10 +506,10 @@ async function sendConsolidatedEmailReport(type: "daily" | "weekly" | "monthly")
     db.collection("users").where("createdAt", ">=", fromIso).get().catch(() => null),
   ]);
 
-  const orders: Order[] = ordersSnap ? ordersSnap.docs.map((d) => d.data() as Order) : [];
+  const orders: Order[] = ordersSnap ? ordersSnap.docs.map((d: any) => d.data() as Order) : [];
   const s = buildOrderStats(orders);
 
-  const acts = actsSnap ? actsSnap.docs.map((d) => d.data()) : [];
+  const acts = actsSnap ? actsSnap.docs.map((d: any) => d.data()) : [];
   let deposits = 0, nbDeposits = 0;
   let withdrawals = 0, nbWithdrawals = 0;
   let refunds = 0, referralsPaid = 0;
@@ -711,37 +711,37 @@ async function isAdmin(req: AuthRequest): Promise<boolean> {
   } catch { return false; }
 }
 
-router.post("/reports/daily/orders", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/reports/daily/orders", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!(await isAdmin(req))) { res.status(403).json({ error: "Accès refusé" }); return; }
   res.json({ success: true, message: "Rapport journalier commandes en cours — vérifiez WhatsApp." });
   sendDailyOrderReport().catch(() => {});
 });
 
-router.post("/reports/daily/payments", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/reports/daily/payments", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!(await isAdmin(req))) { res.status(403).json({ error: "Accès refusé" }); return; }
   res.json({ success: true, message: "Rapport journalier paiements en cours." });
   sendDailyPaymentReport().catch(() => {});
 });
 
-router.post("/reports/weekly/orders", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/reports/weekly/orders", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!(await isAdmin(req))) { res.status(403).json({ error: "Accès refusé" }); return; }
   res.json({ success: true, message: "Rapport hebdomadaire commandes en cours." });
   sendWeeklyOrderReport().catch(() => {});
 });
 
-router.post("/reports/weekly/payments", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/reports/weekly/payments", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!(await isAdmin(req))) { res.status(403).json({ error: "Accès refusé" }); return; }
   res.json({ success: true, message: "Rapport hebdomadaire paiements en cours." });
   sendWeeklyPaymentReport().catch(() => {});
 });
 
-router.post("/reports/monthly", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/reports/monthly", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!(await isAdmin(req))) { res.status(403).json({ error: "Accès refusé" }); return; }
   res.json({ success: true, message: "Bilan mensuel en cours." });
   sendMonthlyReport().catch(() => {});
 });
 
-router.post("/reports/test-now", async (_req, res: Response) => {
+router.post("/reports/test-now", async (_req, res: ExpressResponse) => {
   res.json({ success: true, message: "Envoi des 5 rapports en cours — vérifiez votre WhatsApp dans quelques secondes." });
   const all = [
     sendDailyOrderReport(),

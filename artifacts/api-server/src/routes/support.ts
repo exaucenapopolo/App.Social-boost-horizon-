@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { firestoreGet, asString } from "../lib/firebase-admin.js";
 import { sendServiceRequestConfirmEmail } from "../lib/email.js";
@@ -22,7 +22,7 @@ async function sendTwilioWhatsApp(body: string): Promise<void> {
       To:   `whatsapp:${ADMIN_WHATSAPP}`,
       Body: body,
     });
-    const res = await fetch(
+    const r: any = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`,
       {
         method: "POST",
@@ -34,9 +34,9 @@ async function sendTwilioWhatsApp(body: string): Promise<void> {
         signal: AbortSignal.timeout(12000),
       }
     );
-    if (!res.ok) {
-      const txt = await res.text();
-      console.error("[twilio/support] Erreur WhatsApp:", res.status, txt);
+    if (!r.ok) {
+      const txt = await r.text();
+      console.error("[twilio/support] Erreur WhatsApp:", r.status, txt);
     } else {
       console.log("[twilio/support] Message WhatsApp envoyé à l'admin");
     }
@@ -45,7 +45,7 @@ async function sendTwilioWhatsApp(body: string): Promise<void> {
   }
 }
 
-router.post("/support/contact", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/support/contact", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const {
     category,
     message,
@@ -94,7 +94,7 @@ router.post("/support/contact", requireAuth, async (req: AuthRequest, res: Respo
   }
 });
 
-router.post("/support/site-request", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/support/site-request", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const {
     hasWebsite,
     siteUrl,
@@ -145,7 +145,7 @@ router.post("/support/site-request", requireAuth, async (req: AuthRequest, res: 
   }
 });
 
-router.post("/support/service-request", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/support/service-request", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const {
     serviceType,
     fields,
@@ -215,7 +215,7 @@ router.post("/support/service-request", requireAuth, async (req: AuthRequest, re
   }
 });
 
-router.post("/support/login-help", async (req: any, res: Response) => {
+router.post("/support/login-help", async (req: any, res: ExpressResponse) => {
   const {
     email,
     category,

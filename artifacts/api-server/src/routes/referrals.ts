@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirestore } from "firebase-admin/firestore";
 import {
@@ -19,7 +19,7 @@ const router: ReturnType<typeof Router> = Router();
 let leaderboardCache: { data: unknown[]; ts: number } | null = null;
 const LEADERBOARD_CACHE_MS = 30 * 60 * 1000;
 
-router.get("/referrals", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/referrals", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const user = await firestoreGet(`users/${req.uid}`, req.idToken!);
   if (!user) {
     res.status(404).json({ success: false, error: "Profil introuvable" });
@@ -75,7 +75,7 @@ router.get("/referrals", requireAuth, async (req: AuthRequest, res: Response) =>
   });
 });
 
-router.get("/leaderboard", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/leaderboard", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (leaderboardCache && Date.now() - leaderboardCache.ts < LEADERBOARD_CACHE_MS) {
     res.json({ success: true, data: leaderboardCache.data });
     return;
@@ -84,7 +84,7 @@ router.get("/leaderboard", requireAuth, async (req: AuthRequest, res: Response) 
     getFirebaseAdmin();
     const db = getFirestore();
     const snap = await db.collection("users").get();
-    const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allUsers = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
     const codeToCount: Record<string, number> = {};
     for (const u of allUsers as any[]) {

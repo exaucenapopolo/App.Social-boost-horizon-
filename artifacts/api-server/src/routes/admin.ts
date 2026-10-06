@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
+import type { Transaction } from "firebase-admin/firestore";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
@@ -13,7 +14,7 @@ const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const EXPO_BATCH_SIZE = 100;
 const FIRESTORE_BATCH_SIZE = 400;
 
-function requireAdmin(req: AuthRequest, res: Response): boolean {
+function requireAdmin(req: AuthRequest, res: ExpressResponse): boolean {
   if (req.email !== ADMIN_EMAIL) {
     res.status(403).json({ success: false, error: "Accès administrateur refusé" });
     return false;
@@ -47,7 +48,7 @@ async function sendExpoBatch(
   for (let i = 0; i < messages.length; i += EXPO_BATCH_SIZE) {
     const chunk = messages.slice(i, i + EXPO_BATCH_SIZE);
     try {
-      const r = await fetch(EXPO_PUSH_URL, {
+      const r: any = await fetch(EXPO_PUSH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify(chunk),
@@ -85,7 +86,7 @@ interface UserRow {
   referralCode: string; hasPushToken: boolean; createdAt: string;
 }
 
-router.get("/admin/users", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/admin/users", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const search = asString(req.query.search).toLowerCase().trim();
@@ -97,7 +98,7 @@ router.get("/admin/users", requireAuth, async (req: AuthRequest, res: Response) 
       getFirebaseAdmin();
       const db = getFirestore();
       const snap = await db.collection("users").get();
-      const rows: UserRow[] = snap.docs.map((d) => {
+      const rows: UserRow[] = snap.docs.map((d: any) => {
         const data = d.data();
         const name = asString(data.name) || asString((data as any).username) || asString(data.displayName) || asString(data.email)?.split("@")[0] || "Utilisateur";
         return {
@@ -139,7 +140,7 @@ router.get("/admin/users", requireAuth, async (req: AuthRequest, res: Response) 
   }
 });
 
-router.get("/admin/user/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/admin/user/:id", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
   try {
     getFirebaseAdmin();
@@ -164,7 +165,7 @@ router.get("/admin/user/:id", requireAuth, async (req: AuthRequest, res: Respons
   }
 });
 
-router.patch("/admin/user/:id/balance", requireAuth, async (req: AuthRequest, res: Response) => {
+router.patch("/admin/user/:id/balance", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const { operation, amount: rawAmount, reason } = req.body ?? {};
@@ -180,7 +181,7 @@ router.patch("/admin/user/:id/balance", requireAuth, async (req: AuthRequest, re
     const userRef = db.doc(`users/${req.params.id}`);
 
     let newBalance = 0;
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const snap = await t.get(userRef);
       if (!snap.exists) throw new Error("Utilisateur introuvable");
       const current = Number(snap.data()?.balance ?? 0);
@@ -207,7 +208,7 @@ router.patch("/admin/user/:id/balance", requireAuth, async (req: AuthRequest, re
 let wdListCache: { data: unknown[]; ts: number } | null = null;
 const WD_CACHE_MS = 30 * 60 * 1000;
 
-router.get("/admin/withdrawals-list", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/admin/withdrawals-list", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   if (wdListCache && Date.now() - wdListCache.ts < WD_CACHE_MS) {
@@ -218,7 +219,7 @@ router.get("/admin/withdrawals-list", requireAuth, async (req: AuthRequest, res:
     getFirebaseAdmin();
     const db = getFirestore();
     const snap = await db.collection("withdrawals").limit(100).get();
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     wdListCache = { data, ts: Date.now() };
     res.json({ success: true, data });
   } catch (e: any) {
@@ -226,7 +227,7 @@ router.get("/admin/withdrawals-list", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-router.patch("/admin/withdrawal/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+router.patch("/admin/withdrawal/:id", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const { action } = req.body ?? {};
@@ -253,7 +254,7 @@ router.patch("/admin/withdrawal/:id", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const { title, message, target, userId, screen, externalUrl, imageUrl, saveToInbox } = req.body ?? {};
@@ -366,7 +367,7 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
 let statsCache: { data: Record<string, unknown>; ts: number } | null = null;
 const STATS_CACHE_MS = 30 * 60 * 1000;
 
-router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   if (statsCache && Date.now() - statsCache.ts < STATS_CACHE_MS) {
@@ -408,7 +409,7 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
 
     if (usersResult.status === "fulfilled" && usersResult.value !== null) {
       const freshDocs = (usersResult.value as import("firebase-admin/firestore").QuerySnapshot).docs;
-      const rows: UserRow[] = freshDocs.map((d) => {
+      const rows: UserRow[] = freshDocs.map((d: any) => {
         const data = d.data();
         return {
           id: d.id,
@@ -498,11 +499,11 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
     const totalReferrals = Number(counters.totalReferrals ?? 0);
 
     const wdDocs = withdrawSnap.status === "fulfilled" ? withdrawSnap.value.docs : [];
-    const pendingWithdrawals = wdDocs.filter(d => d.data().status === "pending");
+    const pendingWithdrawals = wdDocs.filter((d: any) => d.data().status === "pending");
     const totalWithdrawn = wdDocs
-      .filter(d => d.data().status === "confirmed")
-      .reduce((s, d) => s + Number(d.data().amount ?? 0), 0);
-    const recentWithdrawals = pendingWithdrawals.map(d => ({
+      .filter((d: any) => d.data().status === "confirmed")
+      .reduce((s: number, d: any) => s + Number(d.data().amount ?? 0), 0);
+    const recentWithdrawals = pendingWithdrawals.map((d: any) => ({
       id: d.id, ...d.data(),
     }));
 
@@ -539,19 +540,19 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
   }
 });
 
-router.post("/admin/stats/invalidate", requireAuth, (req: AuthRequest, res: Response) => {
+router.post("/admin/stats/invalidate", requireAuth, (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
   statsCache = null;
   usersListCache = null;
   res.json({ success: true, message: "Cache stats + users invalidé" });
 });
 
-router.get("/admin/pending-credits", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/admin/pending-credits", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
   res.json({ success: true, pendingCount: getPendingCount() });
 });
 
-router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const { userId, amount: rawAmount, reason, transId } = req.body ?? {};
@@ -586,7 +587,7 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
       return;
     }
 
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const freshUser   = await t.get(userRef);
       const currentBal  = Number(freshUser.data()?.balance ?? 0);
       t.update(userRef, { balance: currentBal + amount });
@@ -640,7 +641,7 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
   }
 });
 
-router.post("/admin/credit-by-email", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/admin/credit-by-email", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const { email, amount, transId, reason } = req.body as {
@@ -697,7 +698,7 @@ router.post("/admin/credit-by-email", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const FAPSHI_BASE   = process.env.FAPSHI_BASE_URL ?? "https://live.fapshi.com";
@@ -735,7 +736,7 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
         .where("type", "==", "depot")
         .limit(100)
         .get();
-      actPendingDocs = snap.docs.filter(d => {
+      actPendingDocs = snap.docs.filter((d: any) => {
         const created = asIsoDate(d.data().createdAt) ?? "";
         return created >= since24h;
       });
@@ -799,7 +800,7 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
 
       let fapshiStatus = "UNKNOWN";
       try {
-        const r = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
+        const r: any = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
           headers: { apiuser: FAPSHI_USER, apikey: FAPSHI_SECRET },
           signal: AbortSignal.timeout(10000),
         });
@@ -836,7 +837,7 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
   }
 });
 
-router.post("/api/admin/set-version", requireAuth, async (req: AuthRequest, res) => {
+router.post("/api/admin/set-version", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   if (!requireAdmin(req, res)) return;
 
   const { latestVersion, minVersion, downloadUrl, changelog, forceUpdate } = req.body as {
