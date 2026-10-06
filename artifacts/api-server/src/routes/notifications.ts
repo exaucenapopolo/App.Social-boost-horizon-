@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore } from "firebase-admin/firestore";
@@ -28,7 +28,7 @@ setInterval(() => {
   }
 }, 10 * 60_000);
 
-router.post("/notifications/push-token", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/notifications/push-token", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { token } = req.body ?? {};
   if (!token || typeof token !== "string" || !token.startsWith("ExponentPushToken")) {
     res.status(400).json({ success: false, error: "Token invalide" });
@@ -46,7 +46,7 @@ router.post("/notifications/push-token", requireAuth, async (req: AuthRequest, r
   }
 });
 
-router.delete("/notifications/push-token", requireAuth, async (req: AuthRequest, res: Response) => {
+router.delete("/notifications/push-token", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   try {
     getFirebaseAdmin();
     const db = getFirestore();
@@ -77,7 +77,7 @@ interface NotifItem {
   createdAt: string;
 }
 
-router.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/notifications", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const uid     = req.uid!;
   const idToken = req.idToken!;
 
@@ -105,7 +105,7 @@ router.get("/notifications", requireAuth, async (req: AuthRequest, res: Response
       .where("userId", "==", uid)
       .limit(50)
       .get();
-    const activities = actSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+    const activities = actSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
 
     for (const a of activities) {
       const aType     = asString(a.type);
@@ -184,7 +184,7 @@ router.get("/notifications", requireAuth, async (req: AuthRequest, res: Response
       .where("userId", "==", uid)
       .limit(20)
       .get();
-    const orders = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+    const orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
 
     for (const o of orders) {
       const status = asString(o.status);
