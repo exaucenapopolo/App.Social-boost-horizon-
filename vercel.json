@@ -1,6 +1,0 @@
-{
-  "buildCommand": "pnpm --filter @workspace/api-server run build",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "framework": null,
-  "outputDirectory": "artifacts/api-server/dist"
-}
