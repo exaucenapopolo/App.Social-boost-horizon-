@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import authRouter from "./auth.js";
 import healthRouter from "./health.js";
 import versionRouter from "./version.js";
@@ -14,7 +14,7 @@ import claimsRouter from "./claims.js";
 import reportsRouter from "./reports.js";
 import expoQrRouter from "./expo-qr.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
 router.use(authRouter);
 router.use(healthRouter);
