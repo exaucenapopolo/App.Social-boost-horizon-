@@ -1,8 +1,8 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore } from "firebase-admin/firestore";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
 const DEFAULT_VERSION = {
   latestVersion: "1.15.0",
@@ -12,10 +12,9 @@ const DEFAULT_VERSION = {
   forceUpdate: false,
 };
 
-// GET /api/version — public, no auth required
 router.get("/api/version", async (_req, res) => {
   try {
-    getFirebaseAdmin(); // ensures the default Firebase app is initialized
+    getFirebaseAdmin();
     const db = getFirestore();
     const doc = await db.collection("config").doc("appVersion").get();
     const data = doc.exists ? doc.data() : DEFAULT_VERSION;
