@@ -1,4 +1,5 @@
 import * as adminNS from "firebase-admin";
+import type { Query } from "firebase-admin/firestore";
 
 // firebase-admin exports its API on the default export in ESM context
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -204,7 +205,7 @@ export async function firestoreGet(
   }
   try {
     const token = await getBestToken(idToken);
-    const res = await fetch(`${FIRESTORE_BASE}/${path}`, {
+    const res: any = await fetch(`${FIRESTORE_BASE}/${path}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -231,13 +232,13 @@ export async function adminFirestoreQuery(
   try {
     const fb = getFirebaseAdmin();
     const db = fb.firestore();
-    let q: FirebaseFirestore.Query = db.collection(collection);
+    let q: Query = db.collection(collection);
     for (const f of filters) {
       q = q.where(f.field, "==", f.value);
     }
     const snap = await q.get();
-    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
-    docs.sort((a, b) => {
+    const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+    docs.sort((a: any, b: any) => {
       const ta = a["createdAt"] ? new Date(a["createdAt"] as string).getTime() : 0;
       const tb = b["createdAt"] ? new Date(b["createdAt"] as string).getTime() : 0;
       return tb - ta;
@@ -282,7 +283,7 @@ async function firestoreQueryRest(
       },
     };
 
-    const res = await fetch(
+    const res: any = await fetch(
       `${FIRESTORE_BASE}:runQuery`,
       {
         method: "POST",
@@ -331,7 +332,7 @@ export async function firestoreList(
         limit,
       },
     };
-    const res = await fetch(
+    const res: any = await fetch(
       `${FIRESTORE_BASE}:runQuery`,
       {
         method: "POST",
@@ -381,7 +382,7 @@ export async function firestoreCreate(
   try {
     const token = await getBestToken(idToken);
     const fields = toFirestoreFields(data);
-    const res = await fetch(`${FIRESTORE_BASE}/${collection}`, {
+    const res: any = await fetch(`${FIRESTORE_BASE}/${collection}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ fields }),
@@ -410,7 +411,7 @@ export async function firestoreSet(
     const docId = parts.pop()!;
     const collectionPath = parts.join("/");
     const fields = toFirestoreFields(data);
-    const res = await fetch(
+    const res: any = await fetch(
       `${FIRESTORE_BASE}/${collectionPath}?documentId=${encodeURIComponent(docId)}`,
       {
         method: "POST",
@@ -456,7 +457,7 @@ export async function firestoreUpdate(
     const updateMask = Object.keys(data)
       .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
       .join("&");
-    const res = await fetch(`${FIRESTORE_BASE}/${docPath}?${updateMask}`, {
+    const res: any = await fetch(`${FIRESTORE_BASE}/${docPath}?${updateMask}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ fields }),
@@ -490,7 +491,7 @@ export async function firestoreTransactionIncrement(
   try {
     const token = await getBestToken(idToken);
 
-    const txRes = await fetch(`${FIRESTORE_DB_BASE}:beginTransaction`, {
+    const txRes: any = await fetch(`${FIRESTORE_DB_BASE}:beginTransaction`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ options: { readWrite: {} } }),
@@ -501,7 +502,7 @@ export async function firestoreTransactionIncrement(
     }
     const { transaction } = await txRes.json() as { transaction: string };
 
-    const getRes = await fetch(
+    const getRes: any = await fetch(
       `${FIRESTORE_DB_BASE}/documents/${docPath}?transaction=${encodeURIComponent(transaction)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -519,7 +520,7 @@ export async function firestoreTransactionIncrement(
     const nextCount = Math.max(currentCount, minValue - 1) + 1;
     const fullDocPath = `projects/${PROJECT_ID}/databases/(default)/documents/${docPath}`;
 
-    const commitRes = await fetch(`${FIRESTORE_DB_BASE}:commit`, {
+    const commitRes: any = await fetch(`${FIRESTORE_DB_BASE}:commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
