@@ -83,7 +83,7 @@ async function notifyAdminCancelRefund(
       To:   `whatsapp:${ADMIN_WHATSAPP_CANCEL}`,
       Body: body,
     });
-    const r = await fetch(
+    const r: any = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`,
       {
         method: "POST",
@@ -132,7 +132,7 @@ async function fetchProviderStatus(
       action: "status",
       order: providerOrderId,
     });
-    const r = await fetch(base, {
+    const r: any = await fetch(base, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
