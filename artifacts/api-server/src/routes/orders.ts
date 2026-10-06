@@ -379,16 +379,21 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   // ── Vérification + déduction atomique du solde ──────────────────────────
   // Utilise une transaction Firestore pour éviter les race conditions.
   // C'est le seul endroit qui décide si une commande peut partir.
-  let balanceCheckError: string | null = null;
-
+  //
+  // ✅ FIX TS "never" : la valeur d'erreur est RETOURNÉE par le callback de
+  //    transaction (Promise<string | null>) au lieu d'être assignée à une
+  //    variable externe. TS suit ainsi correctement le type de retour et
+  //    balanceCheckError n'est plus narrowé en `null`/`never` après l'await.
   let orderUserEmail = "";
   let orderUserName  = "";
+
+  let balanceCheckError: string | null = null;
 
   try {
     const fb = getFirebaseAdmin();
     const db = fb.firestore();
 
-    await db.runTransaction(async (tx) => {
+    balanceCheckError = await db.runTransaction<string | null>(async (tx) => {
       const userRef = db.doc(`users/${uid}`);
       const userDoc = await tx.get(userRef);
       const userData = userDoc.data() ?? {};
@@ -397,26 +402,24 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
 
       // 1. Compte bloqué ?
       if (userData.blocked === true) {
-        balanceCheckError = "BLOCKED";
-        return;
+        return "BLOCKED";
       }
 
       // 2. Dette non remboursée ?
       const frozenDebt = Number(userData.frozenDebt ?? 0);
       if (frozenDebt > 0) {
-        balanceCheckError = `DEBT:${frozenDebt}`;
-        return;
+        return `DEBT:${frozenDebt}`;
       }
 
       // 3. Solde suffisant ?
       const currentBalance = Number(userData.balance ?? 0);
       if (currentBalance < orderPrice) {
-        balanceCheckError = `INSUFFICIENT:${currentBalance}`;
-        return;
+        return `INSUFFICIENT:${currentBalance}`;
       }
 
       // 4. Tout OK → déduire atomiquement
       tx.update(userRef, { balance: FieldValue.increment(-orderPrice) });
+      return null;
     });
   } catch (txErr) {
     console.error("[orders/create] Transaction erreur:", txErr);
