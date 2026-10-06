@@ -380,20 +380,19 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   // Utilise une transaction Firestore pour éviter les race conditions.
   // C'est le seul endroit qui décide si une commande peut partir.
   //
-  // ✅ FIX TS "never" : la valeur d'erreur est RETOURNÉE par le callback de
-  //    transaction (Promise<string | null>) au lieu d'être assignée à une
-  //    variable externe. TS suit ainsi correctement le type de retour et
-  //    balanceCheckError n'est plus narrowé en `null`/`never` après l'await.
+  // ✅ FIX TS: la transaction RETOURNE l'erreur au lieu de l'assigner à une variable
+  //    capturée dans la closure. TypeScript ne peut pas tracker les affectations
+  //    faites à l'intérieur d'un callback → il réduisait `balanceCheckError` à `never`.
+  let balanceCheckError: string | null = null;
+
   let orderUserEmail = "";
   let orderUserName  = "";
-
-  let balanceCheckError: string | null = null;
 
   try {
     const fb = getFirebaseAdmin();
     const db = fb.firestore();
 
-    balanceCheckError = await db.runTransaction<string | null>(async (tx) => {
+    balanceCheckError = await db.runTransaction(async (tx): Promise<string | null> => {
       const userRef = db.doc(`users/${uid}`);
       const userDoc = await tx.get(userRef);
       const userData = userDoc.data() ?? {};
@@ -699,7 +698,11 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
 //   Si la requête est envoyée 100 fois, seule la première passera ; les suivantes
 //   recevront "déjà annulée".
 router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  // ✅ FIX TS: req.params.id peut être typé `string | string[]` en Express 5.
+  //    On garantit un `string` avant de le passer à notifyAdminCancelRefund.
+  const rawId = req.params.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
+
   const uid     = req.uid!;
   const idToken = req.idToken!;
 

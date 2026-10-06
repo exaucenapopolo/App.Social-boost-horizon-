@@ -929,8 +929,8 @@ router.post("/api/admin/set-version", requireAuth, async (req: AuthRequest, res)
     return;
   }
 
-  // ✅ FIX: initialiser l'app PUIS récupérer Firestore sans argument (pattern aligné
-  //         sur le reste du fichier — évite "Argument of type [...] not assignable to 'App'")
+  // ✅ FIX: getFirebaseAdmin() initialise l'app par défaut, puis getFirestore() l'utilise.
+  //    (avant: getFirestore(getFirebaseAdmin()) — mauvais type passé à getFirestore)
   getFirebaseAdmin();
   const db = getFirestore();
 
