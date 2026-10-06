@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { Request, Response as ExpressResponse } from "express";
+import type { Transaction } from "firebase-admin/firestore";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
@@ -79,7 +80,7 @@ async function sendTwilioWhatsApp(body: string): Promise<void> {
       To:   `whatsapp:${ADMIN_WHATSAPP}`,
       Body: body,
     });
-    const res = await fetch(
+    const res: any = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`,
       {
         method: "POST",
@@ -174,7 +175,7 @@ async function creditReferralBonus(
   }
 }
 
-router.get("/wallet", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/wallet", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const uid = req.uid!;
   const idToken = req.idToken!;
 
@@ -202,8 +203,8 @@ router.get("/wallet", requireAuth, async (req: AuthRequest, res: Response) => {
       .limit(50)
       .get();
     recharges = snap.docs
-      .map((d) => normalizeRecharge({ id: d.id, ...d.data() } as Record<string, unknown>))
-      .sort((a, b) => {
+      .map((d: any) => normalizeRecharge({ id: d.id, ...d.data() } as Record<string, unknown>))
+      .sort((a: any, b: any) => {
         const ta = new Date(a["createdAt"] as string).getTime();
         const tb = new Date(b["createdAt"] as string).getTime();
         return tb - ta;
@@ -211,16 +212,16 @@ router.get("/wallet", requireAuth, async (req: AuthRequest, res: Response) => {
   } catch {
     const refs = Array.isArray(user?.recentRecharges) ? (user.recentRecharges as { id: string }[]) : [];
     if (refs.length > 0) {
-      const ids = refs.slice(0, 50).map((r) => r.id).filter(Boolean);
+      const ids = refs.slice(0, 50).map((r: any) => r.id).filter(Boolean);
       try {
         getFirebaseAdmin();
         const db2 = getFirestore();
-        const snapshots = await Promise.all(ids.map((id) => db2.doc(`rechargements/${id}`).get()));
-        recharges = snapshots.filter((d) => d.exists).map((d) => normalizeRecharge({ id: d.id, ...d.data() }));
+        const snapshots = await Promise.all(ids.map((id: string) => db2.doc(`rechargements/${id}`).get()));
+        recharges = snapshots.filter((d: any) => d.exists).map((d: any) => normalizeRecharge({ id: d.id, ...d.data() }));
       } catch {
         recharges = ((await firestoreGetMany("rechargements", ids, idToken)) as Record<string, unknown>[]).map(normalizeRecharge);
       }
-      recharges.sort((a, b) => {
+      recharges.sort((a: any, b: any) => {
         const ta = new Date(a["createdAt"] as string).getTime();
         const tb = new Date(b["createdAt"] as string).getTime();
         return tb - ta;
@@ -240,7 +241,7 @@ router.get("/wallet", requireAuth, async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: walletData });
 });
 
-router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Response) => {
+router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const uid = req.uid!;
   const idToken = req.idToken!;
 
@@ -259,8 +260,8 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
       dbActiv.collection("activites").where("userId", "==", uid).limit(50).get(),
       dbActiv.collection("rechargements").where("userId", "==", uid).limit(50).get(),
     ]);
-    activites = actSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
-    recharges = rechSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+    activites = actSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+    recharges = rechSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
   } catch {
   }
 
@@ -279,7 +280,7 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
         ? (user.recentRecharges as { id: string }[])
         : [];
       if (refs.length > 0) {
-        const ids = refs.slice(0, 50).map((r) => r.id).filter(Boolean);
+        const ids = refs.slice(0, 50).map((r: any) => r.id).filter(Boolean);
         recharges = await firestoreGetMany("rechargements", ids, idToken);
       }
     }
@@ -304,13 +305,13 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
 
   const seen = new Set<string>();
   const all = [...normalizedActivites, ...fromRecharges]
-    .filter((a) => {
+    .filter((a: any) => {
       const key = a.id ?? `${a.type}-${a.createdAt}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 50);
 
   walletActivCache.set(uid, { data: all, ts: Date.now() });
@@ -318,7 +319,7 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
   res.json({ success: true, data: all });
 });
 
-router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { amount, phone, transactionId, method, transId } = req.body;
   if (!amount) {
     res.status(400).json({ success: false, error: "Montant requis" });
@@ -331,7 +332,7 @@ router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: Respo
 
   if (txId) {
     try {
-      const r = await fetch(`${FAPSHI_BASE}/payment-status/${txId}`, {
+      const r: any = await fetch(`${FAPSHI_BASE}/payment-status/${txId}`, {
         headers: { "apiuser": FAPSHI_USER, "apikey": FAPSHI_SECRET },
         signal: AbortSignal.timeout(10000),
       });
@@ -353,7 +354,7 @@ router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: Respo
     let alreadyCredited = false;
     let firstName = "";
 
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const existing = await t.get(rechargeRef);
       if (existing.exists) { alreadyCredited = true; return; }
 
@@ -419,7 +420,7 @@ router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: Respo
   res.status(201).json({ success: true, data: { ...recharge, verified: false } });
 });
 
-router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { transId, amount } = req.body ?? {};
   if (!transId) {
     res.status(400).json({ success: false, error: "transId requis" });
@@ -427,7 +428,7 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
   }
 
   try {
-    const r = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
+    const r: any = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
       headers: { "apiuser": FAPSHI_USER, "apikey": FAPSHI_SECRET },
       signal: AbortSignal.timeout(10000),
     });
@@ -460,7 +461,7 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
     let debtRepaid = 0;
     let unblocked = false;
 
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const existingDoc = await t.get(rechargeRef);
 
       if (existingDoc.exists) {
@@ -567,7 +568,7 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-router.post("/webhook/fapshi", async (req: Request, res: Response) => {
+router.post("/webhook/fapshi", async (req: Request, res: ExpressResponse) => {
   let webhookTransId = "";
   let webhookExtId   = "";
   let webhookAmount  = 0;
@@ -583,7 +584,7 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
       return;
     }
 
-    const r = await fetch(`${FAPSHI_BASE}/payment-status/${webhookTransId}`, {
+    const r: any = await fetch(`${FAPSHI_BASE}/payment-status/${webhookTransId}`, {
       headers: { apiuser: FAPSHI_USER, apikey: FAPSHI_SECRET },
       signal: AbortSignal.timeout(10000),
     });
@@ -618,7 +619,7 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
     let webhookUserName = "";
     let alreadyDone    = false;
 
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const existingDoc = await t.get(rechargeRef);
       if (existingDoc.exists) { alreadyDone = true; return; }
 
@@ -704,7 +705,7 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/wallet/transfer", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/wallet/transfer", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { target } = req.body;
   if (target !== "main" && target !== "withdrawal") {
     res.status(400).json({ success: false, error: "Cible invalide (main ou withdrawal)" });
@@ -721,7 +722,7 @@ router.post("/wallet/transfer", requireAuth, async (req: AuthRequest, res: Respo
     let newWithdrawalBalance = 0;
     let label = "";
 
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const userDoc = await t.get(userRef);
       if (!userDoc.exists) throw Object.assign(new Error("Utilisateur non trouvé"), { code: 404 });
 
@@ -764,7 +765,7 @@ router.post("/wallet/transfer", requireAuth, async (req: AuthRequest, res: Respo
 const WITHDRAWAL_FEE = 455;
 const WITHDRAWAL_FEE_THRESHOLD = 10000;
 
-router.post("/wallet/withdraw", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/wallet/withdraw", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { amount, phone, country, method, countryName, feeSource } = req.body ?? {};
   const MIN_WITHDRAW = 1500;
   const amt = Number(amount ?? 0);
@@ -909,7 +910,7 @@ router.post("/wallet/withdraw", requireAuth, async (req: AuthRequest, res: Respo
   }
 });
 
-router.post("/wallet/record-pending-recharge", requireAuth, async (req: AuthRequest, res: Response) => {
+router.post("/wallet/record-pending-recharge", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { transId, amount, method, phone } = req.body ?? {};
   if (!amount || Number(amount) < 1) {
     res.status(400).json({ success: false, error: "amount requis" });
@@ -954,7 +955,7 @@ router.post("/wallet/record-pending-recharge", requireAuth, async (req: AuthRequ
   }
 });
 
-router.post("/webhook/swychr", async (req: Request, res: Response) => {
+router.post("/webhook/swychr", async (req: Request, res: ExpressResponse) => {
   try {
     const { userId, amount: rawAmount, transId, phone, method, status: extStatus } = req.body ?? {};
 
@@ -986,7 +987,7 @@ router.post("/webhook/swychr", async (req: Request, res: Response) => {
     let debtRepaidSwychr = 0;
     let swychrUnblocked = false;
 
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: Transaction) => {
       const existing = await t.get(rechargeRef);
       if (existing.exists && (existing.data()?.status === "confirmed" || existing.data()?.processed === true)) {
         alreadyConfirmed = true;
