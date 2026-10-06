@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
@@ -6,13 +6,11 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
 import { enqueuePendingCredit, getPendingCount } from "../lib/pendingCredits.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
 const ADMIN_EMAIL = "mcexauofficiel@gmail.com"; "exaucenapopolo2@gmail.com";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
-// Expo accepts up to 100 messages per batch request
 const EXPO_BATCH_SIZE = 100;
-// Firestore batch writes: max 500 ops per commit
 const FIRESTORE_BATCH_SIZE = 400;
 
 function requireAdmin(req: AuthRequest, res: Response): boolean {
@@ -40,11 +38,6 @@ function asIsoDate(v: unknown): string | null {
   return null;
 }
 
-/**
- * Send push notifications in batch using Expo's bulk endpoint.
- * Each call sends up to EXPO_BATCH_SIZE messages in one HTTP request,
- * which avoids rate-limiting issues from hundreds of individual requests.
- */
 async function sendExpoBatch(
   messages: Array<{ to: string; title: string; body: string; data?: Record<string, unknown>; sound: string; channelId: string; imageUrl?: string }>
 ): Promise<{ sent: number; failed: number }> {
@@ -83,9 +76,8 @@ async function sendExpoBatch(
   return { sent, failed };
 }
 
-// Cache 30 min pour /admin/users — partagé avec /admin/stats pour zéro lecture double
 let usersListCache: { data: UserRow[]; ts: number } | null = null;
-const USERS_CACHE_MS = 30 * 60 * 1000; // 30 min
+const USERS_CACHE_MS = 30 * 60 * 1000;
 
 interface UserRow {
   id: string; name: string; email: string; balance: number;
@@ -93,21 +85,18 @@ interface UserRow {
   referralCode: string; hasPushToken: boolean; createdAt: string;
 }
 
-// GET /api/admin/users?search=&sort=balance|name|recent&limit=50
 router.get("/admin/users", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
   const search = asString(req.query.search).toLowerCase().trim();
   const sort   = asString(req.query.sort) || "balance";
-  // Limite élevée par défaut pour le centre de notifications — toute la base est déjà en cache mémoire
   const limit  = Math.min(Number(req.query.limit) || 5000, 10000);
 
   try {
-    // Reuse cached list to avoid re-reading Firestore
     if (!usersListCache || Date.now() - usersListCache.ts >= USERS_CACHE_MS) {
       getFirebaseAdmin();
       const db = getFirestore();
-      const snap = await db.collection("users").get(); // Sans limite — cache 30 min
+      const snap = await db.collection("users").get();
       const rows: UserRow[] = snap.docs.map((d) => {
         const data = d.data();
         const name = asString(data.name) || asString((data as any).username) || asString(data.displayName) || asString(data.email)?.split("@")[0] || "Utilisateur";
@@ -127,7 +116,6 @@ router.get("/admin/users", requireAuth, async (req: AuthRequest, res: Response) 
 
     let list = [...usersListCache.data];
 
-    // In-memory search (0 extra Firestore reads)
     if (search) {
       list = list.filter(u =>
         u.name.toLowerCase().includes(search) ||
@@ -137,10 +125,9 @@ router.get("/admin/users", requireAuth, async (req: AuthRequest, res: Response) 
       );
     }
 
-    // Sort
     if (sort === "name")    list.sort((a, b) => a.name.localeCompare(b.name));
     else if (sort === "recent") list.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
-    else                        list.sort((a, b) => b.balance - a.balance); // default: balance
+    else                        list.sort((a, b) => b.balance - a.balance);
 
     const total = list.length;
     const totalWithToken = list.filter(u => u.hasPushToken).length;
@@ -152,7 +139,6 @@ router.get("/admin/users", requireAuth, async (req: AuthRequest, res: Response) 
   }
 });
 
-// GET /api/admin/user/:id — détail d'un utilisateur (1 lecture Firestore)
 router.get("/admin/user/:id", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
   try {
@@ -178,8 +164,6 @@ router.get("/admin/user/:id", requireAuth, async (req: AuthRequest, res: Respons
   }
 });
 
-// PATCH /api/admin/user/:id/balance — modifier le solde (add / subtract / set)
-// Body: { operation: "add"|"subtract"|"set", amount, reason? }
 router.patch("/admin/user/:id/balance", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
@@ -212,7 +196,6 @@ router.patch("/admin/user/:id/balance", requireAuth, async (req: AuthRequest, re
       });
     });
 
-    // Invalide cache users
     usersListCache = null;
     console.log(`[admin] ✅ Balance update: ${req.params.id} → op=${operation} amount=${amount} newBal=${newBalance}`);
     res.json({ success: true, newBalance, operation, amount });
@@ -221,11 +204,9 @@ router.patch("/admin/user/:id/balance", requireAuth, async (req: AuthRequest, re
   }
 });
 
-// Cache 30 min pour /admin/withdrawals-list
 let wdListCache: { data: unknown[]; ts: number } | null = null;
-const WD_CACHE_MS = 30 * 60 * 1000; // 30 min
+const WD_CACHE_MS = 30 * 60 * 1000;
 
-// GET /api/admin/withdrawals-list
 router.get("/admin/withdrawals-list", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
@@ -245,8 +226,6 @@ router.get("/admin/withdrawals-list", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-// PATCH /api/admin/withdrawal/:id — confirmer ou rejeter un retrait
-// Body: { action: "confirm"|"reject" }
 router.patch("/admin/withdrawal/:id", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
@@ -265,7 +244,6 @@ router.patch("/admin/withdrawal/:id", requireAuth, async (req: AuthRequest, res:
     const status = action === "confirm" ? "confirmed" : "rejected";
     await wdRef.update({ status, processedAt: new Date().toISOString(), processedBy: "admin" });
 
-    // Invalide cache
     wdListCache = null;
     statsCache = null;
     console.log(`[admin] Retrait ${req.params.id} → ${status}`);
@@ -275,7 +253,6 @@ router.patch("/admin/withdrawal/:id", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-// POST /api/admin/notifications/broadcast
 router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
@@ -294,7 +271,6 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
     return;
   }
 
-  // Build push data: externalUrl takes priority over screen (opens browser)
   const pushData: Record<string, unknown> = {};
   if (externalUrl) {
     pushData.externalUrl = String(externalUrl);
@@ -307,13 +283,11 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
     getFirebaseAdmin();
     const db = getFirestore();
 
-    // ── Single user ────────────────────────────────────────────────────────────
     if (target === "user") {
       const userDoc = await db.doc(`users/${userId}`).get();
       const token = userDoc.data()?.expoPushToken as string | undefined;
 
       if (saveToInbox) {
-        // Write activity to inbox
         await db.collection("activites").add({
           userId,
           type:      "info",
@@ -326,7 +300,6 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
         });
       }
 
-      // Send push (fire and forget if no token)
       await sendExpoPush(token, title, message, pushData, "default", cleanImageUrl);
 
       console.log(`[admin] Notification → uid=${userId} (saveToInbox=${saveToInbox})`);
@@ -334,12 +307,9 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
       return;
     }
 
-    // ── Broadcast to all users ─────────────────────────────────────────────────
-    // Lecture de TOUS les utilisateurs — pas de limite pour couvrir tous les tokens push
     const snap = await db.collection("users").get();
     const docs = snap.docs;
 
-    // Collect valid push tokens
     const messages: Array<{ to: string; title: string; body: string; data: Record<string, unknown>; sound: string; channelId: string; imageUrl?: string; uid: string }> = [];
     for (const d of docs) {
       const token = d.data()?.expoPushToken as string | undefined;
@@ -352,13 +322,11 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
 
     const withoutToken = docs.length - messages.length;
 
-    // Inbox activity extra fields
     const inboxExtra: Record<string, unknown> = {};
     if (externalUrl) inboxExtra.externalUrl = String(externalUrl);
     else if (screen) inboxExtra.screen = screen;
     if (cleanImageUrl) inboxExtra.imageUrl = cleanImageUrl;
 
-    // If saveToInbox: write all activites using Firestore batched writes (400 per commit)
     if (saveToInbox) {
       const now = new Date().toISOString();
       for (let i = 0; i < docs.length; i += FIRESTORE_BATCH_SIZE) {
@@ -381,7 +349,6 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
       console.log(`[admin] ${docs.length} activités écrites en batch Firestore`);
     }
 
-    // Send push notifications in batch via Expo bulk endpoint
     const { sent, failed: pushFailed } = await sendExpoBatch(
       messages.map(({ uid: _uid, ...m }) => m)
     );
@@ -396,12 +363,8 @@ router.post("/admin/notifications/broadcast", requireAuth, async (req: AuthReque
   }
 });
 
-// ── GET /api/admin/stats ───────────────────────────────────────────────────
-// Tableau de bord admin — quota-aware : lit uniquement les compteurs pré-calculés.
-// ⚠️ Cache 30 min — réduit drastiquement les lectures Firestore.
-//    /admin/stats partage le cache users avec /admin/users (zéro lecture double).
 let statsCache: { data: Record<string, unknown>; ts: number } | null = null;
-const STATS_CACHE_MS = 30 * 60 * 1000; // 30 min
+const STATS_CACHE_MS = 30 * 60 * 1000;
 
 router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
@@ -415,13 +378,11 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
     getFirebaseAdmin();
     const db = getFirestore();
 
-    // ── Quota guard: users lus UNIQUEMENT si cache expiré (évite 200 lectures double) ──
     const usersAlreadyCached = usersListCache && Date.now() - usersListCache.ts < USERS_CACHE_MS;
     const usersPromise = usersAlreadyCached
       ? Promise.resolve(null)
-      : db.collection("users").get(); // Sans limite — cache 30 min
+      : db.collection("users").get();
 
-    // Lire en parallèle (commandes limitées à 100, total vient de meta/counters)
     const [
       usersResult, ordersSnap, rechargSnap,
       withdrawSnap, countersSnap,
@@ -438,7 +399,6 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
     if (withdrawSnap.status === "rejected") console.error("[admin/stats] withdrawals query failed:", (withdrawSnap as PromiseRejectedResult).reason?.message);
     if (usersResult.status === "rejected")  console.error("[admin/stats] users query failed:", (usersResult as PromiseRejectedResult).reason?.message);
 
-    // ── Compteurs pré-calculés (si doc meta/counters existe) ──
     const counters = (countersSnap.status === "fulfilled" && countersSnap.value.exists)
       ? (countersSnap.value.data() ?? {})
       : {};
@@ -446,7 +406,6 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
     const now   = Date.now();
     const msDay = 86_400_000;
 
-    // ── Utilisateurs — met à jour usersListCache si on vient de lire Firestore ──
     if (usersResult.status === "fulfilled" && usersResult.value !== null) {
       const freshDocs = (usersResult.value as import("firebase-admin/firestore").QuerySnapshot).docs;
       const rows: UserRow[] = freshDocs.map((d) => {
@@ -492,7 +451,6 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
     }
     recentUsers.sort((a, b) => Number(b.balance) - Number(a.balance));
 
-    // ── Commandes ──
     const orders = ordersSnap.status === "fulfilled" ? ordersSnap.value.docs : [];
     const totalOrders    = Number(counters.totalOrders ?? orders.length);
     const ordersByType: Record<string, number> = { standard: 0, automatique: 0, avancée: 0, autre: 0 };
@@ -517,7 +475,6 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
       }
     }
 
-    // ── Rechargements ──
     const rechs      = rechargSnap.status === "fulfilled" ? rechargSnap.value.docs : [];
     let totalRecharged = 0, rechargesToday = 0, rechargesYesterday = 0, rechargesWeek = 0;
     let rechargesTodayAmount = 0, rechargesYesterdayAmount = 0, rechargesWeekAmount = 0;
@@ -535,14 +492,11 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
     }
     const rechCount  = Number(counters.totalRechargements ?? rechs.length);
 
-    // ── Revendeurs — calculés depuis le cache users (0 read supplémentaire) ──
     const resellersFromUsers = cachedRows.filter(r => r.isReseller).length;
     const totalResellers = Number(counters.totalResellers ?? resellersFromUsers);
 
-    // ── Parrainage — depuis meta/counters uniquement (0 read supplémentaire) ──
     const totalReferrals = Number(counters.totalReferrals ?? 0);
 
-    // ── Retraits ──
     const wdDocs = withdrawSnap.status === "fulfilled" ? withdrawSnap.value.docs : [];
     const pendingWithdrawals = wdDocs.filter(d => d.data().status === "pending");
     const totalWithdrawn = wdDocs
@@ -570,8 +524,8 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
       resellers:   { total: totalResellers },
       referrals:   { total: totalReferrals },
       withdrawals: { pendingCount: pendingWithdrawals.length, totalWithdrawn, recentPending: recentWithdrawals.slice(0, 10) },
-      topUsers:    recentUsers.slice(0, 5),   // top 5 by balance
-      recentUsers: recentUsers.slice(0, 30),  // for users section
+      topUsers:    recentUsers.slice(0, 5),
+      recentUsers: recentUsers.slice(0, 30),
       pendingCredits: getPendingCount(),
       updatedAt: new Date().toISOString(),
     };
@@ -585,7 +539,6 @@ router.get("/admin/stats", requireAuth, async (req: AuthRequest, res: Response) 
   }
 });
 
-// ── POST /api/admin/stats/invalidate ──────────────────────────────────────
 router.post("/admin/stats/invalidate", requireAuth, (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
   statsCache = null;
@@ -593,16 +546,11 @@ router.post("/admin/stats/invalidate", requireAuth, (req: AuthRequest, res: Resp
   res.json({ success: true, message: "Cache stats + users invalidé" });
 });
 
-// ── GET /api/admin/pending-credits ────────────────────────────────────────
-// Voir les crédits en file d'attente (bloqués par quota Firestore)
 router.get("/admin/pending-credits", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
   res.json({ success: true, pendingCount: getPendingCount() });
 });
 
-// ── POST /api/admin/credit-user ───────────────────────────────────────────
-// Créditer manuellement un utilisateur (cas d'urgence quota / paiement bloqué)
-// Body: { userId, amount, reason?, transId? }
 router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
@@ -614,7 +562,6 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
     return;
   }
 
-  // Générer un transId unique si non fourni
   const creditId = transId ? `admin_${transId}` : `admin_${Date.now()}_${userId.slice(0, 6)}`;
   const label    = reason ?? `Crédit manuel admin — ${amount.toLocaleString("fr-FR")} FCFA`;
 
@@ -632,7 +579,6 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
 
     const userName = String(userDoc.data()?.name ?? "").split(" ")[0] || "";
 
-    // Idempotency: check if already credited
     const creditRef = db.collection("rechargements").doc(creditId);
     const existing  = await creditRef.get();
     if (existing.exists) {
@@ -640,7 +586,6 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
       return;
     }
 
-    // Atomic credit
     await db.runTransaction(async (t) => {
       const freshUser   = await t.get(userRef);
       const currentBal  = Number(freshUser.data()?.balance ?? 0);
@@ -660,7 +605,6 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
 
     console.log(`[admin] ✅ Crédit manuel: ${amount} FCFA → ${userId} (${creditId})`);
 
-    // Push notification to user
     const greeting = userName ? `, ${userName}` : "";
     getUserPushToken(userId).then((token) =>
       sendExpoPush(
@@ -679,7 +623,6 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
     const isQuota = errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("Quota exceeded");
 
     if (isQuota) {
-      // Mettre en file d'attente — sera traité dès que le quota est reset
       enqueuePendingCredit({
         id: creditId, userId, amount,
         method: "Crédit admin (quota)", transId: creditId,
@@ -697,9 +640,6 @@ router.post("/admin/credit-user", requireAuth, async (req: AuthRequest, res: Res
   }
 });
 
-// ── POST /api/admin/credit-by-email ───────────────────────────────────────
-// Cherche l'UID d'un utilisateur par email (Firebase Auth) et enqueue un crédit.
-// Utilise Firebase Auth, PAS Firestore → fonctionne même si quota Firestore est épuisé.
 router.post("/admin/credit-by-email", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
@@ -716,7 +656,6 @@ router.post("/admin/credit-by-email", requireAuth, async (req: AuthRequest, res:
     const { getAuth } = await import("firebase-admin/auth");
     getFirebaseAdmin();
 
-    // Chercher l'UID via Firebase Auth (ne consomme pas de quota Firestore)
     let userRecord: import("firebase-admin/auth").UserRecord;
     try {
       userRecord = await getAuth().getUserByEmail(email.trim());
@@ -758,11 +697,6 @@ router.post("/admin/credit-by-email", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-// ── POST /api/admin/audit-payments ────────────────────────────────────────
-// Scanne tous les paiements des 24 dernières heures non crédités.
-// Vérifie le statut réel chez Fapshi pour chaque paiement en attente.
-// Enqueue automatiquement ceux qui sont SUCCESSFUL mais non crédités.
-// ⚠️ Fonctionne même si Firestore quota est dépassé (les crédits sont mis en file)
 router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
@@ -783,7 +717,6 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
     const db  = getFirestore();
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    // ── 1. Requête tous les rechargements pending des 24 dernières heures ──
     let pendingDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
     try {
       const snap = await db.collection("rechargements")
@@ -795,7 +728,6 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
       console.warn("[audit] Impossible de lire rechargements (quota?):", (e as Error).message);
     }
 
-    // ── 2. Requête activites pending (depot) des 24 dernières heures ──
     let actPendingDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
     try {
       const snap = await db.collection("activites")
@@ -811,7 +743,6 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
       console.warn("[audit] Impossible de lire activites (quota?):", (e as Error).message);
     }
 
-    // ── 3. Regrouper par transId pour éviter les doublons ──
     interface PendingEntry {
       transId: string; userId: string; amount: number;
       phone: string; docId: string; source: string;
@@ -848,11 +779,9 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
       return;
     }
 
-    // ── 4. Pour chaque paiement en attente → vérifier chez Fapshi ──
     for (const entry of pendingMap.values()) {
       const { transId, userId, amount, phone } = entry;
 
-      // Vérifier si déjà crédité dans rechargements (via fapshi_ prefix)
       let alreadyCredited = false;
       try {
         const confirmedRef = db.collection("rechargements").doc(`fapshi_${transId}`);
@@ -860,7 +789,7 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
         if (confirmedDoc.exists) {
           alreadyCredited = true;
         }
-      } catch { /* quota — ignorer, on vérifie Fapshi quand même */ }
+      } catch { }
 
       if (alreadyCredited) {
         report.alreadyCredited++;
@@ -868,7 +797,6 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
         continue;
       }
 
-      // Vérifier le statut chez Fapshi
       let fapshiStatus = "UNKNOWN";
       try {
         const r = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
@@ -883,7 +811,6 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
       } catch { fapshiStatus = "API_ERROR"; }
 
       if (fapshiStatus === "SUCCESSFUL") {
-        // Paiement confirmé mais non crédité → mettre en file
         enqueuePendingCredit({
           id:      `fapshi_${transId}`,
           userId,  amount,
@@ -909,10 +836,6 @@ router.post("/admin/audit-payments", requireAuth, async (req: AuthRequest, res: 
   }
 });
 
-// ──────────────────────────────────────────────────────────────────────
-// POST /api/admin/set-version  — Admin: configure la version de l'app
-// Body: { latestVersion, minVersion, downloadUrl?, changelog?, forceUpdate? }
-// ──────────────────────────────────────────────────────────────────────
 router.post("/api/admin/set-version", requireAuth, async (req: AuthRequest, res) => {
   if (!requireAdmin(req, res)) return;
 
@@ -929,8 +852,6 @@ router.post("/api/admin/set-version", requireAuth, async (req: AuthRequest, res)
     return;
   }
 
-  // ✅ FIX: getFirebaseAdmin() initialise l'app par défaut, puis getFirestore() l'utilise.
-  //    (avant: getFirestore(getFirebaseAdmin()) — mauvais type passé à getFirestore)
   getFirebaseAdmin();
   const db = getFirestore();
 

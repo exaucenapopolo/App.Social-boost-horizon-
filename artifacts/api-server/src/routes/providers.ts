@@ -1,11 +1,10 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
-// ── Vérification solde/blocage avant envoi fournisseur ─────────────────────
 async function checkUserCanOrder(uid: string): Promise<{ allowed: boolean; errorCode?: string; errorMsg?: string; userEmail?: string; userName?: string }> {
   try {
     const fb = getFirebaseAdmin();
@@ -23,7 +22,7 @@ async function checkUserCanOrder(uid: string): Promise<{ allowed: boolean; error
     return { allowed: true, userEmail: String(d.email ?? ""), userName: String(d.name ?? d.username ?? "") };
   } catch (e) {
     console.error("[checkUserCanOrder] Firestore error:", e);
-    return { allowed: true }; // fail-open si Firestore est inaccessible — la vérif dans POST /api/orders prendra le relais
+    return { allowed: true };
   }
 }
 
@@ -41,7 +40,7 @@ const AFB_BASE    = "https://afriqueboost.com/api/v2";
 const FAPSHI_BASE = "https://live.fapshi.com";
 
 const USD_TO_XAF      = 1230;
-const USD_TO_XAF_AUTO = 1845; // MTP/SMMGen: higher markup factor (1.5x)
+const USD_TO_XAF_AUTO = 1845;
 
 type RawSvc = {
   service: number;
@@ -83,7 +82,6 @@ function detectPlatform(svc: RawSvc): string {
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  // ─── Réseaux sociaux ──────────────────────────────────────────────────────
   if (t.includes("instagram") || t.includes("insta"))                             return "instagram";
   if (t.includes("tiktok") || t.includes("tik tok"))                              return "tiktok";
   if (t.includes("youtube") || t.includes(" yt "))                                return "youtube";
@@ -101,7 +99,6 @@ function detectPlatform(svc: RawSvc): string {
   if (t.includes("discord"))                                                       return "discord";
   if (t.includes("clubhouse"))                                                     return "clubhouse";
   if (t.includes("vimeo"))                                                         return "vimeo";
-  // ─── Musique / Audio ──────────────────────────────────────────────────────
   if (t.includes("spotify"))                                                       return "spotify";
   if (t.includes("soundcloud"))                                                    return "soundcloud";
   if (t.includes("deezer"))                                                        return "deezer";
@@ -109,38 +106,26 @@ function detectPlatform(svc: RawSvc): string {
   if (t.includes("shazam"))                                                        return "shazam";
   if (t.includes("twitch"))                                                        return "twitch";
   if (t.includes("kick.com") || t.includes(" kick ") || t.includes("kick stream")) return "kick";
-  // ─── Streaming / Divertissement ────────────────────────────────────────────
   if (t.includes("netflix"))                                                       return "netflix";
   if (t.includes("amazon") || t.includes("prime video"))                          return "amazon";
-  // ─── E-mail / Productivité ─────────────────────────────────────────────────
   if (t.includes("gmail"))                                                         return "gmail";
   if (t.includes("outlook"))                                                       return "outlook";
-  // ─── Tech / Dev ────────────────────────────────────────────────────────────
   if (t.includes("github"))                                                        return "github";
   if (t.includes("google play") || t.includes("googleplay") || t.includes("play store")) return "googleplay";
   if (t.includes("app store") || t.includes("appstore") || t.includes("apple store"))    return "appstore";
   if (t.includes("google"))                                                        return "google";
-  // ─── Jeux vidéo ────────────────────────────────────────────────────────────
   if (t.includes("steam"))                                                         return "steam";
   if (t.includes("xbox"))                                                          return "xbox";
   if (t.includes("ubisoft"))                                                       return "ubisoft";
   if (t.includes("free fire") || t.includes("freefire") || t.includes("garena"))  return "freefire";
-  // ─── IA / Créatif ──────────────────────────────────────────────────────────
   if (t.includes("chatgpt") || t.includes("openai"))                              return "chatgpt";
   if (t.includes("deepseek"))                                                      return "deepseek";
   if (t.includes("canva"))                                                         return "canva";
-  // ─── Design / Assets ───────────────────────────────────────────────────────
   if (t.includes("envato"))                                                        return "envato";
   if (t.includes("flaticon"))                                                      return "flaticon";
   return "other";
 }
 
-/**
- * Format service with custom XAF conversion rate.
- * EXO (Standard/Revendeur): USD_TO_XAF = 1230
- * MTP/SMMGen (Automatique): USD_TO_XAF_AUTO = 1845 (markup already baked in)
- * Afriqueboost (Avancée): rate is already in FCFA/1000, pass xafRate = 1
- */
 function formatService(raw: RawSvc, provider?: string, xafRate: number = USD_TO_XAF): FormattedSvc {
   const rate    = parseFloat(String(raw.rate ?? "0")) || 0;
   const priceXAF = Math.round(rate * xafRate);
@@ -247,7 +232,7 @@ async function smmPanelOrder(
       data = ct.includes("json")
         ? await r.json()
         : JSON.parse(await r.text());
-    } catch { /* empty */ }
+    } catch { }
 
     if (!r.ok || data?.error) {
       const errMsg = String(data?.error ?? `Erreur fournisseur (HTTP ${r.status})`);
@@ -340,7 +325,6 @@ router.post("/smmgen/order", requireAuth, async (req: AuthRequest, res: Response
 router.get("/afriqueboost/services", async (_req: Request, res: Response) => {
   try {
     const raw = await fetchServices(`${AFB_BASE}?key=${encodeURIComponent(AFB_KEY)}&action=services`);
-    // Afriqueboost rates are already in FCFA/1000 — use xafRate = 1 (no USD conversion)
     const svcs = raw.map((s) => formatService(s, "afriqueboost", 1));
     res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
   } catch (e: any) {

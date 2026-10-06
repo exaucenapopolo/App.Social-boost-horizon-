@@ -1,34 +1,13 @@
-/**
- * reports.ts — Système de rapports automatiques (journalier, hebdomadaire, mensuel)
- *
- * Horaires WAT (Africa/Douala = UTC+1) :
- *   Quotidien   23h10 → rapport commandes
- *   Quotidien   23h15 → rapport paiements
- *   Lundi        9h05 → rapport hebdo commandes
- *   Lundi        9h10 → rapport hebdo paiements
- *   30 chaque mois 8h00 → bilan mensuel (28 en février)
- *
- * Multiplicateurs fournisseurs :
- *   ExoSupplier  ×2  → marge 50 %
- *   MTP          ×3  → marge 66,7 %
- *   SMMGen       ×3.5 → marge 71,4 %
- *   AfriqueBoost ×1.82 → marge 45,1 %
- *
- *   Coût fournisseur = CA / multiplicateur
- *   Bénéfice NET     = CA − Coût  =  CA × (1 − 1/mult)
- */
-
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin, asString, asNumber } from "../lib/firebase-admin.js";
 import { sendConsolidatedAdminReport } from "../lib/email.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
-// ── Constants ──────────────────────────────────────────────────────────────
 const ADMIN_WA   = process.env.MY_PHONE_NUMBER ?? "+237699853665";
-const WAT_OFFSET = 1; // UTC+1
+const WAT_OFFSET = 1;
 
 const MULTIPLIERS: Record<string, number> = {
   standard:           2,
@@ -57,7 +36,6 @@ function calcCostAndProfit(revenue: number, type: string, provider: string): { c
   return { cost, profit, margin };
 }
 
-// ── Twilio WhatsApp — avec retries ─────────────────────────────────────────
 async function sendWhatsAppOnce(body: string): Promise<void> {
   const SID   = process.env.TWILIO_ACCOUNT_SID ?? "";
   const TOKEN = process.env.TWILIO_AUTH_TOKEN  ?? "";
@@ -87,13 +65,8 @@ async function sendWhatsAppOnce(body: string): Promise<void> {
   }
 }
 
-/**
- * Envoie un message WhatsApp avec jusqu'à 3 tentatives.
- * Délai entre tentatives : 12 s puis 30 s.
- * Garantit la livraison même en cas de timeout réseau ponctuel.
- */
 async function sendWhatsApp(body: string): Promise<boolean> {
-  const delays = [0, 12000, 30000]; // ms avant chaque tentative
+  const delays = [0, 12000, 30000];
   const SID = process.env.TWILIO_ACCOUNT_SID ?? "";
   if (!SID) {
     console.warn("[reports] Twilio non configuré — aperçu du rapport :");
@@ -118,7 +91,6 @@ async function sendWhatsApp(body: string): Promise<boolean> {
   return false;
 }
 
-// ── Firestore helper ───────────────────────────────────────────────────────
 function getDB() { return getFirebaseAdmin().firestore(); }
 
 function watDateStr(date: Date): string {
@@ -154,10 +126,8 @@ function startOfMonthWAT(): Date {
   return new Date(start.getTime() - WAT_OFFSET * 3600000);
 }
 
-// ── Number formatter ───────────────────────────────────────────────────────
 function f(n: number): string { return n.toLocaleString("fr-FR"); }
 
-// ── Shared stats builder ───────────────────────────────────────────────────
 interface Order {
   type?: string; provider?: string;
   price?: number; finalCost?: number; totalCost?: number;
@@ -228,7 +198,6 @@ function buildOrderStats(orders: Order[]): OrderStats {
     if ((o as any).userId) userSet.add((o as any).userId);
   }
 
-  // Compute per-type margins
   for (const b of Object.values(byType)) {
     b.margin = b.revenue > 0 ? Math.round((b.profit / b.revenue) * 1000) / 10 : 0;
   }
@@ -246,7 +215,6 @@ function buildOrderStats(orders: Order[]): OrderStats {
   };
 }
 
-// ── Message builder — finances section (used by all 3 report types) ────────
 function buildFinanceSection(s: OrderStats): string {
   let msg = "";
   msg += `💰 *FINANCES*\n`;
@@ -272,7 +240,6 @@ function buildFinanceSection(s: OrderStats): string {
   return msg;
 }
 
-// ── DAILY ORDERS REPORT (23h10 WAT) ───────────────────────────────────────
 export async function sendDailyOrderReport(): Promise<void> {
   console.log("[reports] Génération rapport journalier commandes...");
   const db   = getDB();
@@ -305,7 +272,6 @@ export async function sendDailyOrderReport(): Promise<void> {
   console.log("[reports] ✅ Rapport journalier commandes terminé");
 }
 
-// ── DAILY PAYMENT REPORT (23h15 WAT) ──────────────────────────────────────
 export async function sendDailyPaymentReport(): Promise<void> {
   console.log("[reports] Génération rapport journalier paiements...");
   const db   = getDB();
@@ -346,7 +312,6 @@ export async function sendDailyPaymentReport(): Promise<void> {
   console.log("[reports] ✅ Rapport journalier paiements terminé");
 }
 
-// ── WEEKLY ORDERS REPORT (Lundi 9h05 WAT) ────────────────────────────────
 export async function sendWeeklyOrderReport(): Promise<void> {
   console.log("[reports] Génération rapport hebdomadaire commandes...");
   const db   = getDB();
@@ -379,7 +344,6 @@ export async function sendWeeklyOrderReport(): Promise<void> {
   console.log("[reports] ✅ Rapport hebdomadaire commandes terminé");
 }
 
-// ── WEEKLY PAYMENT REPORT (Lundi 9h10 WAT) ───────────────────────────────
 export async function sendWeeklyPaymentReport(): Promise<void> {
   console.log("[reports] Génération rapport hebdomadaire paiements...");
   const db   = getDB();
@@ -420,7 +384,6 @@ export async function sendWeeklyPaymentReport(): Promise<void> {
   console.log("[reports] ✅ Rapport hebdomadaire paiements terminé");
 }
 
-// ── MONTHLY REPORT (30 du mois à 8h00 WAT) ───────────────────────────────
 export async function sendMonthlyReport(): Promise<void> {
   console.log("[reports] Génération rapport mensuel...");
   const db   = getDB();
@@ -438,7 +401,6 @@ export async function sendMonthlyReport(): Promise<void> {
 
   const s = buildOrderStats(orders);
 
-  // Paiements du mois
   let depots = 0, nbDepots = 0;
   let retraits = 0, nbRetraits = 0;
   let rembs = 0, nbRembs = 0;
@@ -450,7 +412,6 @@ export async function sendMonthlyReport(): Promise<void> {
     else if (typ === "remboursement") { rembs += amt; nbRembs++; }
   }
 
-  // Top 3 clients
   const spendMap: Record<string, number> = {};
   for (const o of orders) {
     const uid = asString((o as any).userId);
@@ -465,7 +426,6 @@ export async function sendMonthlyReport(): Promise<void> {
       return { name, spent };
     });
 
-  // Nouveaux inscrits
   const newUsers = users.filter((u) => asString((u as any).createdAt) >= from.toISOString()).length;
 
   const now        = new Date();
@@ -519,7 +479,6 @@ export async function sendMonthlyReport(): Promise<void> {
   console.log("[reports] ✅ Rapport mensuel terminé");
 }
 
-// ── RAPPORT EMAIL CONSOLIDÉ ADMIN (journalier / hebdo / mensuel) ──────────
 async function sendConsolidatedEmailReport(type: "daily" | "weekly" | "monthly"): Promise<void> {
   console.log(`[reports] Génération rapport email consolidé (${type})...`);
   const db  = getDB();
@@ -586,7 +545,6 @@ async function sendConsolidatedEmailReport(type: "daily" | "weekly" | "monthly")
   console.log(`[reports] ✅ Rapport email ${type} envoyé à ${REPORTS_ADMIN_EMAIL}`);
 }
 
-// ── Suivi Firestore — résistance aux redémarrages ─────────────────────────
 const EMAIL_REPORT_TRACK_DOC = "_system/emailReportSentAt";
 
 async function getLastEmailReportSent(type: "daily" | "weekly" | "monthly"): Promise<Date | null> {
@@ -615,7 +573,6 @@ function isEmailReportOverdue(
   const m = now.getUTCMinutes();
 
   if (type === "daily") {
-    // Déclenchement UTC 22h45 — si on est passé cette heure aujourd'hui et pas encore envoyé
     if (h < 22 || (h === 22 && m < 45)) return false;
     if (!lastSent) return true;
     const todayTrigger = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 22, 45));
@@ -623,7 +580,6 @@ function isEmailReportOverdue(
   }
 
   if (type === "weekly") {
-    // Déclenchement Dimanche UTC 11h00
     if (now.getUTCDay() !== 0 || h < 11) return false;
     if (!lastSent) return true;
     const thisSundayTrigger = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 11, 0));
@@ -631,7 +587,6 @@ function isEmailReportOverdue(
   }
 
   if (type === "monthly") {
-    // Déclenchement 1er du mois (n'importe quelle heure ce jour-là)
     if (now.getUTCDate() !== 1) return false;
     if (!lastSent) return true;
     const thisMonthTrigger = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -664,14 +619,12 @@ async function checkOverdueEmailReports(): Promise<void> {
   }
 }
 
-// ── Scheduler (pure Node.js) ───────────────────────────────────────────────
-const MAX_TIMEOUT_MS = 2_147_483_647; // ~24.8 jours (limite 32-bit)
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 function safeTimeout(fn: () => void, delayMs: number): void {
   if (delayMs <= MAX_TIMEOUT_MS) {
     setTimeout(fn, delayMs);
   } else {
-    // Fractionner pour éviter le TimeoutOverflowWarning
     setTimeout(() => safeTimeout(fn, delayMs - MAX_TIMEOUT_MS), MAX_TIMEOUT_MS);
   }
 }
@@ -693,7 +646,6 @@ function msUntilNextUTC(hourUTC: number, minUTC: number, dayOfWeek = -1, dayOfMo
     const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntil, hourUTC, minUTC, 0, 0));
     return Math.max(target.getTime() - now.getTime(), 1000);
   }
-  // Quotidien
   if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
   return Math.max(next.getTime() - now.getTime(), 1000);
 }
@@ -725,27 +677,16 @@ function scheduleRecurring(
 
 export function startReportScheduler(): void {
   console.log("[reports] 🚀 Démarrage du planificateur...");
-  // WAT 23h10 = UTC 22h10
   scheduleRecurring("Rapport journalier commandes",   sendDailyOrderReport,   22, 10);
-  // WAT 23h15 = UTC 22h15
   scheduleRecurring("Rapport journalier paiements",   sendDailyPaymentReport, 22, 15);
-  // WAT lundi 9h05 = UTC lundi 8h05
   scheduleRecurring("Rapport hebdo commandes",        sendWeeklyOrderReport,  8,  5,  1);
-  // WAT lundi 9h10 = UTC lundi 8h10
   scheduleRecurring("Rapport hebdo paiements",        sendWeeklyPaymentReport, 8, 10, 1);
-  // WAT 8h00 le 30 = UTC 7h00
   scheduleRecurring("Rapport mensuel",                sendMonthlyReport,      7,  0,  -1, true);
 
-  // ── Rapports email consolidés (horaires différents du site) ──────────────
-  // WAT 23h45 = UTC 22h45
   scheduleRecurring("Rapport email journalier (admin)", () => sendConsolidatedEmailReport("daily"),   22, 45);
-  // Dimanche WAT 12h00 = UTC 11h00 (dayOfWeek=0 → dimanche)
   scheduleRecurring("Rapport email hebdo (admin)",      () => sendConsolidatedEmailReport("weekly"),  11,  0, 0);
-  // 1er du mois WAT 01h00 = UTC 00h00
   scheduleRecurring("Rapport email mensuel (admin)",    () => sendConsolidatedEmailReport("monthly"),  0,  0, -1, false, 1);
 
-  // ── Rattrapage résistant aux redémarrages ─────────────────────────────────
-  // Vérifie au boot (5 s) si un rapport a été manqué, puis toutes les 15 min
   setTimeout(() => {
     checkOverdueEmailReports().catch((e) =>
       console.error("[reports] ❌ checkOverdue (boot):", e)
@@ -761,7 +702,6 @@ export function startReportScheduler(): void {
   console.log("[reports] ✅ Tous les rapports planifiés");
 }
 
-// ── Routes admin — déclenchement manuel ──────────────────────────────────
 const REPORTS_ADMIN_EMAIL = "mcexauofficiel@gmail.com";
 
 async function isAdmin(req: AuthRequest): Promise<boolean> {
@@ -801,11 +741,6 @@ router.post("/reports/monthly", requireAuth, async (req: AuthRequest, res: Respo
   sendMonthlyReport().catch(() => {});
 });
 
-/**
- * POST /api/reports/test-now
- * Route publique (pas d'auth requise) pour envoyer tous les rapports instantanément.
- * À utiliser uniquement pour les tests — à désactiver en production si besoin.
- */
 router.post("/reports/test-now", async (_req, res: Response) => {
   res.json({ success: true, message: "Envoi des 5 rapports en cours — vérifiez votre WhatsApp dans quelques secondes." });
   const all = [

@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
@@ -17,20 +17,17 @@ import {
 } from "../lib/firebase-admin.js";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
 const ADMIN_WHATSAPP_CANCEL = process.env.MY_PHONE_NUMBER ?? "+237699853665";
 
-// ── Cache commandes par utilisateur — 3 min TTL ────────────────────────────
-// Évite de relire toutes les commandes Firestore à chaque ouverture de l'onglet.
 const ordersCache = new Map<string, { data: unknown[]; ts: number }>();
-const ORDERS_CACHE_MS = 5 * 60_000; // 5 minutes (invalidé sur nouvelle commande + poller)
+const ORDERS_CACHE_MS = 5 * 60_000;
 
 export function invalidateOrdersCache(uid: string): void {
   ordersCache.delete(uid);
 }
 
-// Purge périodique (toutes les 10 min)
 setInterval(() => {
   const now = Date.now();
   for (const [uid, entry] of ordersCache) {
@@ -104,7 +101,6 @@ async function notifyAdminCancelRefund(
   }
 }
 
-// ── Provider constants (mirrors providers.ts) ──────────────────────────────
 const EXO_KEY    = process.env.EXOSUPPLIER_API_KEY       ?? "";
 const MTP_KEY    = process.env.MORETHANPANEL_API_KEY      ?? "";
 const SMMGEN_KEY = process.env.SMMGEN_API_KEY             ?? "";
@@ -114,7 +110,6 @@ const MTP_BASE    = "https://morethanpanel.com/api/v2";
 const SMMGEN_BASE = "https://smmgen.com/api/v2";
 const AFB_BASE    = "https://afriqueboost.com/api/v2";
 
-// ── Provider status fetch ──────────────────────────────────────────────────
 interface ProviderStatus {
   status: string;
   start_count?: number;
@@ -149,7 +144,7 @@ async function fetchProviderStatus(
     let data: Record<string, unknown> = {};
     try {
       data = ct.includes("json") ? await r.json() : JSON.parse(await r.text());
-    } catch { /* ignore */ }
+    } catch { }
 
     if (!r.ok || data.error) return null;
 
@@ -204,7 +199,6 @@ function calcProgress(ps: ProviderStatus, mappedStatus: string): number {
   return 2;
 }
 
-// ── Activity logger ────────────────────────────────────────────────────────
 async function logActivity(
   uid: string,
   idToken: string,
@@ -224,10 +218,8 @@ async function logActivity(
     ...(meta ?? {}),
   };
   await firestoreCreate("activites", item, idToken);
-  // NOTE: appendToUserArray("recentActivities") supprimé — trop coûteux en quota Firestore.
 }
 
-// ── Order counter helpers ──────────────────────────────────────────────────
 function getCounterKey(orderType: string): string {
   const t = (orderType ?? "").toLowerCase();
   if (t === "automatique") return "orders_automatique";
@@ -265,7 +257,7 @@ async function getNextOrderNumber(orderType: string, idToken: string): Promise<n
     console.log(`[counter] ${counterKey} (Admin SDK) → ${result}`);
     memCounters.set(counterKey, result as number);
     return result as number;
-  } catch { /* try REST */ }
+  } catch { }
 
   const next = await firestoreTransactionIncrement(docPath, "count", MIN_ORDER_NUMBER, idToken);
   if (next !== null) {
@@ -294,13 +286,10 @@ async function incrementUserTotalOrders(uid: string, idToken: string): Promise<v
   }
 }
 
-// ── GET /api/orders ────────────────────────────────────────────────────────
-// Merges Admin SDK query + orderRefs fallback to never miss any order.
 router.get("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   const uid     = req.uid!;
   const idToken = req.idToken!;
 
-  // Serve from cache if fresh (économise toutes les lectures Firestore commandes)
   const cached = ordersCache.get(uid);
   if (cached && Date.now() - cached.ts < ORDERS_CACHE_MS) {
     res.set("X-Cache", "HIT");
@@ -308,19 +297,16 @@ router.get("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  // Always run both paths in parallel, then merge + deduplicate
   const [queryOrders, user] = await Promise.all([
     firestoreQuery("commandes", [{ field: "userId", value: uid }], idToken),
     firestoreGet(`users/${uid}`, idToken),
   ]);
 
-  // Build a map by document ID
   const orderMap = new Map<string, Record<string, unknown>>();
   for (const o of queryOrders) {
     if (o.id) orderMap.set(String(o.id), o);
   }
 
-  // Supplement with orderRefs stored in user doc
   const refs = Array.isArray(user?.orderRefs)
     ? (user!.orderRefs as { id: string; createdAt: string }[])
     : [];
@@ -337,7 +323,6 @@ router.get("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
     }
   }
 
-  // Normalise createdAt (Timestamp Firestore → ISO string) avant envoi au client
   const normalizeOrder = (o: Record<string, unknown>): Record<string, unknown> => ({
     ...o,
     createdAt: asIsoDate(o.createdAt) ?? new Date(0).toISOString(),
@@ -353,13 +338,11 @@ router.get("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
       return tb - ta;
     });
 
-  // Mettre en cache pour les prochaines requêtes
   ordersCache.set(uid, { data: orders, ts: Date.now() });
   res.set("X-Cache", "MISS");
   res.json({ success: true, data: orders });
 });
 
-// ── POST /api/orders ───────────────────────────────────────────────────────
 router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   const {
     serviceId, serviceName, platform, platformColor, type, quantity,
@@ -376,13 +359,6 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   const idToken    = req.idToken!;
   const orderPrice = Number(price);
 
-  // ── Vérification + déduction atomique du solde ──────────────────────────
-  // Utilise une transaction Firestore pour éviter les race conditions.
-  // C'est le seul endroit qui décide si une commande peut partir.
-  //
-  // ✅ FIX TS: la transaction RETOURNE l'erreur au lieu de l'assigner à une variable
-  //    capturée dans la closure. TypeScript ne peut pas tracker les affectations
-  //    faites à l'intérieur d'un callback → il réduisait `balanceCheckError` à `never`.
   let balanceCheckError: string | null = null;
 
   let orderUserEmail = "";
@@ -399,24 +375,20 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
       orderUserEmail = String(userData.email ?? "");
       orderUserName  = String(userData.name ?? userData.username ?? "");
 
-      // 1. Compte bloqué ?
       if (userData.blocked === true) {
         return "BLOCKED";
       }
 
-      // 2. Dette non remboursée ?
       const frozenDebt = Number(userData.frozenDebt ?? 0);
       if (frozenDebt > 0) {
         return `DEBT:${frozenDebt}`;
       }
 
-      // 3. Solde suffisant ?
       const currentBalance = Number(userData.balance ?? 0);
       if (currentBalance < orderPrice) {
         return `INSUFFICIENT:${currentBalance}`;
       }
 
-      // 4. Tout OK → déduire atomiquement
       tx.update(userRef, { balance: FieldValue.increment(-orderPrice) });
       return null;
     });
@@ -474,7 +446,6 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  // Invalider le cache orders de cet utilisateur — la nouvelle commande doit apparaître
   invalidateOrdersCache(uid);
 
   const orderRef = { id: order.id as string, createdAt: orderData.createdAt as string };
@@ -489,7 +460,6 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
     ),
   ];
 
-  // Increment referralOrdersUsed counter when filleul discount was applied
   if (referralDiscountApplied === true) {
     postOrderTasks.push(
       (async () => {
@@ -513,8 +483,6 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: Response) => {
   res.status(201).json({ success: true, data: order });
 });
 
-// ── GET /api/orders/:id/refresh-status ────────────────────────────────────
-// Fetches real-time status from the provider API and updates Firestore.
 router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const uid     = req.uid!;
@@ -528,7 +496,6 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
 
   const providerOrderId = asString(order.providerOrderId);
   if (!providerOrderId) {
-    // No provider order ID — return current order without error
     res.json({ success: true, data: order, noProviderId: true });
     return;
   }
@@ -536,7 +503,6 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
   const type         = asString(order.type).toLowerCase();
   const storedProvider = asString(order.provider).toLowerCase();
 
-  // Determine which provider(s) to query
   let providerStatus: ProviderStatus | null = null;
   let usedProvider = "";
 
@@ -544,7 +510,6 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
     providerStatus = await fetchProviderStatus(AFB_BASE, AFB_KEY, providerOrderId);
     usedProvider   = "afriqueboost";
   } else if (type === "automatique") {
-    // Try stored provider first, then MTP, then SMMGen
     if (storedProvider === "smmgen") {
       providerStatus = await fetchProviderStatus(SMMGEN_BASE, SMMGEN_KEY, providerOrderId);
       usedProvider   = "smmgen";
@@ -557,7 +522,6 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
       usedProvider   = "smmgen";
     }
   } else {
-    // standard / revendeur → Exo
     providerStatus = await fetchProviderStatus(EXO_BASE, EXO_KEY, providerOrderId);
     usedProvider   = "exo";
   }
@@ -579,9 +543,6 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
   if (providerStatus.remains     != null) updates.remains    = providerStatus.remains;
   if (providerStatus.start_count != null) updates.startCount = providerStatus.start_count;
 
-  // ── REMBOURSEMENT ATOMIQUE si annulée ou partiel ──────────────────────────
-  // Le orderPoller ne retouchera plus cette commande une fois le statut changé.
-  // On doit donc créditer ici, atomiquement, avec le même verrou refundProcessed.
   let refundCredited = 0;
 
   if (
@@ -598,7 +559,6 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
       const ratio = qty > 0 && remains > 0 ? remains / qty : 0;
       refundAmt = Math.round(ratio * price);
     } else {
-      // annulée ou remboursé → remboursement total
       refundAmt = price;
     }
 
@@ -608,7 +568,7 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
         await db.runTransaction(async (t) => {
           const orderRef = db.doc(`commandes/${id}`);
           const snap = await t.get(orderRef);
-          if (snap.data()?.refundProcessed) return; // déjà traité (race condition)
+          if (snap.data()?.refundProcessed) return;
           t.update(orderRef, {
             ...updates,
             refundProcessed: true,
@@ -622,14 +582,12 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
         updates.refundAmount    = refundAmt;
         invalidateOrdersCache(uid);
 
-        // Log remboursement
         logActivity(uid, idToken, "remboursement",
           `Remboursement ${mappedStatus} — ${asString(order.orderId)}`,
           refundAmt, "completed",
           { orderId: order.orderId }
         ).catch(() => {});
 
-        // Push notification
         getUserPushToken(uid).then((token) =>
           sendExpoPush(
             token,
@@ -643,22 +601,18 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
         console.log(`[orders/refresh] ✅ Remboursement ${refundAmt} FCFA → ${uid} (commande ${id} → ${mappedStatus})`);
       } catch (err) {
         console.error(`[orders/refresh] Erreur remboursement ${id}:`, err);
-        // Mettre à jour quand même le statut sans refundProcessed pour que le poller le récupère
         await firestoreUpdate(`commandes/${id}`, updates, idToken).catch(() => {});
         res.json({ success: true, data: { ...order, ...updates }, providerStatus: { ...providerStatus, provider: usedProvider }, refundError: true });
         return;
       }
     } else {
-      // Pas de remboursement (prix = 0) → juste mettre à jour le statut
       updates.refundProcessed = true;
       await firestoreUpdate(`commandes/${id}`, updates, idToken);
     }
   } else {
-    // Autres statuts (succès, en cours, etc.) → mise à jour simple
     await firestoreUpdate(`commandes/${id}`, updates, idToken);
   }
 
-  // ── COMMANDE LIVRÉE → notif ───────────────────────────────────────────────
   if (mappedStatus === "succès" && prevStatus !== "succès") {
     const serviceName = asString(order.serviceName);
     const platform   = asString(order.platform);
@@ -691,15 +645,7 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
   });
 });
 
-// ── POST /api/orders/:id/cancel ────────────────────────────────────────────
-// ⚠️  TRANSACTION ATOMIQUE — impossible d'exécuter le remboursement 2 fois :
-//   1. Vérifie que le statut est encore "En attente" ET que refundProcessed est absent
-//   2. Met status="annulée" + refundProcessed=true + crédite le solde en UNE seule opération
-//   Si la requête est envoyée 100 fois, seule la première passera ; les suivantes
-//   recevront "déjà annulée".
 router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Response) => {
-  // ✅ FIX TS: req.params.id peut être typé `string | string[]` en Express 5.
-  //    On garantit un `string` avant de le passer à notifyAdminCancelRefund.
   const rawId = req.params.id;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
@@ -722,7 +668,6 @@ router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Res
       const order = orderSnap.data()!;
       if (asString(order.userId) !== uid) throw Object.assign(new Error("Non autorisé"), { code: 403 });
 
-      // ── Garde-fou idempotent : déjà annulée ou déjà remboursée ──
       const status = asString(order.status);
       const cancelableStatuses = ["En attente", "pending", "en attente"];
       if (!cancelableStatuses.includes(status) || order.refundProcessed === true) {
@@ -732,16 +677,14 @@ router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Res
       existing = order;
       price    = asNumber(order.price ?? order.amount);
 
-      // ── Mise à jour atomique de la commande ──
       t.update(orderRef, {
         status:          "annulée",
         progress:        0,
         cancelledAt:     new Date().toISOString(),
         refundAmount:    price,
-        refundProcessed: true,   // ← Verrou anti-double-remboursement
+        refundProcessed: true,
       });
 
-      // ── Crédit atomique du solde (increment, jamais read-then-write) ──
       if (price > 0) {
         const userRef = db.doc(`users/${uid}`);
         t.update(userRef, { balance: FieldValue.increment(price) });
@@ -765,7 +708,6 @@ router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Res
   const userEmail = asString(ord.userEmail ?? ord.email, "Non renseigné");
   const userPhone = asString(ord.userPhone ?? ord.phone, "Non renseigné");
 
-  // Activité de remboursement (asynchrone, ne bloque pas)
   if (price > 0) {
     logActivity(uid, idToken, "remboursement",
       `Remboursement commande ${asString(ord.orderId) || id}`,
@@ -780,10 +722,8 @@ router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Res
     ).catch(() => {});
   }
 
-  // ── Notification WhatsApp admin (asynchrone) ──
   notifyAdminCancelRefund(ord, id, price, userName, userEmail, userPhone).catch(() => {});
 
-  // ── Push notification to user ──
   getUserPushToken(uid).then((token) =>
     sendExpoPush(
       token,

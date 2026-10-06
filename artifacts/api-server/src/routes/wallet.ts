@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { sendExpoPush, getUserPushToken } from "../lib/push.js";
@@ -23,14 +23,11 @@ const FAPSHI_BASE   = "https://live.fapshi.com";
 const INTL_PAYMENT_BACKEND = "https://social-boost-exaucenapopolo2.replit.app";
 const ADMIN_WHATSAPP = "+237699853665";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
-// ── Caches wallet par utilisateur ─────────────────────────────────────────
-// GET /wallet (solde + rechargements) : 3 min TTL
-// GET /wallet/activities (activités) : 3 min TTL
 const walletCache = new Map<string, { data: unknown; ts: number }>();
 const walletActivCache = new Map<string, { data: unknown[]; ts: number }>();
-const WALLET_CACHE_MS = 5 * 60_000; // 5 minutes (invalidé sur dépôt confirmé)
+const WALLET_CACHE_MS = 5 * 60_000;
 
 export function invalidateWalletCache(uid: string): void {
   walletCache.delete(uid);
@@ -66,8 +63,6 @@ async function logActivity(
     ...(meta ?? {}),
   };
   await firestoreCreate("activites", item, idToken);
-  // NOTE: appendToUserArray("recentActivities") supprimé — trop coûteux en quota Firestore.
-  // Les activités sont requêtées directement depuis la collection "activites".
 }
 
 async function sendTwilioWhatsApp(body: string): Promise<void> {
@@ -183,7 +178,6 @@ router.get("/wallet", requireAuth, async (req: AuthRequest, res: Response) => {
   const uid = req.uid!;
   const idToken = req.idToken!;
 
-  // Serve depuis le cache si frais (économise lecture users + 50 rechargements)
   const cached = walletCache.get(uid);
   if (cached && Date.now() - cached.ts < WALLET_CACHE_MS) {
     res.set("X-Cache", "HIT");
@@ -241,7 +235,6 @@ router.get("/wallet", requireAuth, async (req: AuthRequest, res: Response) => {
     recharges,
   };
 
-  // Mettre en cache
   walletCache.set(uid, { data: walletData, ts: Date.now() });
   res.set("X-Cache", "MISS");
   res.json({ success: true, data: walletData });
@@ -251,7 +244,6 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
   const uid = req.uid!;
   const idToken = req.idToken!;
 
-  // Serve depuis le cache si frais (économise activites + rechargements Firestore)
   const cachedActiv = walletActivCache.get(uid);
   if (cachedActiv && Date.now() - cachedActiv.ts < WALLET_CACHE_MS) {
     res.set("X-Cache", "HIT");
@@ -259,7 +251,6 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
     return;
   }
 
-  // Try collection queries first — limité à 50 docs chacun pour préserver le quota Firestore
   getFirebaseAdmin();
   const dbActiv = getFirestore();
   let [activites, recharges]: [Record<string, unknown>[], Record<string, unknown>[]] = [[], []];
@@ -271,10 +262,8 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
     activites = actSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
     recharges = rechSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
   } catch {
-    // fallback si quota épuisé — activites/recharges restent []
   }
 
-  // Fallback: use recentActivities and recentRecharges stored in user document
   if (activites.length === 0 || recharges.length === 0) {
     const user = await firestoreGet(`users/${uid}`, idToken);
 
@@ -308,7 +297,6 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
     createdAt: asIsoDate(r.createdAt) ?? new Date(0).toISOString(),
   }));
 
-  // Normalise les createdAt Timestamp dans les activités
   const normalizedActivites = (activites as any[]).map((a: any) => ({
     ...a,
     createdAt: asIsoDate(a.createdAt) ?? new Date(0).toISOString(),
@@ -325,7 +313,6 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Resp
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 50);
 
-  // Mettre en cache
   walletActivCache.set(uid, { data: all, ts: Date.now() });
   res.set("X-Cache", "MISS");
   res.json({ success: true, data: all });
@@ -357,9 +344,6 @@ router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: Respo
     } catch { verified = false; }
   }
 
-  // ── IDEMPOTENCY : si le paiement est vérifié et qu'on a un transId,
-  //    utiliser "fapshi_TRANSID" comme ID de doc pour bloquer tout double-crédit.
-  //    /wallet/fapshi-confirm et /webhook/fapshi utilisent exactement le même ID.
   if (verified && txId) {
     const amt = Number(amount);
     getFirebaseAdmin();
@@ -409,7 +393,6 @@ router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: Respo
     return;
   }
 
-  // Paiement non vérifié ou sans transId → créer doc pending pour que le poller prenne le relais
   const recharge = await firestoreCreate(
     "rechargements",
     {
@@ -465,7 +448,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
     getFirebaseAdmin();
     const db = getFirestore();
 
-    // Use a transaction to prevent race condition between polling and webhook
     let toCredit = amountFapshi || Number(amount ?? 0);
     let alreadyCredited = false;
     let newBalance = 0;
@@ -473,7 +455,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
     let fapshiFirstName = "";
     let fapshiEmail = "";
 
-    // Use transId as the rechargements document ID to guarantee atomic idempotency
     const rechargeRef = db.collection("rechargements").doc(`fapshi_${transId}`);
 
     let debtRepaid = 0;
@@ -495,7 +476,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
       fapshiFirstName = String(userData.name ?? "").split(" ")[0] || "";
       fapshiEmail = asString(userData.email);
 
-      // ── Gestion de la dette (compte bloqué) ──────────────────────────────
       const currentDebt = asNumber(userData.frozenDebt ?? 0);
       const isBlocked   = !!userData.blocked;
       let creditToBalance = toCredit;
@@ -503,7 +483,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
 
       if (currentDebt > 0) {
         if (toCredit >= currentDebt) {
-          // Solde entièrement apuré
           creditToBalance = toCredit - currentDebt;
           debtRepaid = currentDebt;
           userUpdates.frozenDebt = 0;
@@ -513,7 +492,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
             unblocked = true;
           }
         } else {
-          // Paiement partiel de la dette
           creditToBalance = 0;
           debtRepaid = toCredit;
           userUpdates.frozenDebt = currentDebt - toCredit;
@@ -540,7 +518,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
     });
 
     if (alreadyCredited) {
-      // Already credited by webhook or previous polling attempt — return success so mobile can refresh
       const userSnap = await db.doc(`users/${req.uid}`).get();
       res.json({
         success: true,
@@ -580,7 +557,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
       sendExpoPush(token, pushTitle, pushBody, { screen: "wallet" }, "wallet")
     ).catch(() => {});
 
-    // Fire-and-forget recharge email
     if (fapshiEmail) {
       sendRechargeEmail(fapshiEmail, fapshiFirstName, toCredit, "Fapshi Mobile Money", newBalance).catch(() => {});
     }
@@ -592,7 +568,6 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
 });
 
 router.post("/webhook/fapshi", async (req: Request, res: Response) => {
-  // Declare outside try so they're accessible in catch for enqueue fallback
   let webhookTransId = "";
   let webhookExtId   = "";
   let webhookAmount  = 0;
@@ -609,7 +584,7 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
     }
 
     const r = await fetch(`${FAPSHI_BASE}/payment-status/${webhookTransId}`, {
-      headers: { "apiuser": FAPSHI_USER, "apikey": FAPSHI_SECRET },
+      headers: { apiuser: FAPSHI_USER, apikey: FAPSHI_SECRET },
       signal: AbortSignal.timeout(10000),
     });
     if (!r.ok) { res.status(502).json({ success: false }); return; }
@@ -638,7 +613,6 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
     }
     const db = getFS();
 
-    // transId as doc ID — guarantees only one of webhook/polling credits the user
     const rechargeRef = db.collection("rechargements").doc(`fapshi_${webhookTransId}`);
 
     let webhookUserName = "";
@@ -654,7 +628,6 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
       const currentBal  = asNumber(userData.balance);
       webhookUserName   = String(userData.name ?? "").split(" ")[0] || "";
 
-      // ── Gestion de la dette (même logique que fapshi-confirm) ────────────
       const currentDebt     = asNumber(userData.frozenDebt ?? 0);
       const isBlocked       = !!userData.blocked;
       let   creditToBalance = webhookAmount;
@@ -694,7 +667,6 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
       return;
     }
 
-    // Invalider le cache wallet de cet utilisateur (solde a changé)
     invalidateWalletCache(webhookExtId);
 
     const greeting = webhookUserName ? `, ${webhookUserName}` : "";
@@ -715,7 +687,6 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
     const isQuota = errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("Quota exceeded");
 
     if (isQuota && webhookExtId && webhookAmount > 0) {
-      // ── Quota Firestore — mettre en file d'attente, réessai auto toutes les 30s ──
       enqueuePendingCredit({
         id:      `fapshi_${webhookTransId}`,
         userId:  webhookExtId,
@@ -725,7 +696,7 @@ router.post("/webhook/fapshi", async (req: Request, res: Response) => {
         phone:   webhookPhone,
       });
       console.warn(`[webhook/fapshi] ⚠️ Quota Firestore — ${webhookAmount} FCFA mis en file pour ${webhookExtId}`);
-      res.json({ success: true, queued: true }); // 200 → Fapshi ne réessaie pas
+      res.json({ success: true, queued: true });
     } else {
       console.error("[webhook/fapshi] Erreur:", errMsg);
       res.status(500).json({ success: false, error: errMsg });
@@ -750,8 +721,6 @@ router.post("/wallet/transfer", requireAuth, async (req: AuthRequest, res: Respo
     let newWithdrawalBalance = 0;
     let label = "";
 
-    // ── TRANSACTION ATOMIQUE — empêche le double transfert si deux requêtes simultanées ──
-    // Lit et écrit dans la même transaction : impossible de transférer deux fois le même solde.
     await db.runTransaction(async (t) => {
       const userDoc = await t.get(userRef);
       if (!userDoc.exists) throw Object.assign(new Error("Utilisateur non trouvé"), { code: 404 });
@@ -922,7 +891,6 @@ router.post("/wallet/withdraw", requireAuth, async (req: AuthRequest, res: Respo
 
     sendTwilioWhatsApp(adminMsg).catch(() => {});
 
-    // Fire-and-forget withdrawal email
     const withdrawEmail = asString(user.email);
     const withdrawName  = asString(user.name) || asString(user.username) || "Utilisateur";
     if (withdrawEmail) {
@@ -955,7 +923,6 @@ router.post("/wallet/record-pending-recharge", requireAuth, async (req: AuthRequ
 
     const tid = transId ?? "";
 
-    // Write pending rechargement doc so the swychr webhook + poller can detect confirmation
     if (tid) {
       await db.collection("rechargements").doc(`swychr_${tid}`).set({
         amount:        Number(amount),
@@ -987,14 +954,6 @@ router.post("/wallet/record-pending-recharge", requireAuth, async (req: AuthRequ
   }
 });
 
-/**
- * POST /webhook/swychr
- *
- * Called by the external SwychrConnect backend when a payment is confirmed.
- * The external backend has already credited the user's balance in Firebase.
- * This webhook records the rechargement, sends the deposit notification,
- * and lets the referralPoller handle the 10% referral bonus.
- */
 router.post("/webhook/swychr", async (req: Request, res: Response) => {
   try {
     const { userId, amount: rawAmount, transId, phone, method, status: extStatus } = req.body ?? {};
@@ -1021,7 +980,6 @@ router.post("/webhook/swychr", async (req: Request, res: Response) => {
 
     const rechargeRef = db.collection("rechargements").doc(`swychr_${transId}`);
 
-    // ── TRANSACTION — idempotence + vérification solde + dette ───────────────
     let alreadyConfirmed = false;
     let userName = "";
     let createdAt = new Date().toISOString();
@@ -1045,17 +1003,11 @@ router.post("/webhook/swychr", async (req: Request, res: Response) => {
       userName = String(userData.name ?? "").split(" ")[0] || "";
       createdAt = asIsoDate(existing.data()?.createdAt) ?? new Date().toISOString();
 
-      // ── Sécurité : vérifier que le solde a bien augmenté du montant attendu ──
-      // Cela empêche qu'un attaquant appelle ce webhook sans avoir réellement payé.
-      // L'external backend credit le solde avant d'appeler ce webhook.
-      // Tolérance de ±1 FCFA pour les conversions de devises.
       const balanceIncrease = currentBal - balanceBefore;
       const paymentVerified = balanceIncrease >= (amount - 1);
 
       if (!paymentVerified && !existing.exists) {
-        // Webhook reçu mais solde pas encore crédité — ne pas confirmer
         console.warn(`[webhook/swychr] ⚠️ Solde non crédité pour ${transId} — attendu +${amount} FCFA, delta: ${balanceIncrease}`);
-        // On crée quand même le doc pending si absent, pour que PHASE 0 le récupère plus tard
         t.set(rechargeRef, {
           amount,
           method:        method ?? "Mobile Money International",
@@ -1069,13 +1021,10 @@ router.post("/webhook/swychr", async (req: Request, res: Response) => {
           depositNotifSent:  false,
           referralProcessed: false,
         }, { merge: true });
-        alreadyConfirmed = true; // bloquer la suite (pas encore confirmé)
+        alreadyConfirmed = true;
         return;
       }
 
-      // ── Gestion de la dette (solde déjà crédité par l'external backend) ──────
-      // L'external backend a crédité `amount` sans connaître la dette.
-      // On redirige min(amount, frozenDebt) vers le remboursement de dette.
       const frozenDebt = asNumber(userData.frozenDebt ?? 0);
       const isBlocked  = !!userData.blocked;
       const swychrUpdates: Record<string, unknown> = {};
@@ -1083,7 +1032,7 @@ router.post("/webhook/swychr", async (req: Request, res: Response) => {
       if (frozenDebt > 0) {
         const repayable = Math.min(amount, frozenDebt);
         debtRepaidSwychr = repayable;
-        swychrUpdates.balance    = currentBal - repayable; // retire la part dette du solde
+        swychrUpdates.balance    = currentBal - repayable;
         swychrUpdates.frozenDebt = frozenDebt - repayable;
         if (frozenDebt <= amount && isBlocked) {
           swychrUpdates.blocked    = false;
@@ -1125,7 +1074,6 @@ router.post("/webhook/swychr", async (req: Request, res: Response) => {
       return;
     }
 
-    // Push notification
     const greeting = userName ? `, ${userName}` : "";
     let swychrPushTitle = "💰 Rechargement confirmé !";
     let swychrPushBody  = `${amount.toLocaleString("fr-FR")} FCFA ont bien été crédités sur votre solde${greeting}. Vous pouvez maintenant passer vos commandes.`;
@@ -1142,7 +1090,6 @@ router.post("/webhook/swychr", async (req: Request, res: Response) => {
 
     await rechargeRef.update({ depositNotifSent: true }).catch(() => {});
 
-    // Invalider le cache wallet de cet utilisateur (solde a changé)
     invalidateWalletCache(userId);
 
     console.log(`[webhook/swychr] ✅ Paiement ${transId} confirmé pour ${userId} (${amount} FCFA${debtRepaidSwychr > 0 ? `, dette remboursée: ${debtRepaidSwychr}` : ""})`);
