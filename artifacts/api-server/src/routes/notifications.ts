@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
@@ -12,11 +12,10 @@ import {
   asNumber,
 } from "../lib/firebase-admin.js";
 
-const router: IRouter = Router();
+const router: ReturnType<typeof Router> = Router();
 
-// ── Cache notifications par utilisateur — 2 min TTL ───────────────────────
 const notifCache = new Map<string, { data: unknown[]; ts: number }>();
-const NOTIF_CACHE_MS = 15 * 60_000; // 15 minutes (poller invalide en temps réel)
+const NOTIF_CACHE_MS = 15 * 60_000;
 
 export function invalidateNotifCache(uid: string): void {
   notifCache.delete(uid);
@@ -78,15 +77,10 @@ interface NotifItem {
   createdAt: string;
 }
 
-/**
- * GET /api/notifications
- * Returns the user's notification history from Firestore activites + completed orders.
- */
 router.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) => {
   const uid     = req.uid!;
   const idToken = req.idToken!;
 
-  // Serve depuis le cache si frais (économise activites + commandes Firestore)
   const cached = notifCache.get(uid);
   if (cached && Date.now() - cached.ts < NOTIF_CACHE_MS) {
     res.set("X-Cache", "HIT");
@@ -104,8 +98,6 @@ router.get("/notifications", requireAuth, async (req: AuthRequest, res: Response
     }
   };
 
-  // 1. All saved activites (covers: parrainage, nouveau_filleul, order_done, order_partial, order_cancelled, depot)
-  // Limité aux 50 activités les plus récentes.
   try {
     getFirebaseAdmin();
     const db = getFirestore();
@@ -185,8 +177,6 @@ router.get("/notifications", requireAuth, async (req: AuthRequest, res: Response
     console.error("[notifications] activites error:", e);
   }
 
-  // 2. Completed orders in commandes collection (for orders that completed before activites were tracked)
-  // Limité aux 20 commandes les plus récentes pour réduire les lectures Firestore.
   try {
     getFirebaseAdmin();
     const db = getFirestore();
@@ -255,12 +245,10 @@ router.get("/notifications", requireAuth, async (req: AuthRequest, res: Response
     console.error("[notifications] orders error:", e);
   }
 
-  // Sort by date descending
   notifs.sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  // Mettre en cache pour les prochaines requêtes
   notifCache.set(uid, { data: notifs, ts: Date.now() });
   res.set("X-Cache", "MISS");
   res.json({ success: true, data: notifs });
