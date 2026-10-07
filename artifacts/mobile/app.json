@@ -8,12 +8,13 @@
     "scheme": "socialboost",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF",
-      "runtimeVersion": {
-  "policy": "appVersion"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true
@@ -33,7 +34,8 @@
       "name": "Social Boost Horizon"
     },
     "updates": {
-      "enabled": true
+      "enabled": true,
+      "url": "https://u.expo.dev/4c729449-8668-490a-a10c-a31e8e00b50b"
     },
     "experiments": {
       "typedRoutes": true,
