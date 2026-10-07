@@ -2,7 +2,7 @@
   "expo": {
     "name": "Social Boost Horizon",
     "slug": "social-boost-horizon",
-    "version": "1.12.3",
+    "version": "1.15.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "socialboost",
