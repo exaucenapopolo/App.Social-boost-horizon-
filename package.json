@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "preinstall": "node -e \"try{require('./scripts/preinstall.cjs')}catch(e){console.log('[preinstall] skipped:',e.message)}\""
+    "preinstall": "node -e \"try{require('./scripts/preinstall.cjs')}catch(e){console.log('[preinstall] skipped:',e.message)}\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
