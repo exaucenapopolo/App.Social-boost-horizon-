@@ -7,8 +7,7 @@
     "dev": "pnpm exec expo start --port 8081",
     "build": "pnpm exec expo export --platform web",
     "serve": "node server/serve.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "eas-build-pre-install": "bash ../../eas-build-pre-install.sh"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -62,7 +61,7 @@
     "expo-device": "~8.0.10",
     "expo-notifications": "~0.32.16",
     "expo-secure-store": "~15.0.8",
-    "expo-updates": "^56.0.19",
+    "expo-updates": "~29.0.20",
     "firebase": "^12.10.0"
   }
 }

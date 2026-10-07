@@ -8,21 +8,27 @@
       "distribution": "internal",
       "channel": "preview",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "sdk-54"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-server-gilt-pi.vercel.app/"
-      }
+      },
+      "node": "20.19.4",
+      "pnpm": "10.14.0"
     },
     "production": {
       "distribution": "store",
       "channel": "production",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "image": "sdk-54"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-server-gilt-pi.vercel.app/"
-      }
+      },
+      "node": "20.19.4",
+      "pnpm": "10.14.0"
     }
   },
   "submit": {
