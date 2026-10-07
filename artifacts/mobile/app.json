@@ -31,7 +31,7 @@
       "name": "Social Boost Horizon"
     },
     "updates": {
-      "enabled": false
+      "enabled": true
     },
     "experiments": {
       "typedRoutes": true,
