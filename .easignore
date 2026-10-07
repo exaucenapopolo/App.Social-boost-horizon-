@@ -1,17 +1,13 @@
-# .easignore — garantit que pnpm-lock.yaml et pnpm-workspace.yaml sont inclus
-# même s'ils sont dans .gitignore
-
+# Files that must be included in EAS build
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !.npmrc
 
-# Ignorer les dossiers de build et dépendances
+# Directories to ignore
 node_modules/
 dist/
 .expo/
 static-build/
 attached_assets/
-
-# Ignorer les anciens builds natifs (seront régénérés par prebuild)
 artifacts/mobile/android/
 artifacts/mobile/ios/

@@ -614,6 +614,7 @@ export default function NewOrderScreen() {
 
       let providerOrderId: string | undefined;
       let providerError: string | undefined;
+      let providerData: any = null;
 
       try {
         const abortCtrl = new AbortController();
@@ -628,7 +629,7 @@ export default function NewOrderScreen() {
           signal: abortCtrl.signal,
         });
         clearTimeout(abortTimer);
-        const providerData = await providerRes.json().catch(() => null);
+        providerData = await providerRes.json().catch(() => null);
         if (!providerRes.ok || providerData?.success === false) {
           providerError = providerData?.error ?? `Erreur fournisseur (${providerRes.status})`;
         } else {

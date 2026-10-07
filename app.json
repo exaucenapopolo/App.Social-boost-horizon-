@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "e17e7e9f-f4c4-4e7e-84b9-cbef64d80d3b"
+      }
+    },
+    "android": {
+      "package": "com.socialboost237.workspace"
+    }
+  }
+}
