@@ -20,26 +20,34 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import StarBackground from "@/components/StarBackground";
 import { APP_VERSION } from "@/constants/version";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import { LOGO_URL } from "@/lib/firebase";
 import { BASE_URL } from "@/services/api";
 
-const ACCENT   = "#7C3AED";
-const ACCENT2  = "#A855F7";
-const SUCCESS  = "#10B981";
-const GOLD     = "#F59E0B";
-const CARD_BG  = "rgba(10,15,40,0.82)";
-const BORDER   = "rgba(124,58,237,0.35)";
-const MUTED    = "rgba(255,255,255,0.45)";
+// ─────────────────────────────────────────────────────────────────
+// Palette claire — professionnelle, minimaliste, style application
+// ─────────────────────────────────────────────────────────────────
+const PRIMARY      = "#7C3AED";   // Violet principal
+const PRIMARY_DK   = "#6D28D9";   // Violet foncé (pressed)
+const PRIMARY_SOFT = "#F5F3FF";   // Violet très clair (fonds légers)
+const BG           = "#F7F8FB";   // Fond de page — gris ultra doux
+const SURFACE      = "#FFFFFF";   // Cartes / surfaces
+const TEXT         = "#0F172A";   // Texte principal (presque noir)
+const TEXT_MUTED   = "#64748B";   // Texte secondaire (gris ardoise)
+const TEXT_SOFT    = "#94A3B8";   // Placeholders
+const BORDER       = "#E5E7EB";   // Bordures neutres
+const INPUT_BG     = "#F3F4F6";   // Fond des inputs
+const DANGER       = "#EF4444";
+const SUCCESS      = "#10B981";
+const WHATSAPP     = "#25D366";
+const WHATSAPP_DK  = "#128C7E";
 
 const LOGIN_PROBLEMS = [
   {
     id: "connexion",
     icon: "log-in" as const,
-    color: "#EF4444",
+    color: DANGER,
     title: "Problème de connexion",
     desc: "Je n'arrive pas à me connecter à mon compte",
     getMessage: (email: string) =>
@@ -57,7 +65,7 @@ const LOGIN_PROBLEMS = [
   {
     id: "autre",
     icon: "help-circle" as const,
-    color: "#10B981",
+    color: SUCCESS,
     title: "Autre problème",
     desc: "J'ai un autre problème à signaler",
     getMessage: (email: string) =>
@@ -68,7 +76,6 @@ const LOGIN_PROBLEMS = [
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
-  const { colors } = useTheme();
 
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -86,23 +93,25 @@ export default function LoginScreen() {
   const [supportLoading, setSupportLoading] = useState(false);
   const [supportSuccess, setSupportSuccess] = useState(false);
 
-  // Entrance animations
-  const logoAnim  = useRef(new Animated.Value(0)).current;
-  const cardAnim  = useRef(new Animated.Value(0)).current;
-  const glowPulse = useRef(new Animated.Value(1)).current;
+  // Entrance animations (subtiles, gardées)
+  const logoAnim = useRef(new Animated.Value(0)).current;
+  const cardAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.sequence([
-      Animated.timing(logoAnim, { toValue: 1, duration: 700, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
-      Animated.timing(cardAnim, { toValue: 1, duration: 500, useNativeDriver: true, easing: Easing.out(Easing.quad) }),
+      Animated.timing(logoAnim, {
+        toValue: 1,
+        duration: 550,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(cardAnim, {
+        toValue: 1,
+        duration: 450,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
     ]).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowPulse, { toValue: 1.18, duration: 2200, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
-        Animated.timing(glowPulse, { toValue: 1, duration: 2200, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
-      ])
-    ).start();
   }, []);
 
   const handleLogin = async () => {
@@ -165,53 +174,35 @@ export default function LoginScreen() {
     }
   };
 
-  const logoTranslate = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [-30, 0] });
-  const cardTranslate = cardAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
+  const logoTranslate = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] });
+  const cardTranslate = cardAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] });
 
   return (
     <View style={styles.root}>
-      <StarBackground />
-
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
-          contentContainerStyle={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 30 }]}
+          contentContainerStyle={[styles.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 30 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {/* ── Logo area ── */}
           <Animated.View style={[styles.logoArea, { opacity: logoAnim, transform: [{ translateY: logoTranslate }] }]}>
-            <View style={styles.logoGlowWrap}>
-              <Animated.View style={[styles.logoGlow, { transform: [{ scale: glowPulse }] }]} />
-              <LinearGradient
-                colors={[ACCENT, ACCENT2, "#EC4899"]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.logoRingGradient}
-              >
-                <View style={styles.logoInner}>
-                  <Image source={{ uri: LOGO_URL }} style={styles.logoImage} contentFit="cover" />
-                </View>
-              </LinearGradient>
+            <View style={styles.logoWrap}>
+              <Image source={{ uri: LOGO_URL }} style={styles.logoImage} contentFit="cover" />
             </View>
 
             <Text style={styles.appName}>Social Boost Horizon</Text>
-
-            <View style={styles.sloganRow}>
-              <View style={styles.sloganLine} />
-              <Text style={styles.slogan}>Votre visibilité, notre horizon</Text>
-              <View style={styles.sloganLine} />
-            </View>
+            <Text style={styles.slogan}>Votre visibilité, notre horizon</Text>
           </Animated.View>
 
           {/* ── Login card ── */}
           <Animated.View style={[styles.card, { opacity: cardAnim, transform: [{ translateY: cardTranslate }] }]}>
-            <View style={styles.cardHeader}>
-              <LinearGradient colors={[ACCENT, ACCENT2]} style={styles.cardHeaderDot} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-              <Text style={styles.cardTitle}>Connexion</Text>
-            </View>
+            <Text style={styles.cardTitle}>Connexion</Text>
+            <Text style={styles.cardSubtitle}>Accédez à votre espace</Text>
 
             {error ? (
               <View style={styles.errorBox}>
-                <Feather name="alert-circle" size={14} color="#EF4444" />
+                <Feather name="alert-circle" size={14} color={DANGER} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
@@ -220,11 +211,16 @@ export default function LoginScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={[styles.inputRow, focusedField === "email" && styles.inputFocused]}>
-                <Feather name="mail" size={16} color={focusedField === "email" ? ACCENT2 : MUTED} style={styles.inputIcon} />
+                <Feather
+                  name="mail"
+                  size={18}
+                  color={focusedField === "email" ? PRIMARY : TEXT_SOFT}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="votre@email.com"
-                  placeholderTextColor={MUTED}
+                  placeholderTextColor={TEXT_SOFT}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -240,11 +236,16 @@ export default function LoginScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Mot de passe</Text>
               <View style={[styles.inputRow, focusedField === "password" && styles.inputFocused]}>
-                <Feather name="lock" size={16} color={focusedField === "password" ? ACCENT2 : MUTED} style={styles.inputIcon} />
+                <Feather
+                  name="lock"
+                  size={18}
+                  color={focusedField === "password" ? PRIMARY : TEXT_SOFT}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="••••••••"
-                  placeholderTextColor={MUTED}
+                  placeholderTextColor={TEXT_SOFT}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -252,46 +253,46 @@ export default function LoginScreen() {
                   onBlur={() => setFocusedField(null)}
                 />
                 <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn} hitSlop={8}>
-                  <Feather name={showPassword ? "eye-off" : "eye"} size={16} color={MUTED} />
+                  <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={TEXT_SOFT} />
                 </Pressable>
               </View>
             </View>
 
             {/* Login button */}
             <Pressable
-              style={({ pressed }) => [styles.submitBtn, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.submitBtn, pressed && { opacity: 0.9 }]}
               onPress={handleLogin}
               disabled={loading}
             >
-              <LinearGradient
-                colors={[ACCENT, ACCENT2]}
-                style={styles.submitGradient}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Feather name="log-in" size={18} color="#fff" />
-                    <Text style={styles.submitText}>Se connecter</Text>
-                  </>
-                )}
-              </LinearGradient>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Feather name="log-in" size={18} color="#fff" />
+                  <Text style={styles.submitText}>Se connecter</Text>
+                </>
+              )}
             </Pressable>
 
+            {/* Divider */}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>ou</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            <Pressable onPress={() => router.push("/auth/register")} style={styles.registerBtn}>
-              <Feather name="user-plus" size={16} color={ACCENT2} />
+            {/* Register */}
+            <Pressable
+              onPress={() => router.push("/auth/register")}
+              style={({ pressed }) => [styles.registerBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Feather name="user-plus" size={16} color={PRIMARY} />
               <Text style={styles.registerBtnText}>Créer un compte</Text>
             </Pressable>
 
+            {/* Support */}
             <Pressable onPress={openSupport} style={styles.supportBtn}>
-              <Feather name="headphones" size={14} color="#25D366" />
+              <Feather name="help-circle" size={14} color={WHATSAPP} />
               <Text style={styles.supportBtnText}>Problème de connexion ? Contacter le support</Text>
             </Pressable>
           </Animated.View>
@@ -303,46 +304,48 @@ export default function LoginScreen() {
       {/* ── Support Modal ── */}
       <Modal visible={showSupport} animationType="slide" transparent onRequestClose={() => setShowSupport(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={styles.modalSheet}>
+            {/* Handle bar */}
+            <View style={styles.modalHandleWrap}>
+              <View style={styles.modalHandle} />
+            </View>
+
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
                 <View style={styles.supportIconBadge}>
-                  <Feather name="headphones" size={18} color="#25D366" />
+                  <Feather name="headphones" size={18} color={WHATSAPP} />
                 </View>
-                <View>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>
-                    {supportStep === 1 ? "Contacter le support" : supportStep === 2 ? supportCategory : supportSuccess ? "Message envoyé !" : "Erreur d'envoi"}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalTitle}>
+                    {supportStep === 1 ? "Contacter le support" : supportStep === 2 ? "Votre message" : supportSuccess ? "Message envoyé !" : "Erreur d'envoi"}
                   </Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted }}>
-                    Support WhatsApp
-                  </Text>
+                  <Text style={styles.modalSubtitle}>Support WhatsApp</Text>
                 </View>
               </View>
-              <Pressable onPress={() => setShowSupport(false)} style={[styles.modalCloseBtn, { backgroundColor: colors.inputBg }]}>
-                <Feather name="x" size={20} color={colors.text} />
+              <Pressable onPress={() => setShowSupport(false)} style={styles.modalCloseBtn}>
+                <Feather name="x" size={20} color={TEXT_MUTED} />
               </Pressable>
             </View>
 
             <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {supportStep === 1 && (
                 <>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: colors.textMuted, marginBottom: 4 }}>
-                    Sélectionnez votre problème :
-                  </Text>
+                  <Text style={styles.modalLabel}>Sélectionnez votre problème :</Text>
                   {LOGIN_PROBLEMS.map((p) => (
                     <Pressable
                       key={p.id}
                       onPress={() => handleSelectCategory(p)}
-                      style={({ pressed }) => [styles.problemCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, opacity: pressed ? 0.75 : 1 }]}
+                      style={({ pressed }) => [styles.problemCard, pressed && { opacity: 0.75 }]}
                     >
-                      <View style={[styles.problemIconBox, { backgroundColor: p.color + "22" }]}>
+                      <View style={[styles.problemIconBox, { backgroundColor: p.color + "18" }]}>
                         <Feather name={p.icon} size={22} color={p.color} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.problemTitle, { color: colors.text }]}>{p.title}</Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted }}>{p.desc}</Text>
+                        <Text style={styles.problemTitle}>{p.title}</Text>
+                        <Text style={styles.problemDesc}>{p.desc}</Text>
                       </View>
-                      <Feather name="chevron-right" size={18} color={colors.textMuted} />
+                      <Feather name="chevron-right" size={18} color={TEXT_SOFT} />
                     </Pressable>
                   ))}
                 </>
@@ -350,56 +353,67 @@ export default function LoginScreen() {
 
               {supportStep === 2 && (
                 <>
-                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.textMuted }}>
-                    Modifiez le message si nécessaire :
-                  </Text>
+                  <Text style={styles.modalLabel}>Modifiez le message si nécessaire :</Text>
                   <TextInput
-                    style={[styles.messageInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                    multiline numberOfLines={10}
-                    value={supportMessage} onChangeText={setSupportMessage}
+                    style={styles.messageInput}
+                    multiline
+                    numberOfLines={10}
+                    value={supportMessage}
+                    onChangeText={setSupportMessage}
                     textAlignVertical="top"
                     placeholder="Décrivez votre problème..."
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={TEXT_SOFT}
                   />
 
-                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.textMuted, marginTop: 4 }}>
-                    Votre numéro WhatsApp *
-                  </Text>
+                  <Text style={[styles.modalLabel, { marginTop: 4 }]}>Votre numéro WhatsApp *</Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
-                    <View style={[styles.waCodeInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                    <View style={styles.waCodeInput}>
                       <TextInput
-                        style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.accent, textAlign: "center" }}
-                        value={supportWaCode} onChangeText={setSupportWaCode} keyboardType="phone-pad"
+                        style={styles.waCodeText}
+                        value={supportWaCode}
+                        onChangeText={setSupportWaCode}
+                        keyboardType="phone-pad"
                       />
                     </View>
-                    <View style={[styles.waPhoneInput, { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                      <Feather name="smartphone" size={16} color="#25D366" style={{ marginRight: 8 }} />
+                    <View style={styles.waPhoneInput}>
+                      <Feather name="smartphone" size={16} color={WHATSAPP} style={{ marginRight: 8 }} />
                       <TextInput
-                        style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 15, color: colors.text }}
-                        placeholder="6XX XXX XXX" placeholderTextColor={colors.textMuted}
-                        value={supportWaPhone} onChangeText={setSupportWaPhone} keyboardType="phone-pad"
+                        style={styles.waPhoneText}
+                        placeholder="6XX XXX XXX"
+                        placeholderTextColor={TEXT_SOFT}
+                        value={supportWaPhone}
+                        onChangeText={setSupportWaPhone}
+                        keyboardType="phone-pad"
                       />
                     </View>
                   </View>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textMuted }}>
-                    Obligatoire — notre équipe vous contactera sur ce numéro
-                  </Text>
+                  <Text style={styles.modalHint}>Obligatoire — notre équipe vous contactera sur ce numéro</Text>
 
                   <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
-                    <Pressable onPress={() => setSupportStep(1)} style={[styles.backStepBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                      <Feather name="arrow-left" size={16} color={colors.text} />
-                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 14, color: colors.text }}>Retour</Text>
+                    <Pressable onPress={() => setSupportStep(1)} style={styles.backStepBtn}>
+                      <Feather name="arrow-left" size={16} color={TEXT_MUTED} />
+                      <Text style={styles.backStepText}>Retour</Text>
                     </Pressable>
                     <Pressable
                       onPress={handleSendSupport}
                       disabled={supportLoading || !supportMessage.trim() || !supportWaPhone.trim()}
-                      style={[styles.sendBtnWrapper, { opacity: (supportLoading || !supportMessage.trim() || !supportWaPhone.trim()) ? 0.5 : 1 }]}
+                      style={[
+                        styles.sendBtnWrapper,
+                        { opacity: supportLoading || !supportMessage.trim() || !supportWaPhone.trim() ? 0.5 : 1 },
+                      ]}
                     >
-                      <LinearGradient colors={["#25D366", "#128C7E"]} style={styles.sendBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                        {supportLoading ? <ActivityIndicator color="#fff" /> : (
+                      <LinearGradient
+                        colors={[WHATSAPP, WHATSAPP_DK]}
+                        style={styles.sendBtnGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        {supportLoading ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
                           <>
                             <Feather name="send" size={16} color="#fff" />
-                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" }}>Envoyer</Text>
+                            <Text style={styles.sendBtnText}>Envoyer</Text>
                           </>
                         )}
                       </LinearGradient>
@@ -410,19 +424,26 @@ export default function LoginScreen() {
 
               {supportStep === 3 && (
                 <View style={{ alignItems: "center", gap: 16, paddingVertical: 20 }}>
-                  <View style={[styles.resultIcon, { backgroundColor: supportSuccess ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)" }]}>
-                    <Feather name={supportSuccess ? "check-circle" : "alert-circle"} size={40} color={supportSuccess ? SUCCESS : "#EF4444"} />
+                  <View
+                    style={[
+                      styles.resultIcon,
+                      { backgroundColor: supportSuccess ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)" },
+                    ]}
+                  >
+                    <Feather
+                      name={supportSuccess ? "check-circle" : "alert-circle"}
+                      size={40}
+                      color={supportSuccess ? SUCCESS : DANGER}
+                    />
                   </View>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text, textAlign: "center" }}>
-                    {supportSuccess ? "Message envoyé !" : "Erreur d'envoi"}
-                  </Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: colors.textMuted, textAlign: "center", lineHeight: 20 }}>
+                  <Text style={styles.resultTitle}>{supportSuccess ? "Message envoyé !" : "Erreur d'envoi"}</Text>
+                  <Text style={styles.resultDesc}>
                     {supportSuccess
                       ? `Notre équipe va vous contacter sur WhatsApp (${supportWaCode} ${supportWaPhone}) dès que possible.`
                       : "Une erreur s'est produite. Contactez-nous directement : +237 699 853 665"}
                   </Text>
-                  <Pressable onPress={() => setShowSupport(false)} style={[styles.closeFinalBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: colors.text }}>Fermer</Text>
+                  <Pressable onPress={() => setShowSupport(false)} style={styles.closeFinalBtn}>
+                    <Text style={styles.closeFinalText}>Fermer</Text>
                   </Pressable>
                 </View>
               )}
@@ -435,157 +456,405 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#080C1A" },
-  container: { alignItems: "center", paddingHorizontal: 22, gap: 28 },
+  /* ── Root & container ── */
+  root: { flex: 1, backgroundColor: BG },
+  container: { alignItems: "center", paddingHorizontal: 24, gap: 32 },
 
-  /* ── Logo ── */
-  logoArea: { alignItems: "center", gap: 4 },
-  logoGlowWrap: { position: "relative", alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  logoGlow: {
-    position: "absolute",
-    width: 110, height: 110, borderRadius: 55,
-    backgroundColor: ACCENT,
-    opacity: 0.22,
+  /* ── Logo area ── */
+  logoArea: { alignItems: "center", gap: 10 },
+  logoWrap: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: SURFACE,
+    padding: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  logoRingGradient: {
-    width: 96, height: 96, borderRadius: 48,
-    padding: 3,
+  logoImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 40,
   },
-  logoInner: {
-    flex: 1, borderRadius: 45,
-    backgroundColor: "#0A0E1A",
-    overflow: "hidden",
-  },
-  logoImage: { width: "100%", height: "100%" },
 
   appName: {
     fontFamily: "Inter_700Bold",
     fontSize: 22,
-    color: "#fff",
-    letterSpacing: 0.8,
-    textShadowColor: ACCENT2,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
+    color: TEXT,
+    letterSpacing: 0.3,
+    marginTop: 4,
   },
-  sloganRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
-  sloganLine: { flex: 1, height: 1, backgroundColor: "rgba(124,58,237,0.3)" },
-  slogan: { fontFamily: "Inter_400Regular", fontSize: 11, color: "rgba(255,255,255,0.45)", letterSpacing: 0.4 },
+  slogan: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: TEXT_MUTED,
+    letterSpacing: 0.2,
+  },
 
   /* ── Card ── */
   card: {
     width: "100%",
-    backgroundColor: CARD_BG,
+    backgroundColor: SURFACE,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: BORDER,
     padding: 24,
     gap: 16,
-    shadowColor: ACCENT,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.06,
     shadowRadius: 24,
-    elevation: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
-  cardHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: -4 },
-  cardHeaderDot: { width: 4, height: 22, borderRadius: 2 },
-  cardTitle: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#fff" },
+  cardTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+    color: TEXT,
+    marginBottom: -4,
+  },
+  cardSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: TEXT_MUTED,
+    marginBottom: 4,
+  },
 
   errorBox: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "rgba(239,68,68,0.10)",
-    borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: "rgba(239,68,68,0.25)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(239,68,68,0.08)",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.2)",
   },
-  errorText: { fontFamily: "Inter_400Regular", fontSize: 13, color: "#EF4444", flex: 1 },
+  errorText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: DANGER,
+    flex: 1,
+  },
 
   fieldGroup: { gap: 7 },
-  label: { fontFamily: "Inter_500Medium", fontSize: 12, color: "rgba(255,255,255,0.7)", letterSpacing: 0.3, marginLeft: 2 },
+  label: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: TEXT,
+    letterSpacing: 0.1,
+    marginLeft: 2,
+  },
   inputRow: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 12, borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 14, height: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: INPUT_BG,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    paddingHorizontal: 14,
+    height: 54,
   },
   inputFocused: {
-    borderColor: ACCENT2,
-    backgroundColor: "rgba(124,58,237,0.08)",
+    borderColor: PRIMARY,
+    backgroundColor: SURFACE,
   },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15, color: "#fff" },
+  input: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 15,
+    color: TEXT,
+  },
   eyeBtn: { padding: 4 },
 
-  submitBtn: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
-  submitGradient: { height: 54, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  submitText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff", letterSpacing: 0.3 },
+  submitBtn: {
+    backgroundColor: PRIMARY,
+    borderRadius: 14,
+    height: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 8,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  submitText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: "#fff",
+    letterSpacing: 0.3,
+  },
 
-  divider: { flexDirection: "row", alignItems: "center", gap: 12 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.08)" },
-  dividerText: { fontFamily: "Inter_400Regular", fontSize: 12, color: MUTED },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginVertical: 4,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  dividerText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: TEXT_SOFT,
+  },
 
   registerBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    borderRadius: 12, borderWidth: 1, borderColor: BORDER,
-    paddingVertical: 13,
-    backgroundColor: "rgba(124,58,237,0.08)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: PRIMARY,
+    paddingVertical: 14,
+    backgroundColor: PRIMARY_SOFT,
   },
-  registerBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 15, color: ACCENT2 },
+  registerBtnText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+    color: PRIMARY,
+  },
 
   supportBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     paddingVertical: 8,
+    marginTop: 2,
   },
-  supportBtnText: { fontFamily: "Inter_400Regular", fontSize: 12, color: "#25D366" },
+  supportBtnText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: TEXT_MUTED,
+  },
 
   version: {
-    fontFamily: "Inter_400Regular", fontSize: 11,
-    color: "rgba(255,255,255,0.2)",
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: TEXT_SOFT,
+    marginTop: 8,
   },
 
   /* ── Support Modal ── */
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end" },
-  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "90%" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: SURFACE,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "90%",
+  },
+  modalHandleWrap: {
+    alignItems: "center",
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: BORDER,
+  },
   modalHeader: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    padding: 16, paddingBottom: 12, borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-  modalTitle: { fontFamily: "Inter_700Bold", fontSize: 17 },
-  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  modalTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 17,
+    color: TEXT,
+  },
+  modalSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: TEXT_MUTED,
+    marginTop: 1,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: INPUT_BG,
+  },
   supportIconBadge: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: "rgba(37,211,102,0.15)",
-    alignItems: "center", justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(37,211,102,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
   },
+  modalLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: TEXT_MUTED,
+    marginBottom: 4,
+  },
+  modalHint: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: TEXT_SOFT,
+  },
+
   problemCard: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    borderRadius: 14, borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
     padding: 14,
+    backgroundColor: SURFACE,
   },
-  problemIconBox: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  problemTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14, marginBottom: 2 },
+  problemIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  problemTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: TEXT,
+    marginBottom: 2,
+  },
+  problemDesc: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: TEXT_MUTED,
+  },
+
   messageInput: {
-    borderRadius: 12, borderWidth: 1,
-    padding: 14, minHeight: 160,
-    fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 22,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    padding: 14,
+    minHeight: 160,
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    lineHeight: 22,
+    color: TEXT,
+    backgroundColor: SURFACE,
   },
   waCodeInput: {
-    width: 72, height: 50, borderRadius: 12, borderWidth: 1,
-    alignItems: "center", justifyContent: "center",
+    width: 72,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: SURFACE,
+  },
+  waCodeText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: PRIMARY,
+    textAlign: "center",
   },
   waPhoneInput: {
-    height: 50, borderRadius: 12, borderWidth: 1,
-    flexDirection: "row", alignItems: "center", paddingHorizontal: 14,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    backgroundColor: SURFACE,
+    flex: 1,
   },
+  waPhoneText: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 15,
+    color: TEXT,
+  },
+
   backStepBtn: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 12, borderWidth: 1,
-    paddingVertical: 12, paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: SURFACE,
   },
-  sendBtnWrapper: { flex: 1, borderRadius: 12, overflow: "hidden" },
-  sendBtnGradient: { height: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  resultIcon: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center" },
+  backStepText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    color: TEXT_MUTED,
+  },
+  sendBtnWrapper: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  sendBtnGradient: {
+    height: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  sendBtnText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 15,
+    color: "#fff",
+  },
+
+  resultIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    color: TEXT,
+    textAlign: "center",
+  },
+  resultDesc: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    color: TEXT_MUTED,
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 12,
+  },
   closeFinalBtn: {
-    paddingVertical: 12, paddingHorizontal: 32,
-    borderRadius: 12, borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    backgroundColor: SURFACE,
+  },
+  closeFinalText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+    color: TEXT,
   },
 });
