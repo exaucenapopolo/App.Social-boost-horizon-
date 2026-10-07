@@ -26,22 +26,24 @@ import { LOGO_URL } from "@/lib/firebase";
 import { BASE_URL } from "@/services/api";
 
 // ─────────────────────────────────────────────────────────────────
-// Palette claire — professionnelle, minimaliste, style application
+// Palette alignée sur l'identité du logo : bleu nuit + or
 // ─────────────────────────────────────────────────────────────────
-const PRIMARY      = "#7C3AED";   // Violet principal
-const PRIMARY_DK   = "#6D28D9";   // Violet foncé (pressed)
-const PRIMARY_SOFT = "#F5F3FF";   // Violet très clair (fonds légers)
-const BG           = "#F7F8FB";   // Fond de page — gris ultra doux
-const SURFACE      = "#FFFFFF";   // Cartes / surfaces
-const TEXT         = "#0F172A";   // Texte principal (presque noir)
-const TEXT_MUTED   = "#64748B";   // Texte secondaire (gris ardoise)
-const TEXT_SOFT    = "#94A3B8";   // Placeholders
-const BORDER       = "#E5E7EB";   // Bordures neutres
-const INPUT_BG     = "#F3F4F6";   // Fond des inputs
-const DANGER       = "#EF4444";
-const SUCCESS      = "#10B981";
-const WHATSAPP     = "#25D366";
-const WHATSAPP_DK  = "#128C7E";
+const NAVY        = "#0F2A5C";
+const NAVY_LIGHT  = "#1E3F7A";
+const NAVY_DK     = "#0A1F44";
+const GOLD        = "#C9A961";
+const GOLD_DK     = "#B08D4A";
+const GOLD_SOFT   = "#F7F1E1";
+const BG          = "#FAF9F6";
+const SURFACE     = "#FFFFFF";
+const TEXT        = "#0F172A";
+const TEXT_MUTED  = "#64748B";
+const TEXT_SOFT   = "#94A3B8";
+const BORDER      = "#E8E4DA";
+const DANGER      = "#EF4444";
+const SUCCESS     = "#10B981";
+const WHATSAPP    = "#25D366";
+const WHATSAPP_DK = "#128C7E";
 
 const LOGIN_PROBLEMS = [
   {
@@ -77,59 +79,115 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
 
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail]               = useState("");
+  const [password, setPassword]         = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
+  const [error, setError]               = useState("");
+  const [loading, setLoading]           = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  const [showSupport, setShowSupport]       = useState(false);
-  const [supportStep, setSupportStep]       = useState<1 | 2 | 3>(1);
+  const [showSupport, setShowSupport]         = useState(false);
+  const [supportStep, setSupportStep]         = useState<1 | 2 | 3>(1);
   const [supportCategory, setSupportCategory] = useState("");
-  const [supportMessage, setSupportMessage] = useState("");
-  const [supportWaCode, setSupportWaCode]   = useState("+237");
-  const [supportWaPhone, setSupportWaPhone] = useState("");
-  const [supportLoading, setSupportLoading] = useState(false);
-  const [supportSuccess, setSupportSuccess] = useState(false);
+  const [supportMessage, setSupportMessage]   = useState("");
+  const [supportWaCode, setSupportWaCode]     = useState("+237");
+  const [supportWaPhone, setSupportWaPhone]   = useState("");
+  const [supportLoading, setSupportLoading]   = useState(false);
+  const [supportSuccess, setSupportSuccess]   = useState(false);
 
-  // Entrance animations (subtiles, gardées)
-  const logoAnim = useRef(new Animated.Value(0)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
+  // ── Animations ──
+  const logoAnim   = useRef(new Animated.Value(0)).current;
+  const titleAnim  = useRef(new Animated.Value(0)).current;
+  const formAnim   = useRef(new Animated.Value(0)).current;
+  const errorAnim  = useRef(new Animated.Value(0)).current;
+  const shakeAnim  = useRef(new Animated.Value(0)).current;
+  const btnScale   = useRef(new Animated.Value(1)).current;
+  const btnGlow    = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.sequence([
+    Animated.stagger(140, [
       Animated.timing(logoAnim, {
         toValue: 1,
-        duration: 550,
+        duration: 650,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
-      Animated.timing(cardAnim, {
+      Animated.timing(titleAnim, {
         toValue: 1,
-        duration: 450,
+        duration: 520,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(formAnim, {
+        toValue: 1,
+        duration: 620,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
       }),
     ]).start();
   }, []);
 
+  const triggerError = (msg: string) => {
+    setError(msg);
+    errorAnim.setValue(0);
+    Animated.timing(errorAnim, {
+      toValue: 1,
+      duration: 260,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.quad),
+    }).start();
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 9,  duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -9, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 6,  duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -6, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0,  duration: 55, useNativeDriver: true }),
+    ]).start();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  };
+
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      setError("Veuillez remplir tous les champs");
+      triggerError("Veuillez remplir tous les champs");
       return;
     }
     setError("");
     setLoading(true);
+    Animated.timing(btnGlow, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
     const res = await login(email.trim(), password);
     setLoading(false);
+    Animated.timing(btnGlow, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
     if (res.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/(tabs)");
     } else {
-      setError(res.error ?? "Erreur de connexion");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerError(res.error ?? "Erreur de connexion");
     }
+  };
+
+  const handlePressIn = () => {
+    Animated.spring(btnScale, {
+      toValue: 0.965,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 0,
+    }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(btnScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 6,
+    }).start();
   };
 
   const openSupport = () => {
@@ -174,47 +232,92 @@ export default function LoginScreen() {
     }
   };
 
-  const logoTranslate = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] });
-  const cardTranslate = cardAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] });
+  // Interpolations
+  const logoTranslate = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] });
+  const logoScale     = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] });
+  const titleTranslate = titleAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] });
+  const formTranslate = formAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] });
+
+  const btnGlowColor = btnGlow.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(201,169,97,0)", "rgba(201,169,97,0.35)"],
+  });
 
   return (
     <View style={styles.root}>
+      {/* Halos décoratifs très subtils */}
+      <View style={styles.decorCircle1} pointerEvents="none" />
+      <View style={styles.decorCircle2} pointerEvents="none" />
+
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
-          contentContainerStyle={[styles.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 30 }]}
+          contentContainerStyle={[
+            styles.container,
+            { paddingTop: insets.top + 36, paddingBottom: insets.bottom + 28 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Logo area ── */}
-          <Animated.View style={[styles.logoArea, { opacity: logoAnim, transform: [{ translateY: logoTranslate }] }]}>
+          {/* ── Logo ── */}
+          <Animated.View
+            style={[
+              styles.logoArea,
+              {
+                opacity: logoAnim,
+                transform: [{ translateY: logoTranslate }, { scale: logoScale }],
+              },
+            ]}
+          >
             <View style={styles.logoWrap}>
               <Image source={{ uri: LOGO_URL }} style={styles.logoImage} contentFit="cover" />
             </View>
-
-            <Text style={styles.appName}>Social Boost Horizon</Text>
-            <Text style={styles.slogan}>Votre visibilité, notre horizon</Text>
           </Animated.View>
 
-          {/* ── Login card ── */}
-          <Animated.View style={[styles.card, { opacity: cardAnim, transform: [{ translateY: cardTranslate }] }]}>
-            <Text style={styles.cardTitle}>Connexion</Text>
-            <Text style={styles.cardSubtitle}>Accédez à votre espace</Text>
+          {/* ── Titre & slogan ── */}
+          <Animated.View
+            style={[
+              styles.titleArea,
+              { opacity: titleAnim, transform: [{ translateY: titleTranslate }] },
+            ]}
+          >
+            <Text style={styles.appName}>Social Boost Horizon</Text>
+            <View style={styles.sloganRow}>
+              <View style={styles.sloganLine} />
+              <Text style={styles.slogan}>Votre visibilité, notre horizon</Text>
+              <View style={styles.sloganLine} />
+            </View>
+          </Animated.View>
 
-            {error ? (
-              <View style={styles.errorBox}>
-                <Feather name="alert-circle" size={14} color={DANGER} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
+          {/* ── Formulaire (inline, sans carte) ── */}
+          <Animated.View
+            style={[
+              styles.formSection,
+              { opacity: formAnim, transform: [{ translateY: formTranslate }] },
+            ]}
+          >
+            <Text style={styles.formTitle}>Connexion</Text>
+            <Text style={styles.formSubtitle}>Accédez à votre espace personnel</Text>
 
             {/* Email */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email</Text>
-              <View style={[styles.inputRow, focusedField === "email" && styles.inputFocused]}>
+              <Text
+                style={[
+                  styles.label,
+                  focusedField === "email" && { color: NAVY },
+                ]}
+              >
+                Email
+              </Text>
+              <View
+                style={[
+                  styles.inputRow,
+                  focusedField === "email" && styles.inputFocused,
+                ]}
+              >
                 <Feather
                   name="mail"
                   size={18}
-                  color={focusedField === "email" ? PRIMARY : TEXT_SOFT}
+                  color={focusedField === "email" ? NAVY : TEXT_SOFT}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -222,7 +325,10 @@ export default function LoginScreen() {
                   placeholder="votre@email.com"
                   placeholderTextColor={TEXT_SOFT}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    if (error) setError("");
+                  }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -232,14 +338,26 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            {/* Password */}
+            {/* Mot de passe */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Mot de passe</Text>
-              <View style={[styles.inputRow, focusedField === "password" && styles.inputFocused]}>
+              <Text
+                style={[
+                  styles.label,
+                  focusedField === "password" && { color: NAVY },
+                ]}
+              >
+                Mot de passe
+              </Text>
+              <View
+                style={[
+                  styles.inputRow,
+                  focusedField === "password" && styles.inputFocused,
+                ]}
+              >
                 <Feather
                   name="lock"
                   size={18}
-                  color={focusedField === "password" ? PRIMARY : TEXT_SOFT}
+                  color={focusedField === "password" ? NAVY : TEXT_SOFT}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -247,70 +365,119 @@ export default function LoginScreen() {
                   placeholder="••••••••"
                   placeholderTextColor={TEXT_SOFT}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(v) => {
+                    setPassword(v);
+                    if (error) setError("");
+                  }}
                   secureTextEntry={!showPassword}
                   onFocus={() => setFocusedField("password")}
                   onBlur={() => setFocusedField(null)}
                 />
-                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn} hitSlop={8}>
-                  <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={TEXT_SOFT} />
+                <Pressable
+                  onPress={() => {
+                    setShowPassword(!showPassword);
+                    Haptics.selectionAsync();
+                  }}
+                  style={styles.eyeBtn}
+                  hitSlop={8}
+                >
+                  <Feather
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={18}
+                    color={focusedField === "password" ? NAVY : TEXT_SOFT}
+                  />
                 </Pressable>
               </View>
             </View>
 
-            {/* Login button */}
-            <Pressable
-              style={({ pressed }) => [styles.submitBtn, pressed && { opacity: 0.9 }]}
-              onPress={handleLogin}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Feather name="log-in" size={18} color="#fff" />
-                  <Text style={styles.submitText}>Se connecter</Text>
-                </>
-              )}
-            </Pressable>
+            {/* Message d'erreur animé */}
+            {error ? (
+              <Animated.View
+                style={[
+                  styles.errorBox,
+                  {
+                    opacity: errorAnim,
+                    transform: [{ translateX: shakeAnim }],
+                  },
+                ]}
+              >
+                <Feather name="alert-circle" size={15} color={DANGER} />
+                <Text style={styles.errorText}>{error}</Text>
+              </Animated.View>
+            ) : null}
 
-            {/* Divider */}
+            {/* Bouton principal */}
+            <Animated.View style={[styles.btnWrapper, { transform: [{ scale: btnScale }] }]}>
+              <Pressable
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                onPress={handleLogin}
+                disabled={loading}
+                style={{ width: "100%" }}
+              >
+                <Animated.View style={[styles.btnGlow, { backgroundColor: btnGlowColor }]} />
+                <LinearGradient
+                  colors={[NAVY_LIGHT, NAVY]}
+                  style={styles.submitBtn}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Feather name="log-in" size={18} color={GOLD} />
+                      <Text style={styles.submitText}>Se connecter</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </Pressable>
+            </Animated.View>
+
+            {/* Séparateur "ou" */}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>ou</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Register */}
+            {/* Bouton secondaire */}
             <Pressable
-              onPress={() => router.push("/auth/register")}
-              style={({ pressed }) => [styles.registerBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.push("/auth/register");
+              }}
+              style={({ pressed }) => [
+                styles.registerBtn,
+                pressed && { backgroundColor: GOLD_SOFT },
+              ]}
             >
-              <Feather name="user-plus" size={16} color={PRIMARY} />
+              <Feather name="user-plus" size={16} color={NAVY} />
               <Text style={styles.registerBtnText}>Créer un compte</Text>
             </Pressable>
 
             {/* Support */}
             <Pressable onPress={openSupport} style={styles.supportBtn}>
               <Feather name="help-circle" size={14} color={WHATSAPP} />
-              <Text style={styles.supportBtnText}>Problème de connexion ? Contacter le support</Text>
+              <Text style={styles.supportBtnText}>
+                Problème de connexion ? Contacter le support
+              </Text>
             </Pressable>
           </Animated.View>
 
+          {/* Version */}
           <Text style={styles.version}>v{APP_VERSION}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── Support Modal ── */}
+      {/* ── Modal Support (inchangé fonctionnellement) ── */}
       <Modal visible={showSupport} animationType="slide" transparent onRequestClose={() => setShowSupport(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            {/* Handle bar */}
             <View style={styles.modalHandleWrap}>
               <View style={styles.modalHandle} />
             </View>
 
-            {/* Header */}
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
                 <View style={styles.supportIconBadge}>
@@ -318,7 +485,13 @@ export default function LoginScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.modalTitle}>
-                    {supportStep === 1 ? "Contacter le support" : supportStep === 2 ? "Votre message" : supportSuccess ? "Message envoyé !" : "Erreur d'envoi"}
+                    {supportStep === 1
+                      ? "Contacter le support"
+                      : supportStep === 2
+                      ? "Votre message"
+                      : supportSuccess
+                      ? "Message envoyé !"
+                      : "Erreur d'envoi"}
                   </Text>
                   <Text style={styles.modalSubtitle}>Support WhatsApp</Text>
                 </View>
@@ -328,7 +501,11 @@ export default function LoginScreen() {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerStyle={{ padding: 20, gap: 14 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {supportStep === 1 && (
                 <>
                   <Text style={styles.modalLabel}>Sélectionnez votre problème :</Text>
@@ -365,7 +542,9 @@ export default function LoginScreen() {
                     placeholderTextColor={TEXT_SOFT}
                   />
 
-                  <Text style={[styles.modalLabel, { marginTop: 4 }]}>Votre numéro WhatsApp *</Text>
+                  <Text style={[styles.modalLabel, { marginTop: 4 }]}>
+                    Votre numéro WhatsApp *
+                  </Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
                     <View style={styles.waCodeInput}>
                       <TextInput
@@ -387,7 +566,9 @@ export default function LoginScreen() {
                       />
                     </View>
                   </View>
-                  <Text style={styles.modalHint}>Obligatoire — notre équipe vous contactera sur ce numéro</Text>
+                  <Text style={styles.modalHint}>
+                    Obligatoire — notre équipe vous contactera sur ce numéro
+                  </Text>
 
                   <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
                     <Pressable onPress={() => setSupportStep(1)} style={styles.backStepBtn}>
@@ -396,10 +577,17 @@ export default function LoginScreen() {
                     </Pressable>
                     <Pressable
                       onPress={handleSendSupport}
-                      disabled={supportLoading || !supportMessage.trim() || !supportWaPhone.trim()}
+                      disabled={
+                        supportLoading || !supportMessage.trim() || !supportWaPhone.trim()
+                      }
                       style={[
                         styles.sendBtnWrapper,
-                        { opacity: supportLoading || !supportMessage.trim() || !supportWaPhone.trim() ? 0.5 : 1 },
+                        {
+                          opacity:
+                            supportLoading || !supportMessage.trim() || !supportWaPhone.trim()
+                              ? 0.5
+                              : 1,
+                        },
                       ]}
                     >
                       <LinearGradient
@@ -427,7 +615,11 @@ export default function LoginScreen() {
                   <View
                     style={[
                       styles.resultIcon,
-                      { backgroundColor: supportSuccess ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)" },
+                      {
+                        backgroundColor: supportSuccess
+                          ? "rgba(16,185,129,0.12)"
+                          : "rgba(239,68,68,0.12)",
+                      },
                     ]}
                   >
                     <Feather
@@ -436,7 +628,9 @@ export default function LoginScreen() {
                       color={supportSuccess ? SUCCESS : DANGER}
                     />
                   </View>
-                  <Text style={styles.resultTitle}>{supportSuccess ? "Message envoyé !" : "Erreur d'envoi"}</Text>
+                  <Text style={styles.resultTitle}>
+                    {supportSuccess ? "Message envoyé !" : "Erreur d'envoi"}
+                  </Text>
                   <Text style={styles.resultDesc}>
                     {supportSuccess
                       ? `Notre équipe va vous contacter sur WhatsApp (${supportWaCode} ${supportWaPhone}) dès que possible.`
@@ -458,85 +652,90 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   /* ── Root & container ── */
   root: { flex: 1, backgroundColor: BG },
-  container: { alignItems: "center", paddingHorizontal: 24, gap: 32 },
+  container: { alignItems: "center", paddingHorizontal: 26, gap: 22 },
 
-  /* ── Logo area ── */
-  logoArea: { alignItems: "center", gap: 10 },
+  /* Halos décoratifs subtils */
+  decorCircle1: {
+    position: "absolute",
+    top: -90,
+    right: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: NAVY,
+    opacity: 0.04,
+  },
+  decorCircle2: {
+    position: "absolute",
+    bottom: 40,
+    left: -110,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: GOLD,
+    opacity: 0.06,
+  },
+
+  /* ── Logo ── */
+  logoArea: { alignItems: "center", marginTop: 4 },
   logoWrap: {
     width: 92,
     height: 92,
-    borderRadius: 46,
+    borderRadius: 22,
     backgroundColor: SURFACE,
-    padding: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 4,
+    overflow: "hidden",
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 6,
   },
-  logoImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 40,
-  },
+  logoImage: { width: "100%", height: "100%" },
 
+  /* ── Titre & slogan ── */
+  titleArea: { alignItems: "center", gap: 10 },
   appName: {
     fontFamily: "Inter_700Bold",
-    fontSize: 22,
-    color: TEXT,
-    letterSpacing: 0.3,
-    marginTop: 4,
+    fontSize: 24,
+    color: NAVY,
+    letterSpacing: 0.2,
+  },
+  sloganRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sloganLine: {
+    width: 20,
+    height: 1,
+    backgroundColor: GOLD,
+    opacity: 0.7,
   },
   slogan: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: TEXT_MUTED,
-    letterSpacing: 0.2,
+    fontSize: 12.5,
+    color: GOLD_DK,
+    letterSpacing: 0.4,
   },
 
-  /* ── Card ── */
-  card: {
+  /* ── Form (inline) ── */
+  formSection: {
     width: "100%",
-    backgroundColor: SURFACE,
-    borderRadius: 20,
-    padding: 24,
     gap: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 24,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
+    marginTop: 6,
   },
-  cardTitle: {
+  formTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 22,
     color: TEXT,
-    marginBottom: -4,
+    letterSpacing: 0.1,
   },
-  cardSubtitle: {
+  formSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
     color: TEXT_MUTED,
+    marginTop: -10,
     marginBottom: 4,
-  },
-
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(239,68,68,0.08)",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.2)",
-  },
-  errorText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: DANGER,
-    flex: 1,
   },
 
   fieldGroup: { gap: 7 },
@@ -550,48 +749,85 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: INPUT_BG,
-    borderRadius: 12,
+    backgroundColor: SURFACE,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "transparent",
-    paddingHorizontal: 14,
-    height: 54,
+    borderColor: BORDER,
+    paddingHorizontal: 16,
+    height: 56,
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   inputFocused: {
-    borderColor: PRIMARY,
-    backgroundColor: SURFACE,
+    borderColor: NAVY,
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  inputIcon: { marginRight: 10 },
+  inputIcon: { marginRight: 12 },
   input: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 15,
     color: TEXT,
+    paddingVertical: 0,
   },
   eyeBtn: { padding: 4 },
 
+  /* ── Erreur animée ── */
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(239,68,68,0.07)",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.22)",
+    marginTop: 2,
+  },
+  errorText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: DANGER,
+    flex: 1,
+  },
+
+  /* ── Bouton principal ── */
+  btnWrapper: {
+    width: "100%",
+    marginTop: 6,
+    borderRadius: 16,
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  btnGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+  },
   submitBtn: {
-    backgroundColor: PRIMARY,
-    borderRadius: 14,
-    height: 54,
+    borderRadius: 16,
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    marginTop: 8,
-    shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 4,
   },
   submitText: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,
-    color: "#fff",
+    color: "#FFFFFF",
     letterSpacing: 0.3,
   },
 
+  /* ── Séparateur ── */
   divider: {
     flexDirection: "row",
     alignItems: "center",
@@ -600,39 +836,41 @@ const styles = StyleSheet.create({
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: BORDER },
   dividerText: {
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
     fontSize: 12,
     color: TEXT_SOFT,
   },
 
+  /* ── Bouton secondaire ── */
   registerBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: PRIMARY,
-    paddingVertical: 14,
-    backgroundColor: PRIMARY_SOFT,
+    borderColor: NAVY,
+    paddingVertical: 15,
+    backgroundColor: SURFACE,
   },
   registerBtnText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
-    color: PRIMARY,
+    color: NAVY,
   },
 
+  /* ── Support ── */
   supportBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginTop: 2,
   },
   supportBtnText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
+    fontSize: 12.5,
     color: TEXT_MUTED,
   },
 
@@ -640,10 +878,10 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 11,
     color: TEXT_SOFT,
-    marginTop: 8,
+    marginTop: 6,
   },
 
-  /* ── Support Modal ── */
+  /* ── Modal Support ── */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.5)",
@@ -655,11 +893,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     maxHeight: "90%",
   },
-  modalHandleWrap: {
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
+  modalHandleWrap: { alignItems: "center", paddingTop: 10, paddingBottom: 4 },
   modalHandle: {
     width: 40,
     height: 4,
@@ -675,11 +909,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
-  modalTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 17,
-    color: TEXT,
-  },
+  modalTitle: { fontFamily: "Inter_700Bold", fontSize: 17, color: TEXT },
   modalSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
@@ -692,7 +922,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: INPUT_BG,
+    backgroundColor: "#F3F4F6",
   },
   supportIconBadge: {
     width: 40,
@@ -708,11 +938,7 @@ const styles = StyleSheet.create({
     color: TEXT_MUTED,
     marginBottom: 4,
   },
-  modalHint: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: TEXT_SOFT,
-  },
+  modalHint: { fontFamily: "Inter_400Regular", fontSize: 11, color: TEXT_SOFT },
 
   problemCard: {
     flexDirection: "row",
@@ -768,7 +994,7 @@ const styles = StyleSheet.create({
   waCodeText: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: PRIMARY,
+    color: NAVY,
     textAlign: "center",
   },
   waPhoneInput: {
@@ -800,16 +1026,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: SURFACE,
   },
-  backStepText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 14,
-    color: TEXT_MUTED,
-  },
-  sendBtnWrapper: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
+  backStepText: { fontFamily: "Inter_500Medium", fontSize: 14, color: TEXT_MUTED },
+  sendBtnWrapper: { flex: 1, borderRadius: 12, overflow: "hidden" },
   sendBtnGradient: {
     height: 50,
     flexDirection: "row",
@@ -817,11 +1035,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
-  sendBtnText: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
-    color: "#fff",
-  },
+  sendBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" },
 
   resultIcon: {
     width: 80,
@@ -852,9 +1066,5 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     backgroundColor: SURFACE,
   },
-  closeFinalText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
-    color: TEXT,
-  },
+  closeFinalText: { fontFamily: "Inter_600SemiBold", fontSize: 15, color: TEXT },
 });
