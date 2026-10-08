@@ -8,17 +8,19 @@
     "scheme": "socialboost",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+
+    "runtimeVersion": "sbh-v1",
+
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
+
     "ios": {
       "supportsTablet": true
     },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -26,6 +28,7 @@
       },
       "package": "com.socialboost237.socialboosthorizon"
     },
+
     "web": {
       "favicon": "./assets/images/icon.png",
       "shortName": "Social Boost Horizon",
@@ -33,16 +36,19 @@
       "backgroundColor": "#FFFFFF",
       "name": "Social Boost Horizon"
     },
+
     "updates": {
       "enabled": true,
       "url": "https://u.expo.dev/4c729449-8668-490a-a10c-a31e8e00b50b",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
+
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     },
+
     "extra": {
       "router": {
         "origin": "https://socialboosthorizon.com"
@@ -51,10 +57,13 @@
         "projectId": "4c729449-8668-490a-a10c-a31e8e00b50b"
       }
     },
+
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-updates"
     ],
+
     "owner": "socialboost237"
   }
 }
