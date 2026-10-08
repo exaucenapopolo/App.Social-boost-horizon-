@@ -296,7 +296,7 @@ export default function LoginScreen() {
             ]}
           >
             <Text style={styles.formTitle}>Connexion</Text>
-            <Text style={styles.formSubtitle}>Accédez à votre espace personnel</Text>
+            <Text style={styles.formSubtitle}>Accédez à votre espace personnel SBH</Text>
 
             {/* Email */}
             <View style={styles.fieldGroup}>
