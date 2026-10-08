@@ -20,7 +20,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AuthBackground } from "@/components/AuthBackground";
 import { APP_VERSION } from "@/constants/version";
 import { useAuth } from "@/context/AuthContext";
 import { LOGO_URL } from "@/lib/firebase";
@@ -246,8 +245,9 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Fond décoratif partagé (halos + points + anneaux) */}
-      <AuthBackground />
+      {/* Halos décoratifs très subtils */}
+      <View style={styles.decorCircle1} pointerEvents="none" />
+      <View style={styles.decorCircle2} pointerEvents="none" />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
@@ -653,6 +653,28 @@ const styles = StyleSheet.create({
   /* ── Root & container ── */
   root: { flex: 1, backgroundColor: BG },
   container: { alignItems: "center", paddingHorizontal: 26, gap: 22 },
+
+  /* Halos décoratifs subtils */
+  decorCircle1: {
+    position: "absolute",
+    top: -90,
+    right: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: NAVY,
+    opacity: 0.04,
+  },
+  decorCircle2: {
+    position: "absolute",
+    bottom: 40,
+    left: -110,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: GOLD,
+    opacity: 0.06,
+  },
 
   /* ── Logo ── */
   logoArea: { alignItems: "center", marginTop: 4 },
