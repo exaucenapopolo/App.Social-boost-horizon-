@@ -35,7 +35,9 @@
     },
     "updates": {
       "enabled": true,
-      "url": "https://u.expo.dev/4c729449-8668-490a-a10c-a31e8e00b50b"
+      "url": "https://u.expo.dev/4c729449-8668-490a-a10c-a31e8e00b50b",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     },
     "experiments": {
       "typedRoutes": true,

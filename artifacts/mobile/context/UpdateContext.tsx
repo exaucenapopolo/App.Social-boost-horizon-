@@ -1,7 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
-import * as Updates from "expo-updates";
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 import { BASE_URL } from "@/services/api";
 
@@ -38,60 +43,75 @@ const UpdateContext = createContext<UpdateContextValue>({
 function compareVersions(a: string, b: string): number {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
+
   for (let i = 0; i < 3; i++) {
     if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1;
     if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1;
   }
+
   return 0;
 }
 
-export function UpdateProvider({ children }: { children: React.ReactNode }) {
-  const [info, setInfo]               = useState<VersionInfo | null>(null);
+export function UpdateProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [info, setInfo] = useState<VersionInfo | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const checkedRef = useRef(false);
 
   const currentVersion = Constants.expoConfig?.version ?? "1.0.0";
 
   useEffect(() => {
-    if (checkedRef.current) return;
-    checkedRef.current = true;
-
-    // ── COUCHE 1 : EAS OTA Update (silencieux, sans téléchargement) ──────────
-    // S'active uniquement dans les builds de production (pas en dev/Expo Go).
-    // L'app vérifie s'il y a un nouveau bundle JS, le télécharge et se recharge
-    // automatiquement — l'utilisateur ne voit rien, la mise à jour est invisible.
-    if (!__DEV__) {
-      (async () => {
-        try {
-          const check = await Updates.checkForUpdateAsync();
-          if (check.isAvailable) {
-            await Updates.fetchUpdateAsync();
-            // Rechargement immédiat avec le nouveau bundle
-            await Updates.reloadAsync();
-          }
-        } catch {
-          // Silencieux — pas de panique si Expo Update n'est pas disponible
-        }
-      })();
-    }
-
-    // ── COUCHE 2 : Vérification de version APK (grands changements natifs) ───
-    // Affiche la modale de téléchargement uniquement quand un nouveau build
-    // natif est nécessaire (nouveau module, changement Android/iOS profond).
+    // ─────────────────────────────────────────────────────────────
+    // EAS OTA UPDATE
+    // ─────────────────────────────────────────────────────────────
+    //
+    // NE PAS appeler ici :
+    //   Updates.checkForUpdateAsync()
+    //   Updates.fetchUpdateAsync()
+    //   Updates.reloadAsync()
+    //
+    // expo-updates est configuré directement dans app.json et
+    // effectue automatiquement la vérification au chargement.
+    //
+    // L'application reste sur la version actuellement fonctionnelle
+    // pendant le téléchargement et appliquera la nouvelle version
+    // lors d'un prochain redémarrage.
+    //
+    // ─────────────────────────────────────────────────────────────
+    // VÉRIFICATION DE VERSION APK
+    // ─────────────────────────────────────────────────────────────
+    //
+    // Cette deuxième couche est indépendante de l'OTA.
+    // Elle sert uniquement à signaler qu'un nouveau build natif
+    // est nécessaire.
+    //
     (async () => {
       try {
-        const res  = await fetch(`${BASE_URL}api/version`, { signal: AbortSignal.timeout(8_000) });
+        const res = await fetch(`${BASE_URL}api/version`, {
+          signal: AbortSignal.timeout(8_000),
+        });
+
         const json = await res.json();
-        if (!json.success || !json.data) return;
+
+        if (!json.success || !json.data) {
+          return;
+        }
 
         const v: VersionInfo = json.data;
+
         setInfo(v);
 
-        const mustUpdate = compareVersions(currentVersion, v.minVersion) < 0;
-        const hasNewer   = compareVersions(v.latestVersion, currentVersion) > 0;
+        const mustUpdate =
+          compareVersions(currentVersion, v.minVersion) < 0;
 
+        const hasNewer =
+          compareVersions(v.latestVersion, currentVersion) > 0;
+
+        // Mise à jour obligatoire
         if (mustUpdate || v.forceUpdate) {
           setForceUpdate(true);
           setUpdateAvailable(true);
@@ -99,33 +119,55 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // Mise à jour facultative
         if (hasNewer) {
-          const dismissed = await AsyncStorage.getItem(DISMISSED_KEY);
-          if (dismissed === v.latestVersion) return;
+          const dismissed = await AsyncStorage.getItem(
+            DISMISSED_KEY
+          );
+
+          if (dismissed === v.latestVersion) {
+            return;
+          }
+
           setUpdateAvailable(true);
           setModalVisible(true);
         }
       } catch {
-        // Silencieux — l'app fonctionne normalement sans vérification de version
+        // Aucun blocage si le serveur de version est indisponible.
+        // L'application continue normalement.
       }
     })();
   }, [currentVersion]);
 
   const dismiss = useCallback(async () => {
     if (info && !forceUpdate) {
-      await AsyncStorage.setItem(DISMISSED_KEY, info.latestVersion);
+      await AsyncStorage.setItem(
+        DISMISSED_KEY,
+        info.latestVersion
+      );
     }
+
     setModalVisible(false);
     setUpdateAvailable(false);
   }, [info, forceUpdate]);
 
   const openModal = useCallback(() => {
-    if (updateAvailable) setModalVisible(true);
+    if (updateAvailable) {
+      setModalVisible(true);
+    }
   }, [updateAvailable]);
 
   return (
     <UpdateContext.Provider
-      value={{ updateAvailable, forceUpdate, info, currentVersion, modalVisible, dismiss, openModal }}
+      value={{
+        updateAvailable,
+        forceUpdate,
+        info,
+        currentVersion,
+        modalVisible,
+        dismiss,
+        openModal,
+      }}
     >
       {children}
     </UpdateContext.Provider>
