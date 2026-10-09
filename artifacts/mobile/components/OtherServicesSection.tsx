@@ -113,7 +113,7 @@ const FEATURED_EXTERNAL = [
     icon: "phone-call" as const,
     label: "Numéro étranger",
     sub: "WhatsApp · TikTok · +5000 services",
-    badge: "Partenariat",
+    badge: "PARTENARIAT",
     url: "https://www.texerra.site/",
     info: {
       title: "Acheter un numéro étranger",
@@ -133,7 +133,7 @@ const FEATURED_EXTERNAL = [
     icon: "trending-up" as const,
     label: "Gagner de l'argent",
     sub: "Affiliation · Formations offertes",
-    badge: "Nouveau",
+    badge: "NOUVEAU",
     url: "https://www.trixhub.store/?ref=EXA0001HJB",
     info: {
       title: "Gagner de l'argent en ligne",
@@ -189,7 +189,7 @@ type ModalBaseProps = {
   priceFmt: (fcfa: number) => string;
 };
 
-// ─── Champs ───
+// ─── Champs réutilisables ───
 function FieldInput({
   label, value, onChange, placeholder, multiline, keyboardType, theme, secureTextEntry,
 }: {
@@ -328,29 +328,14 @@ function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) 
       >
         <Feather name="check" size={32} color={SUCCESS} />
       </View>
-      <Text
-        style={{
-          fontFamily: "Inter_700Bold", fontSize: 20,
-          color: theme.text, textAlign: "center",
-        }}
-      >
+      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: theme.text, textAlign: "center" }}>
         Demande envoyée
       </Text>
-      <Text
-        style={{
-          fontFamily: "Inter_400Regular", fontSize: 14,
-          color: theme.textMuted, textAlign: "center", lineHeight: 21,
-        }}
-      >
+      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: theme.textMuted, textAlign: "center", lineHeight: 21 }}>
         Notre équipe vous contactera sur WhatsApp très prochainement pour finaliser votre commande.
       </Text>
       <Pressable style={[ms.submitBtn, { marginTop: 6 }]} onPress={onClose}>
-        <LinearGradient
-          colors={[NAVY_LIGHT, NAVY]}
-          style={ms.submitGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-        >
+        <LinearGradient colors={[NAVY_LIGHT, NAVY]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
           <Text style={ms.submitText}>Fermer</Text>
         </LinearGradient>
       </Pressable>
@@ -385,23 +370,14 @@ function WaField({
   );
 }
 
-function SubmitButton({
-  onPress, loading, theme,
-}: {
-  onPress: () => void; loading: boolean; theme: any;
-}) {
+function SubmitButton({ onPress, loading, theme }: { onPress: () => void; loading: boolean; theme: any }) {
   return (
     <Pressable
       style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9 }]}
       onPress={onPress}
       disabled={loading}
     >
-      <LinearGradient
-        colors={[NAVY_LIGHT, NAVY]}
-        style={ms.submitGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-      >
+      <LinearGradient colors={[NAVY_LIGHT, NAVY]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
@@ -415,6 +391,7 @@ function SubmitButton({
   );
 }
 
+// ─── Modal explicatif ───
 function ServiceInfoModal({
   visible, onClose, service, theme,
 }: {
@@ -430,10 +407,7 @@ function ServiceInfoModal({
         <View style={[ms.infoCard, { backgroundColor: theme.surface }]}>
           <View style={ms.infoHeader}>
             <View
-              style={[
-                ms.infoIconBox,
-                { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
-              ]}
+              style={[ms.infoIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
             >
               <Feather name={service.icon} size={20} color={theme.accent} />
             </View>
@@ -453,19 +427,11 @@ function ServiceInfoModal({
             {service.info.bullets.map((b, i) => (
               <View key={i} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
                 <View
-                  style={[
-                    ms.bulletDot,
-                    { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
-                  ]}
+                  style={[ms.bulletDot, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
                 >
                   <Feather name="check" size={10} color={theme.accent} />
                 </View>
-                <Text
-                  style={{
-                    flex: 1, fontFamily: "Inter_400Regular", fontSize: 13,
-                    color: theme.textSecondary, lineHeight: 19, marginTop: 2,
-                  }}
-                >
+                <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textSecondary, lineHeight: 19, marginTop: 2 }}>
                   {b}
                 </Text>
               </View>
@@ -476,12 +442,7 @@ function ServiceInfoModal({
             style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9 }]}
             onPress={() => { onClose(); Linking.openURL(service.url); }}
           >
-            <LinearGradient
-              colors={[NAVY_LIGHT, NAVY]}
-              style={ms.submitGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
+            <LinearGradient colors={[NAVY_LIGHT, NAVY]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               <Text style={ms.submitText}>{service.info.cta}</Text>
               <Feather name="arrow-right" size={16} color={GOLD} />
             </LinearGradient>
@@ -560,11 +521,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
           </Pressable>
 
           {showPortfolio && (
-            <ScrollView
-              horizontal showsHorizontalScrollIndicator={false}
-              style={{ marginHorizontal: -18 }}
-              contentContainerStyle={{ paddingHorizontal: 18, gap: 10 }}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -18 }} contentContainerStyle={{ paddingHorizontal: 18, gap: 10 }}>
               {PORTFOLIO_SITES.map((site) => (
                 <TouchableOpacity
                   key={site.url}
@@ -611,13 +568,10 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
               <Pressable
                 key={t.label}
                 onPress={() => setSiteType(t)}
-                style={[
-                  ms.radioRow,
-                  {
-                    backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
-                    borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
-                  },
-                ]}
+                style={[ms.radioRow, {
+                  backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
+                  borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
+                }]}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>{t.label}</Text>
@@ -632,7 +586,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
 
           <FieldInput label="Budget envisagé" value={budget} onChange={setBudget} placeholder={`Ex: ${priceFmt(siteType.fcfa)}`} theme={theme} />
           <FieldInput label="Description du projet *" value={desc} onChange={setDesc} placeholder="Fonctionnalités souhaitées, public cible, objectif du site..." theme={theme} multiline />
-          <FieldInput label="Couleurs / charte graphique" value={colors2} onChange={setColors2} placeholder="Ex: bleu et blanc, couleurs de mon logo..." theme={theme} />
+          <FieldInput label="Couleurs / charte graphique" value={colors2} onChange={setColors2} placeholder="Ex: bleu et blanc..." theme={theme} />
           <FieldInput label="Sites d'inspiration / références" value={references} onChange={setReferences} placeholder="Ex: apple.com, airbnb.com..." theme={theme} />
           <FieldInput label="Fonctionnalités spécifiques" value={features} onChange={setFeatures} placeholder="Ex: formulaire de contact, blog, boutique..." theme={theme} multiline />
           <TagRow label="Délai souhaité" value={deadline} options={DEADLINES} onSelect={setDeadline} theme={theme} />
@@ -719,13 +673,10 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
               <Pressable
                 key={p.label}
                 onPress={() => setPkg(p)}
-                style={[
-                  ms.radioRow,
-                  {
-                    backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
-                    borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
-                  },
-                ]}
+                style={[ms.radioRow, {
+                  backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
+                  borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
+                }]}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>{p.label}</Text>
@@ -794,12 +745,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
             Boostez votre visibilité avec nos campagnes Facebook et Instagram ciblées.
           </Text>
 
-          <TagRow
-            label="Réseau *" value={adPlatform}
-            options={["Facebook", "Instagram"]}
-            onSelect={(v) => setAdPlatform(v as any)}
-            theme={theme}
-          />
+          <TagRow label="Réseau *" value={adPlatform} options={["Facebook", "Instagram"]} onSelect={(v) => setAdPlatform(v as any)} theme={theme} />
 
           <View style={{ gap: 6 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
@@ -810,13 +756,10 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                 <Pressable
                   key={d.label}
                   onPress={() => setDuration(d)}
-                  style={[
-                    ms.durationTag,
-                    {
-                      backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
-                      borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
-                    },
-                  ]}
+                  style={[ms.durationTag, {
+                    backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
+                    borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
+                  }]}
                 >
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: duration.label === d.label ? theme.accent : theme.text }}>
                     {d.label}
@@ -946,13 +889,10 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                   <Pressable
                     key={c}
                     onPress={() => setTiktokCountry(c)}
-                    style={[
-                      ms.tag,
-                      {
-                        backgroundColor: tiktokCountry === c ? theme.accent : theme.inputBg,
-                        borderColor: tiktokCountry === c ? theme.accent : theme.inputBorder,
-                      },
-                    ]}
+                    style={[ms.tag, {
+                      backgroundColor: tiktokCountry === c ? theme.accent : theme.inputBg,
+                      borderColor: tiktokCountry === c ? theme.accent : theme.inputBorder,
+                    }]}
                   >
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: tiktokCountry === c ? "#fff" : theme.textSecondary }}>
                       {c}
@@ -1003,13 +943,10 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                 <Pressable
                   key={p}
                   onPress={() => setBadgePlatform(p)}
-                  style={[
-                    ms.tag,
-                    {
-                      backgroundColor: badgePlatform === p ? theme.accent : theme.inputBg,
-                      borderColor: badgePlatform === p ? theme.accent : theme.inputBorder,
-                    },
-                  ]}
+                  style={[ms.tag, {
+                    backgroundColor: badgePlatform === p ? theme.accent : theme.inputBg,
+                    borderColor: badgePlatform === p ? theme.accent : theme.inputBorder,
+                  }]}
                 >
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: badgePlatform === p ? "#fff" : theme.textSecondary }}>
                     {p}
@@ -1042,13 +979,10 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
               <Pressable
                 key={svc.label}
                 onPress={() => handleServiceChange(svc)}
-                style={[
-                  ms.radioRow,
-                  {
-                    backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
-                    borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
-                  },
-                ]}
+                style={[ms.radioRow, {
+                  backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
+                  borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
+                }]}
               >
                 <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>
                   {svc.label}
@@ -1125,32 +1059,57 @@ export default function OtherServicesSection() {
     setInfoService(svc);
   };
 
-  const cardStyle = [
-    ms.serviceCard,
-    { backgroundColor: theme.surface, borderColor: theme.inputBorder },
-  ];
-
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: 16 }}>
+      {/* En-tête de section premium */}
       <View style={ms.sectionHeader}>
-        <Text style={[ms.sectionTitle, { color: theme.text }]}>Nos services</Text>
-        <Text style={[ms.sectionSub, { color: theme.textMuted }]}>
-          Tout pour propulser votre activité
-        </Text>
+        <View style={ms.accentBar} />
+        <View style={{ flex: 1 }}>
+          <Text style={[ms.sectionTitle, { color: theme.text }]}>Nos services</Text>
+          <Text style={[ms.sectionSub, { color: theme.textMuted }]}>
+            Tout pour propulser votre activité
+          </Text>
+        </View>
       </View>
 
-      <View style={ms.grid}>
+      {/* ═══ Services externes vedettes (horizontales) ═══ */}
+      <View style={{ gap: 10 }}>
         {FEATURED_EXTERNAL.map((svc) => (
           <Pressable
             key={svc.id}
-            style={({ pressed }) => [
-              ...cardStyle,
-              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-            ]}
             onPress={() => handleExternalTap(svc)}
+            onPressIn={() => Haptics.selectionAsync()}
+            style={({ pressed }) => [
+              ms.featuredCard,
+              { backgroundColor: theme.surface, borderColor: theme.iconBorder },
+              pressed && { opacity: 0.94, transform: [{ scale: 0.985 }] },
+            ]}
           >
-            <View style={[ms.featuredBadge, { backgroundColor: GOLD }]}>
-              <Text style={ms.featuredBadgeText}>{svc.badge}</Text>
+            {/* Bande dorée à gauche */}
+            <View style={ms.featuredAccent} />
+
+            <View style={ms.featuredLeft}>
+              <View style={[ms.featuredIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+                <Feather name={svc.icon} size={20} color={theme.accent} />
+              </View>
+            </View>
+
+            <View style={ms.featuredRight}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={[ms.featuredTitle, { color: theme.text }]} numberOfLines={1}>
+                  {svc.label}
+                </Text>
+                <View style={ms.featuredBadge}>
+                  <Text style={ms.featuredBadgeText}>{svc.badge}</Text>
+                </View>
+              </View>
+              <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
+                {svc.sub}
+              </Text>
+              <View style={ms.featuredCtaRow}>
+                <Text style={[ms.featuredCta, { color: theme.accent }]}>Découvrir</Text>
+                <Feather name="arrow-right" size={13} color={theme.accent} />
+              </View>
             </View>
 
             <Pressable
@@ -1158,53 +1117,51 @@ export default function OtherServicesSection() {
               hitSlop={12}
               onPress={(e) => { e.stopPropagation?.(); handleInfoTap(svc); }}
             >
-              <Feather name="help-circle" size={16} color={theme.textMuted} />
+              <Feather name="help-circle" size={17} color={theme.textMuted} />
             </Pressable>
-
-            <View
-              style={[
-                ms.serviceIconBox,
-                { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
-              ]}
-            >
-              <Feather name={svc.icon} size={20} color={theme.accent} />
-            </View>
-
-            <Text style={[ms.serviceLabel, { color: theme.text }]} numberOfLines={2}>
-              {svc.label}
-            </Text>
-            <Text style={[ms.serviceSub, { color: theme.textMuted }]} numberOfLines={2}>
-              {svc.sub}
-            </Text>
           </Pressable>
         ))}
+      </View>
 
-        {MODAL_SERVICES.map((svc) => (
+      {/* ═══ Grille services internes (numérotés) ═══ */}
+      <View style={ms.grid}>
+        {MODAL_SERVICES.map((svc, idx) => (
           <Pressable
             key={svc.id}
-            style={({ pressed }) => [
-              ...cardStyle,
-              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-            ]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setOpenModal(svc.id);
             }}
+            style={({ pressed }) => [
+              ms.serviceCard,
+              { backgroundColor: theme.surface, borderColor: theme.inputBorder },
+              pressed && { opacity: 0.92, transform: [{ scale: 0.975 }] },
+            ]}
           >
-            <View
-              style={[
-                ms.serviceIconBox,
-                { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
-              ]}
-            >
-              <Feather name={svc.icon} size={20} color={theme.accent} />
+            <View style={ms.cardHeader}>
+              <View
+                style={[
+                  ms.serviceIconBox,
+                  { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
+                ]}
+              >
+                <Feather name={svc.icon} size={18} color={theme.accent} />
+              </View>
+              <Text style={[ms.cardNumber, { color: theme.textMuted }]}>
+                {String(idx + 1).padStart(2, "0")}
+              </Text>
             </View>
+
             <Text style={[ms.serviceLabel, { color: theme.text }]} numberOfLines={2}>
               {svc.label}
             </Text>
             <Text style={[ms.serviceSub, { color: theme.textMuted }]} numberOfLines={2}>
               {svc.sub}
             </Text>
+
+            <View style={[ms.cardFooterArrow, { borderColor: theme.iconBorder }]}>
+              <Feather name="arrow-up-right" size={12} color={theme.accent} />
+            </View>
           </Pressable>
         ))}
       </View>
@@ -1225,31 +1182,85 @@ export default function OtherServicesSection() {
 }
 
 const ms = StyleSheet.create({
-  sectionHeader: { gap: 3 },
-  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: 0.1 },
-  sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12.5 },
+  /* En-tête section */
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  accentBar: { width: 3, height: 32, borderRadius: 2, backgroundColor: GOLD },
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15.5, letterSpacing: 0.1 },
+  sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
 
+  /* Carte externe vedette */
+  featuredCard: {
+    flexDirection: "row", alignItems: "center",
+    borderRadius: 16, borderWidth: 1,
+    padding: 14, paddingLeft: 18,
+    gap: 14, position: "relative", overflow: "hidden",
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
+  },
+  featuredAccent: {
+    position: "absolute", left: 0, top: 0, bottom: 0,
+    width: 3, backgroundColor: GOLD,
+  },
+  featuredLeft: { alignItems: "center", justifyContent: "center" },
+  featuredIconBox: {
+    width: 46, height: 46, borderRadius: 13,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
+  },
+  featuredRight: { flex: 1, gap: 4 },
+  featuredTitle: {
+    fontFamily: "Inter_700Bold", fontSize: 14.5, letterSpacing: 0.1,
+  },
+  featuredSub: { fontFamily: "Inter_400Regular", fontSize: 11.5 },
+  featuredCtaRow: {
+    flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4,
+  },
+  featuredCta: {
+    fontFamily: "Inter_600SemiBold", fontSize: 11.5, letterSpacing: 0.2,
+  },
+  featuredBadge: {
+    backgroundColor: GOLD, borderRadius: 5,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  featuredBadgeText: {
+    fontFamily: "Inter_700Bold", fontSize: 8.5,
+    color: NAVY, letterSpacing: 0.6,
+  },
+  infoBtn: { padding: 4, alignSelf: "flex-start" },
+
+  /* Grille services internes */
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceCard: {
     width: "47.8%", borderRadius: 16, borderWidth: 1,
-    padding: 14, gap: 8, minHeight: 132, position: "relative",
+    padding: 14, minHeight: 148, gap: 8, position: "relative",
     shadowColor: NAVY,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
   },
+  cardHeader: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between",
+  },
   serviceIconBox: {
-    width: 42, height: 42, borderRadius: 12, borderWidth: 1,
-    alignItems: "center", justifyContent: "center",
+    width: 40, height: 40, borderRadius: 12,
+    borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
-  serviceLabel: { fontFamily: "Inter_700Bold", fontSize: 13.5, lineHeight: 18, letterSpacing: 0.1 },
+  cardNumber: {
+    fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 1.5,
+    opacity: 0.55,
+  },
+  serviceLabel: {
+    fontFamily: "Inter_700Bold", fontSize: 13.5,
+    lineHeight: 18, letterSpacing: 0.1, marginTop: 4,
+  },
   serviceSub: { fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 15 },
-  featuredBadge: {
-    position: "absolute", top: 10, left: 10,
-    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, zIndex: 2,
+  cardFooterArrow: {
+    position: "absolute", bottom: 12, right: 12,
+    width: 24, height: 24, borderRadius: 8,
+    borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
-  featuredBadgeText: { fontFamily: "Inter_700Bold", fontSize: 9, color: NAVY, letterSpacing: 0.3 },
-  infoBtn: { position: "absolute", top: 10, right: 10, zIndex: 2, padding: 2 },
 
+  /* Info modal */
   infoOverlay: {
     flex: 1, backgroundColor: "rgba(15,42,92,0.35)",
     justifyContent: "center", padding: 22,
@@ -1273,6 +1284,7 @@ const ms = StyleSheet.create({
     borderWidth: 1, marginTop: 2,
   },
 
+  /* Modales internes */
   overlay: { flex: 1, backgroundColor: "rgba(15,42,92,0.35)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "94%" },
   sheetHeader: {
