@@ -29,13 +29,14 @@ import { apiClient } from "@/services/api";
 
 const NOTIF_READ_KEY = "@sbh_notif_read";
 
-// ─── Palette identique login ───
+// ─── Palette LIGHT ───
 const NAVY        = "#0F2A5C";
 const NAVY_LIGHT  = "#1E3F7A";
 const NAVY_DK     = "#0A1F44";
 const GOLD        = "#C9A961";
 const GOLD_DK     = "#B08D4A";
 const GOLD_SOFT   = "#F7F1E1";
+const GOLD_BORDER = "#E8DFC7";
 const BG          = "#FAF9F6";
 const SURFACE     = "#FFFFFF";
 const TEXT        = "#0F172A";
@@ -47,11 +48,14 @@ const WARNING     = "#F59E0B";
 const INFO        = "#1E90FF";
 const DANGER      = "#EF4444";
 
-const D_BG         = "#0A162B";
-const D_SURFACE    = "#0F2A5C";
-const D_BORDER     = "rgba(201,169,97,0.14)";
+// ─── Palette DARK (surfaces plus claires pour vraie hiérarchie) ───
+const D_BG         = "#0A162B";         // fond très sombre
+const D_SURFACE    = "#152C57";         // surface nettement plus claire → contraste
+const D_SURFACE_2  = "#1B3768";         // surface élevée (commander)
+const D_BORDER     = "rgba(201,169,97,0.20)";  // bordure dorée bien visible
+const D_BORDER_2   = "rgba(201,169,97,0.32)";
 const D_TEXT       = "#F1F5F9";
-const D_TEXT_MUTED = "#94A3B8";
+const D_TEXT_MUTED = "#A5B4CB";
 const D_TEXT_SOFT  = "#64748B";
 
 function getGreeting(): string {
@@ -76,20 +80,14 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   "completed":  { label: "Terminé",    color: SUCCESS, bg: "rgba(16,185,129,0.10)" },
 };
 
-// Helper : petite animation d'entrée en cascade
 function useStagger(count: number, step = 90, duration = 520) {
-  const anims = useRef(
-    Array.from({ length: count }, () => new Animated.Value(0))
-  ).current;
+  const anims = useRef(Array.from({ length: count }, () => new Animated.Value(0))).current;
   useEffect(() => {
     Animated.stagger(
       step,
       anims.map((a) =>
         Animated.timing(a, {
-          toValue: 1,
-          duration,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.cubic),
+          toValue: 1, duration, useNativeDriver: true, easing: Easing.out(Easing.cubic),
         })
       )
     ).start();
@@ -107,12 +105,14 @@ export default function HomeScreen() {
   const C = useMemo(() => ({
     bg:         isDark ? D_BG         : BG,
     surface:    isDark ? D_SURFACE    : SURFACE,
+    surface2:   isDark ? D_SURFACE_2  : SURFACE,
     border:     isDark ? D_BORDER     : BORDER,
+    border2:    isDark ? D_BORDER_2   : GOLD_BORDER,
     text:       isDark ? D_TEXT       : TEXT,
     textMuted:  isDark ? D_TEXT_MUTED : TEXT_MUTED,
     textSoft:   isDark ? D_TEXT_SOFT  : TEXT_SOFT,
-    chipBg:     isDark ? "rgba(201,169,97,0.10)" : GOLD_SOFT,
-    chipBorder: isDark ? "rgba(201,169,97,0.22)" : "#EDE6D5",
+    chipBg:     isDark ? "rgba(201,169,97,0.12)" : GOLD_SOFT,
+    chipBorder: isDark ? "rgba(201,169,97,0.28)" : GOLD_BORDER,
   }), [isDark]);
 
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
@@ -121,7 +121,6 @@ export default function HomeScreen() {
 
   const [hasUnread, setHasUnread] = useState(false);
 
-  // Animations d'entrée en cascade (5 blocs)
   const anims = useStagger(5);
   const translateY = (v: Animated.Value) =>
     v.interpolate({ inputRange: [0, 1], outputRange: [22, 0] });
@@ -190,12 +189,7 @@ export default function HomeScreen() {
         }
       >
         {/* ═══ 1. HEADER ═══ */}
-        <Animated.View
-          style={{
-            opacity: anims[0],
-            transform: [{ translateY: translateY(anims[0]) }],
-          }}
-        >
+        <Animated.View style={{ opacity: anims[0], transform: [{ translateY: translateY(anims[0]) }] }}>
           <View style={styles.header}>
             <Pressable style={styles.userRow} onPress={() => go("/(tabs)/profile")}>
               <View style={[styles.avatarBox, { borderColor: C.border, backgroundColor: C.surface }]}>
@@ -235,29 +229,22 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
-        {/* ═══ 2. SOLDE HERO ═══ */}
-        <Animated.View
-          style={{
-            opacity: anims[1],
-            transform: [{ translateY: translateY(anims[1]) }],
-          }}
-        >
+        {/* ═══ 2. SOLDE HERO (navy premium, identique dans les 2 modes) ═══ */}
+        <Animated.View style={{ opacity: anims[1], transform: [{ translateY: translateY(anims[1]) }] }}>
           <Pressable
             onPress={() => go("/(tabs)/wallet")}
             onPressIn={() => Haptics.selectionAsync()}
             style={({ pressed }) => [styles.balanceWrap, pressed && { transform: [{ scale: 0.99 }] }]}
           >
             <LinearGradient
-              colors={[NAVY_LIGHT, NAVY, NAVY_DK]}
+              colors={["#22478A", NAVY, NAVY_DK]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.balanceGrad}
             >
-              {/* Ligne d'accent or en haut (signature) */}
               <View style={styles.balanceAccent} />
-
-              {/* Décor discret */}
               <View style={styles.balanceDecor} pointerEvents="none" />
+              <View style={styles.balanceDecor2} pointerEvents="none" />
 
               <View style={styles.balanceTopRow}>
                 <View style={{ flex: 1 }}>
@@ -270,7 +257,11 @@ export default function HomeScreen() {
                   )}
                 </View>
                 <View style={styles.balanceLogoBox}>
-                  <Image source={{ uri: LOGO_URL }} style={styles.balanceLogo} contentFit="cover" />
+                  <Image
+                    source={{ uri: LOGO_URL }}
+                    style={styles.balanceLogo}
+                    contentFit="contain"
+                  />
                 </View>
               </View>
 
@@ -300,64 +291,96 @@ export default function HomeScreen() {
           </Pressable>
         </Animated.View>
 
-        {/* ═══ 3. COMMANDER — CTA PRINCIPAL ═══ */}
-        <Animated.View
-          style={{
-            opacity: anims[2],
-            transform: [{ translateY: translateY(anims[2]) }],
-          }}
-        >
+        {/* ═══ 3. COMMANDER — HERO CTA (design "ticket" premium) ═══ */}
+        <Animated.View style={{ opacity: anims[2], transform: [{ translateY: translateY(anims[2]) }] }}>
           <Pressable
             onPress={() => go("/(tabs)/new-order")}
             onPressIn={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-            style={({ pressed }) => [styles.commanderWrap, pressed && { transform: [{ scale: 0.985 }] }]}
+            style={({ pressed }) => [
+              styles.commanderWrap,
+              {
+                backgroundColor: C.surface2,
+                borderColor: C.border2,
+              },
+              pressed && { transform: [{ scale: 0.985 }] },
+            ]}
           >
-            <LinearGradient
-              colors={["#1A3A6C", NAVY, NAVY_DK]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.commanderGrad}
+            {/* Bande dorée gauche signature */}
+            <View style={styles.commanderAccent} />
+
+            {/* Décor discret en haut à droite */}
+            <View
+              style={[
+                styles.commanderDecor,
+                { backgroundColor: isDark ? "rgba(201,169,97,0.08)" : GOLD_SOFT },
+              ]}
+              pointerEvents="none"
+            />
+
+            {/* Badge haut */}
+            <View
+              style={[
+                styles.commanderBadge,
+                {
+                  backgroundColor: isDark ? "rgba(201,169,97,0.14)" : GOLD_SOFT,
+                  borderColor: C.border2,
+                },
+              ]}
             >
-              {/* Décor */}
-              <View style={styles.commanderDecorBig} pointerEvents="none" />
-              <View style={styles.commanderDecorSmall} pointerEvents="none" />
+              <View style={styles.commanderBadgeDot} />
+              <Text
+                style={[
+                  styles.commanderBadgeText,
+                  { color: isDark ? GOLD : GOLD_DK },
+                ]}
+              >
+                SERVICE PRINCIPAL
+              </Text>
+            </View>
 
-              {/* Badge haut */}
-              <View style={styles.commanderBadge}>
-                <View style={styles.commanderBadgeDot} />
-                <Text style={styles.commanderBadgeText}>SERVICE PRINCIPAL</Text>
+            {/* Contenu principal */}
+            <View style={styles.commanderMain}>
+              <View
+                style={[
+                  styles.commanderIconBox,
+                  { backgroundColor: isDark ? "#0F2A5C" : NAVY },
+                ]}
+              >
+                <Feather name="shopping-cart" size={20} color={GOLD} />
               </View>
-
-              {/* Contenu principal */}
-              <View style={styles.commanderMain}>
-                <View style={styles.commanderIconBox}>
-                  <Feather name="shopping-cart" size={22} color={GOLD} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.commanderTitle}>Commander un boost</Text>
-                  <Text style={styles.commanderSub}>
-                    Boostez vos réseaux en quelques secondes
-                  </Text>
-                </View>
-                <View style={styles.commanderArrowBox}>
-                  <Feather name="arrow-up-right" size={18} color="#fff" />
-                </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.commanderTitle, { color: isDark ? D_TEXT : NAVY }]}>
+                  Commander un boost
+                </Text>
+                <Text style={[styles.commanderSub, { color: C.textMuted }]}>
+                  Boostez vos réseaux en quelques secondes
+                </Text>
               </View>
-            </LinearGradient>
+              <View
+                style={[
+                  styles.commanderArrowBox,
+                  {
+                    backgroundColor: isDark ? "rgba(201,169,97,0.14)" : NAVY,
+                    borderColor: isDark ? "rgba(201,169,97,0.32)" : NAVY,
+                  },
+                ]}
+              >
+                <Feather
+                  name="arrow-up-right"
+                  size={18}
+                  color={isDark ? GOLD : "#FFFFFF"}
+                />
+              </View>
+            </View>
           </Pressable>
         </Animated.View>
 
         {/* ═══ 4. SERVICES ═══ */}
-        <Animated.View
-          style={{
-            opacity: anims[3],
-            transform: [{ translateY: translateY(anims[3]) }],
-          }}
-        >
+        <Animated.View style={{ opacity: anims[3], transform: [{ translateY: translateY(anims[3]) }] }}>
           <OtherServicesSection />
         </Animated.View>
 
-        {/* ═══ 5. STATS + COMMANDES RÉCENTES ═══ */}
+        {/* ═══ 5. ACTIVITÉ ═══ */}
         <Animated.View
           style={{
             opacity: anims[4],
@@ -365,7 +388,6 @@ export default function HomeScreen() {
             gap: 16,
           }}
         >
-          {/* Section header + stats */}
           <View style={styles.sectionHeaderRow}>
             <View style={styles.accentBar} />
             <Text style={[styles.sectionTitle, { color: C.text }]}>Activité</Text>
@@ -391,7 +413,10 @@ export default function HomeScreen() {
             ].map((s, i) => (
               <View
                 key={i}
-                style={[styles.statCard, { backgroundColor: C.surface, borderColor: C.border }]}
+                style={[
+                  styles.statCard,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                ]}
               >
                 <View style={[styles.statIcon, { backgroundColor: C.chipBg }]}>
                   <Feather name={s.icon} size={15} color={isDark ? GOLD : NAVY} />
@@ -402,7 +427,6 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* Commandes récentes */}
           {recentOrders.length > 0 && (
             <View style={{ gap: 10 }}>
               <View style={styles.sectionRow}>
@@ -491,22 +515,28 @@ const styles = StyleSheet.create({
     width: 8, height: 8, borderRadius: 4, backgroundColor: DANGER,
   },
 
-  /* Solde */
+  /* ═══ SOLDE HERO ═══ */
   balanceWrap: {
     borderRadius: 22, overflow: "hidden",
     shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22, shadowRadius: 22, elevation: 9,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28, shadowRadius: 26, elevation: 10,
   },
   balanceGrad: { padding: 22, position: "relative", overflow: "hidden" },
   balanceAccent: {
     position: "absolute", top: 0, left: 22, right: 22, height: 2,
-    backgroundColor: GOLD, opacity: 0.85, borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
+    backgroundColor: GOLD, opacity: 0.9,
+    borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
   },
   balanceDecor: {
-    position: "absolute", top: -60, right: -60,
-    width: 200, height: 200, borderRadius: 100,
-    backgroundColor: GOLD, opacity: 0.06,
+    position: "absolute", top: -80, right: -70,
+    width: 220, height: 220, borderRadius: 110,
+    backgroundColor: GOLD, opacity: 0.07,
+  },
+  balanceDecor2: {
+    position: "absolute", bottom: -50, left: -40,
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: "#FFFFFF", opacity: 0.03,
   },
   balanceTopRow: {
     flexDirection: "row", alignItems: "flex-start",
@@ -514,7 +544,7 @@ const styles = StyleSheet.create({
   },
   balanceKicker: {
     fontFamily: "Inter_600SemiBold", fontSize: 10.5,
-    color: "rgba(201,169,97,0.85)", letterSpacing: 1.4,
+    color: "rgba(201,169,97,0.90)", letterSpacing: 1.5,
   },
   balanceAmount: {
     fontFamily: "Inter_700Bold", fontSize: 30,
@@ -525,114 +555,108 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.55)", marginTop: 4,
   },
   balanceLogoBox: {
-    width: 46, height: 46, borderRadius: 14,
-    overflow: "hidden", borderWidth: 1,
-    borderColor: "rgba(201,169,97,0.35)",
+    width: 54, height: 54, borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1, borderColor: "rgba(201,169,97,0.45)",
+    padding: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 8,
   },
   balanceLogo: { width: "100%", height: "100%" },
   balanceDivider: {
-    height: 1, backgroundColor: "rgba(255,255,255,0.10)", marginVertical: 18,
+    height: 1, backgroundColor: "rgba(255,255,255,0.12)", marginVertical: 18,
   },
   balanceBottomRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
   },
   referralRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   referralIconBox: {
-    width: 28, height: 28, borderRadius: 9,
-    backgroundColor: "rgba(201,169,97,0.14)",
+    width: 30, height: 30, borderRadius: 10,
+    backgroundColor: "rgba(201,169,97,0.18)",
     alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(201,169,97,0.28)",
+    borderWidth: 1, borderColor: "rgba(201,169,97,0.32)",
   },
   referralLabel: {
     fontFamily: "Inter_500Medium", fontSize: 10.5,
-    color: "rgba(255,255,255,0.6)", letterSpacing: 0.3,
+    color: "rgba(255,255,255,0.65)", letterSpacing: 0.3,
   },
   referralValue: {
-    fontFamily: "Inter_700Bold", fontSize: 13.5,
-    color: GOLD, marginTop: 1,
+    fontFamily: "Inter_700Bold", fontSize: 13.5, color: GOLD, marginTop: 1,
   },
   balanceCta: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.14)",
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(201,169,97,0.14)",
+    borderWidth: 1, borderColor: "rgba(201,169,97,0.32)",
   },
   balanceCtaText: {
-    fontFamily: "Inter_600SemiBold", fontSize: 12,
-    color: "#FFFFFF", letterSpacing: 0.2,
+    fontFamily: "Inter_600SemiBold", fontSize: 12.5,
+    color: GOLD, letterSpacing: 0.3,
   },
 
-  /* Commander hero */
+  /* ═══ COMMANDER — design "ticket" ═══ */
   commanderWrap: {
-    borderRadius: 20, overflow: "hidden",
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+    paddingTop: 16, paddingBottom: 18, paddingRight: 18, paddingLeft: 22,
     shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.24, shadowRadius: 20, elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08, shadowRadius: 14, elevation: 3,
   },
-  commanderGrad: {
-    padding: 20, position: "relative", overflow: "hidden",
+  commanderAccent: {
+    position: "absolute", left: 0, top: 0, bottom: 0,
+    width: 4, backgroundColor: GOLD,
   },
-  commanderDecorBig: {
-    position: "absolute", top: -70, right: -50,
-    width: 200, height: 200, borderRadius: 100,
-    backgroundColor: GOLD, opacity: 0.05,
-  },
-  commanderDecorSmall: {
-    position: "absolute", bottom: -50, left: -30,
-    width: 130, height: 130, borderRadius: 65,
-    backgroundColor: GOLD, opacity: 0.04,
+  commanderDecor: {
+    position: "absolute", top: -40, right: -40,
+    width: 140, height: 140, borderRadius: 70,
+    opacity: 0.55,
   },
   commanderBadge: {
     flexDirection: "row", alignItems: "center", gap: 6,
     alignSelf: "flex-start",
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: "rgba(201,169,97,0.14)",
-    borderWidth: 1, borderColor: "rgba(201,169,97,0.32)",
+    paddingHorizontal: 9, paddingVertical: 4,
+    borderRadius: 7, borderWidth: 1,
   },
   commanderBadgeDot: {
-    width: 6, height: 6, borderRadius: 3, backgroundColor: GOLD,
+    width: 5, height: 5, borderRadius: 3, backgroundColor: GOLD,
   },
   commanderBadgeText: {
-    fontFamily: "Inter_700Bold", fontSize: 9.5,
-    color: GOLD, letterSpacing: 1.1,
+    fontFamily: "Inter_700Bold", fontSize: 9,
+    letterSpacing: 1.2,
   },
   commanderMain: {
     flexDirection: "row", alignItems: "center",
-    gap: 14, marginTop: 14,
+    gap: 13, marginTop: 12,
   },
   commanderIconBox: {
-    width: 52, height: 52, borderRadius: 15,
-    backgroundColor: "rgba(201,169,97,0.12)",
-    borderWidth: 1, borderColor: "rgba(201,169,97,0.30)",
+    width: 48, height: 48, borderRadius: 14,
     alignItems: "center", justifyContent: "center",
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 8,
   },
   commanderTitle: {
-    fontFamily: "Inter_700Bold", fontSize: 17,
-    color: "#FFFFFF", letterSpacing: 0.1,
+    fontFamily: "Inter_700Bold", fontSize: 16.5, letterSpacing: 0.1,
   },
   commanderSub: {
-    fontFamily: "Inter_400Regular", fontSize: 12.5,
-    color: "rgba(255,255,255,0.65)", marginTop: 3,
+    fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 3,
   },
   commanderArrowBox: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
     alignItems: "center", justifyContent: "center",
   },
 
-  /* Section headers */
+  /* Section */
   sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  accentBar: {
-    width: 3, height: 16, borderRadius: 2, backgroundColor: GOLD,
-  },
+  accentBar: { width: 3, height: 16, borderRadius: 2, backgroundColor: GOLD },
   sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15.5, letterSpacing: 0.1 },
-  sectionRow: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-  },
+  sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   seeAll: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
 
   /* Stats */

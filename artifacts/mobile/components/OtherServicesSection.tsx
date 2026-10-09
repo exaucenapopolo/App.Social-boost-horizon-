@@ -25,12 +25,13 @@ import { COUNTRIES, formatCurrency } from "@/lib/countries";
 import { BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 
-// ─── Palette identique login ───
+// ─── Palette identique dashboard ───
 const NAVY        = "#0F2A5C";
 const NAVY_LIGHT  = "#1E3F7A";
 const GOLD        = "#C9A961";
 const GOLD_DK     = "#B08D4A";
 const GOLD_SOFT   = "#F7F1E1";
+const GOLD_BORDER = "#E8DFC7";
 const SURFACE     = "#FFFFFF";
 const TEXT        = "#0F172A";
 const TEXT_MUTED  = "#64748B";
@@ -38,10 +39,11 @@ const TEXT_SOFT   = "#94A3B8";
 const BORDER      = "#E8E4DA";
 const SUCCESS     = "#10B981";
 
-const D_SURFACE    = "#0F2A5C";
-const D_BORDER     = "rgba(201,169,97,0.14)";
+const D_SURFACE    = "#152C57";
+const D_BORDER     = "rgba(201,169,97,0.20)";
+const D_BORDER_2   = "rgba(201,169,97,0.32)";
 const D_TEXT       = "#F1F5F9";
-const D_TEXT_MUTED = "#94A3B8";
+const D_TEXT_MUTED = "#A5B4CB";
 const D_TEXT_SOFT  = "#64748B";
 
 // ─── Données ───
@@ -285,10 +287,7 @@ function ModalShell({
             <View style={[ms.sheetHeader, { borderBottomColor: theme.separator }]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
                 <View
-                  style={[
-                    ms.sheetIconBox,
-                    { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
-                  ]}
+                  style={[ms.sheetIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
                 >
                   <Feather name={icon} size={16} color={theme.accent} />
                 </View>
@@ -320,12 +319,7 @@ function ModalShell({
 function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) {
   return (
     <View style={{ alignItems: "center", gap: 16, paddingVertical: 30 }}>
-      <View
-        style={[
-          ms.successIcon,
-          { backgroundColor: "rgba(16,185,129,0.10)", borderColor: "rgba(16,185,129,0.25)" },
-        ]}
-      >
+      <View style={[ms.successIcon, { backgroundColor: "rgba(16,185,129,0.10)", borderColor: "rgba(16,185,129,0.25)" }]}>
         <Feather name="check" size={32} color={SUCCESS} />
       </View>
       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: theme.text, textAlign: "center" }}>
@@ -391,7 +385,6 @@ function SubmitButton({ onPress, loading, theme }: { onPress: () => void; loadin
   );
 }
 
-// ─── Modal explicatif ───
 function ServiceInfoModal({
   visible, onClose, service, theme,
 }: {
@@ -406,9 +399,7 @@ function ServiceInfoModal({
       <View style={ms.infoOverlay}>
         <View style={[ms.infoCard, { backgroundColor: theme.surface }]}>
           <View style={ms.infoHeader}>
-            <View
-              style={[ms.infoIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
-            >
+            <View style={[ms.infoIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
               <Feather name={service.icon} size={20} color={theme.accent} />
             </View>
             <Text style={[ms.infoTitle, { color: theme.text }]} numberOfLines={2}>
@@ -426,9 +417,7 @@ function ServiceInfoModal({
           <View style={{ gap: 10 }}>
             {service.info.bullets.map((b, i) => (
               <View key={i} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
-                <View
-                  style={[ms.bulletDot, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
-                >
+                <View style={[ms.bulletDot, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
                   <Feather name="check" size={10} color={theme.accent} />
                 </View>
                 <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textSecondary, lineHeight: 19, marginTop: 2 }}>
@@ -585,10 +574,10 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
           </View>
 
           <FieldInput label="Budget envisagé" value={budget} onChange={setBudget} placeholder={`Ex: ${priceFmt(siteType.fcfa)}`} theme={theme} />
-          <FieldInput label="Description du projet *" value={desc} onChange={setDesc} placeholder="Fonctionnalités souhaitées, public cible, objectif du site..." theme={theme} multiline />
+          <FieldInput label="Description du projet *" value={desc} onChange={setDesc} placeholder="Fonctionnalités souhaitées..." theme={theme} multiline />
           <FieldInput label="Couleurs / charte graphique" value={colors2} onChange={setColors2} placeholder="Ex: bleu et blanc..." theme={theme} />
-          <FieldInput label="Sites d'inspiration / références" value={references} onChange={setReferences} placeholder="Ex: apple.com, airbnb.com..." theme={theme} />
-          <FieldInput label="Fonctionnalités spécifiques" value={features} onChange={setFeatures} placeholder="Ex: formulaire de contact, blog, boutique..." theme={theme} multiline />
+          <FieldInput label="Sites d'inspiration / références" value={references} onChange={setReferences} placeholder="Ex: apple.com..." theme={theme} />
+          <FieldInput label="Fonctionnalités spécifiques" value={features} onChange={setFeatures} placeholder="Ex: formulaire, blog..." theme={theme} multiline />
           <TagRow label="Délai souhaité" value={deadline} options={DEADLINES} onSelect={setDeadline} theme={theme} />
           <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
           <SubmitButton onPress={submit} loading={loading} theme={theme} />
@@ -659,11 +648,11 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
           </View>
 
           <FieldInput label="Nom de l'application" value={appName} onChange={setAppName} placeholder="Ex: MyApp Pro" theme={theme} />
-          <FieldInput label="Objectif principal *" value={objective} onChange={setObjective} placeholder="Ex: app e-commerce, application de livraison..." theme={theme} />
+          <FieldInput label="Objectif principal *" value={objective} onChange={setObjective} placeholder="Ex: app e-commerce..." theme={theme} />
           <TagRow label="Plateforme *" value={platform} options={APP_PLATFORMS} onSelect={setPlatform} theme={theme} />
           <FieldInput label="Description complète *" value={desc} onChange={setDesc} placeholder="Décrivez votre application..." theme={theme} multiline />
-          <FieldInput label="Fonctionnalités nécessaires" value={features} onChange={setFeatures} placeholder="Ex: authentification, paiement, carte GPS..." theme={theme} multiline />
-          <FieldInput label="Écrans / pages souhaitées" value={screens} onChange={setScreens} placeholder="Ex: accueil, profil, boutique, panier..." theme={theme} />
+          <FieldInput label="Fonctionnalités nécessaires" value={features} onChange={setFeatures} placeholder="Ex: authentification, paiement..." theme={theme} multiline />
+          <FieldInput label="Écrans / pages souhaitées" value={screens} onChange={setScreens} placeholder="Ex: accueil, profil, boutique..." theme={theme} />
 
           <View style={{ gap: 6 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
@@ -781,7 +770,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
 
           <FieldInput label="Lien page / profil *" value={pageLink} onChange={setPageLink} placeholder="https://facebook.com/votrepage" theme={theme} keyboardType="url" />
           <FieldInput label="Lien de la publication" value={postLink} onChange={setPostLink} placeholder="https://facebook.com/publication (optionnel)" theme={theme} keyboardType="url" />
-          <FieldInput label="Observation / cible" value={observation} onChange={setObservation} placeholder="Cible visée, objectif, zones géographiques..." theme={theme} multiline />
+          <FieldInput label="Observation / cible" value={observation} onChange={setObservation} placeholder="Cible visée, objectif..." theme={theme} multiline />
           <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
           <SubmitButton onPress={submit} loading={loading} theme={theme} />
         </>
@@ -864,8 +853,8 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
       return (
         <>
           <FieldInput label="Nom de la page *" value={fields.nomPage ?? ""} onChange={(v) => setField("nomPage", v)} placeholder="Ex: Mon Business Pro" theme={theme} />
-          <FieldInput label="Catégorie *" value={fields.categorie ?? ""} onChange={(v) => setField("categorie", v)} placeholder="Ex: Commerce, Restaurant, Musique..." theme={theme} />
-          <FieldInput label="Description de la page" value={fields.desc ?? ""} onChange={(v) => setField("desc", v)} placeholder="Décrivez votre page / entreprise" theme={theme} multiline />
+          <FieldInput label="Catégorie *" value={fields.categorie ?? ""} onChange={(v) => setField("categorie", v)} placeholder="Ex: Commerce, Restaurant..." theme={theme} />
+          <FieldInput label="Description de la page" value={fields.desc ?? ""} onChange={(v) => setField("desc", v)} placeholder="Décrivez votre page" theme={theme} multiline />
           <FieldInput label="Email du compte admin *" value={fields.email ?? ""} onChange={(v) => setField("email", v)} placeholder="votre@email.com" theme={theme} keyboardType="email-address" />
         </>
       );
@@ -926,7 +915,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
           <FieldInput label="Mot de passe souhaité *" value={fields.mdp ?? ""} onChange={(v) => setField("mdp", v)} placeholder="Min. 8 caractères" theme={theme} />
           <FieldInput label="Numéro de téléphone *" value={fields.tel ?? ""} onChange={(v) => setField("tel", v)} placeholder="+237 6XX XXX XXX" theme={theme} keyboardType="phone-pad" />
           <FieldInput label="Date de naissance *" value={fields.dob ?? ""} onChange={(v) => setField("dob", v)} placeholder="JJ/MM/AAAA" theme={theme} />
-          <FieldInput label="Pays de création *" value={fields.pays ?? ""} onChange={(v) => setField("pays", v)} placeholder="Ex: États-Unis, France..." theme={theme} />
+          <FieldInput label="Pays de création *" value={fields.pays ?? ""} onChange={(v) => setField("pays", v)} placeholder="Ex: États-Unis..." theme={theme} />
         </>
       );
     }
@@ -968,7 +957,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
       {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
-            Choisissez le service et remplissez les informations requises pour la création / livraison.
+            Choisissez le service et remplissez les informations requises.
           </Text>
 
           <View style={{ gap: 6 }}>
@@ -1022,13 +1011,13 @@ export default function OtherServicesSection() {
     text:          isDark ? D_TEXT        : TEXT,
     textSecondary: isDark ? D_TEXT_MUTED  : TEXT_MUTED,
     textMuted:     isDark ? D_TEXT_SOFT   : TEXT_SOFT,
-    inputBg:       isDark ? "rgba(255,255,255,0.04)" : GOLD_SOFT,
-    inputBorder:   isDark ? D_BORDER      : "#EDE6D5",
+    inputBg:       isDark ? "rgba(255,255,255,0.05)" : GOLD_SOFT,
+    inputBorder:   isDark ? "rgba(201,169,97,0.20)" : "#EDE6D5",
     accent:        isDark ? GOLD          : NAVY,
     accentLight:   isDark ? GOLD          : NAVY_LIGHT,
     surface:       isDark ? D_SURFACE     : SURFACE,
-    iconBg:        isDark ? "rgba(201,169,97,0.10)" : GOLD_SOFT,
-    iconBorder:    isDark ? "rgba(201,169,97,0.22)" : "#EDE6D5",
+    iconBg:        isDark ? "rgba(201,169,97,0.12)" : GOLD_SOFT,
+    iconBorder:    isDark ? "rgba(201,169,97,0.28)" : "#EDE6D5",
     separator:     isDark ? D_BORDER      : BORDER,
   }), [isDark]);
 
@@ -1061,7 +1050,6 @@ export default function OtherServicesSection() {
 
   return (
     <View style={{ gap: 16 }}>
-      {/* En-tête de section premium */}
       <View style={ms.sectionHeader}>
         <View style={ms.accentBar} />
         <View style={{ flex: 1 }}>
@@ -1072,7 +1060,7 @@ export default function OtherServicesSection() {
         </View>
       </View>
 
-      {/* ═══ Services externes vedettes (horizontales) ═══ */}
+      {/* Cartes externes */}
       <View style={{ gap: 10 }}>
         {FEATURED_EXTERNAL.map((svc) => (
           <Pressable
@@ -1081,11 +1069,13 @@ export default function OtherServicesSection() {
             onPressIn={() => Haptics.selectionAsync()}
             style={({ pressed }) => [
               ms.featuredCard,
-              { backgroundColor: theme.surface, borderColor: theme.iconBorder },
+              {
+                backgroundColor: theme.surface,
+                borderColor: isDark ? D_BORDER_2 : GOLD_BORDER,
+              },
               pressed && { opacity: 0.94, transform: [{ scale: 0.985 }] },
             ]}
           >
-            {/* Bande dorée à gauche */}
             <View style={ms.featuredAccent} />
 
             <View style={ms.featuredLeft}>
@@ -1123,7 +1113,7 @@ export default function OtherServicesSection() {
         ))}
       </View>
 
-      {/* ═══ Grille services internes (numérotés) ═══ */}
+      {/* Grille services internes */}
       <View style={ms.grid}>
         {MODAL_SERVICES.map((svc, idx) => (
           <Pressable
@@ -1134,16 +1124,16 @@ export default function OtherServicesSection() {
             }}
             style={({ pressed }) => [
               ms.serviceCard,
-              { backgroundColor: theme.surface, borderColor: theme.inputBorder },
+              {
+                backgroundColor: theme.surface,
+                borderColor: isDark ? D_BORDER : BORDER,
+              },
               pressed && { opacity: 0.92, transform: [{ scale: 0.975 }] },
             ]}
           >
             <View style={ms.cardHeader}>
               <View
-                style={[
-                  ms.serviceIconBox,
-                  { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
-                ]}
+                style={[ms.serviceIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
               >
                 <Feather name={svc.icon} size={18} color={theme.accent} />
               </View>
@@ -1159,7 +1149,7 @@ export default function OtherServicesSection() {
               {svc.sub}
             </Text>
 
-            <View style={[ms.cardFooterArrow, { borderColor: theme.iconBorder }]}>
+            <View style={[ms.cardFooterArrow, { borderColor: theme.iconBorder, backgroundColor: theme.iconBg }]}>
               <Feather name="arrow-up-right" size={12} color={theme.accent} />
             </View>
           </Pressable>
@@ -1182,13 +1172,12 @@ export default function OtherServicesSection() {
 }
 
 const ms = StyleSheet.create({
-  /* En-tête section */
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   accentBar: { width: 3, height: 32, borderRadius: 2, backgroundColor: GOLD },
   sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15.5, letterSpacing: 0.1 },
   sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
 
-  /* Carte externe vedette */
+  /* Cartes externes vedettes */
   featuredCard: {
     flexDirection: "row", alignItems: "center",
     borderRadius: 16, borderWidth: 1,
@@ -1208,16 +1197,10 @@ const ms = StyleSheet.create({
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
   featuredRight: { flex: 1, gap: 4 },
-  featuredTitle: {
-    fontFamily: "Inter_700Bold", fontSize: 14.5, letterSpacing: 0.1,
-  },
+  featuredTitle: { fontFamily: "Inter_700Bold", fontSize: 14.5, letterSpacing: 0.1 },
   featuredSub: { fontFamily: "Inter_400Regular", fontSize: 11.5 },
-  featuredCtaRow: {
-    flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4,
-  },
-  featuredCta: {
-    fontFamily: "Inter_600SemiBold", fontSize: 11.5, letterSpacing: 0.2,
-  },
+  featuredCtaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  featuredCta: { fontFamily: "Inter_600SemiBold", fontSize: 11.5, letterSpacing: 0.2 },
   featuredBadge: {
     backgroundColor: GOLD, borderRadius: 5,
     paddingHorizontal: 6, paddingVertical: 2,
@@ -1228,7 +1211,7 @@ const ms = StyleSheet.create({
   },
   infoBtn: { padding: 4, alignSelf: "flex-start" },
 
-  /* Grille services internes */
+  /* Grille services */
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceCard: {
     width: "47.8%", borderRadius: 16, borderWidth: 1,
@@ -1246,8 +1229,7 @@ const ms = StyleSheet.create({
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
   cardNumber: {
-    fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 1.5,
-    opacity: 0.55,
+    fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 1.5, opacity: 0.55,
   },
   serviceLabel: {
     fontFamily: "Inter_700Bold", fontSize: 13.5,
@@ -1260,7 +1242,7 @@ const ms = StyleSheet.create({
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
 
-  /* Info modal */
+  /* Modales */
   infoOverlay: {
     flex: 1, backgroundColor: "rgba(15,42,92,0.35)",
     justifyContent: "center", padding: 22,
@@ -1283,8 +1265,6 @@ const ms = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     borderWidth: 1, marginTop: 2,
   },
-
-  /* Modales internes */
   overlay: { flex: 1, backgroundColor: "rgba(15,42,92,0.35)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "94%" },
   sheetHeader: {
