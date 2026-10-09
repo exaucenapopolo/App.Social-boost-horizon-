@@ -221,7 +221,7 @@ export default function HomeScreen() {
           >
             <View style={styles.balanceTop}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.balanceLabel}>Solde disponible</Text>
+                <Text style={styles.balanceLabel}>Solde SBH</Text>
                 <Text style={styles.balanceAmount}>{balanceFormatted}</Text>
                 {userCountry && userCountry.xafRate !== 1 && (
                   <Text style={styles.balanceConvert}>
@@ -244,7 +244,7 @@ export default function HomeScreen() {
                 onPress={() => { Haptics.selectionAsync(); router.push("/parrainage" as any); }}
               >
                 <Feather name="gift" size={14} color={GOLD} />
-                <Text style={styles.referralLabel}>Parrainage</Text>
+                <Text style={styles.referralLabel}>Parrainage SBH</Text>
                 <Text style={styles.referralValue}>{referralFormatted}</Text>
               </Pressable>
 
