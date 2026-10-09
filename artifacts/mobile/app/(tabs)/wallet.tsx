@@ -73,14 +73,12 @@ export interface PayCountry extends Country {
 }
 
 const INTL_COUNTRIES: PayCountry[] = [
-  // XAF
   { code: "cm", name: "Cameroun",             flag: "🇨🇲", phoneCode: "+237", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Orange Money"] },
   { code: "ga", name: "Gabon",                flag: "🇬🇦", phoneCode: "+241", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Airtel Money"] },
   { code: "cg", name: "Congo Brazzaville",    flag: "🇨🇬", phoneCode: "+242", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Airtel Money"] },
   { code: "td", name: "Tchad",                flag: "🇹🇩", phoneCode: "+235", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Airtel Money"] },
   { code: "cf", name: "Centrafrique",         flag: "🇨🇫", phoneCode: "+236", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money"] },
   { code: "gq", name: "Guinée Équatoriale",   flag: "🇬🇶", phoneCode: "+240", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Airtel Money"] },
-  // XOF
   { code: "sn", name: "Sénégal",              flag: "🇸🇳", phoneCode: "+221", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Orange Money", "Wave"] },
   { code: "ci", name: "Côte d'Ivoire",        flag: "🇨🇮", phoneCode: "+225", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Orange Money", "MTN Mobile Money", "Wave"] },
   { code: "ml", name: "Mali",                 flag: "🇲🇱", phoneCode: "+223", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Orange Money", "Moov Money"] },
@@ -89,7 +87,6 @@ const INTL_COUNTRIES: PayCountry[] = [
   { code: "tg", name: "Togo",                 flag: "🇹🇬", phoneCode: "+228", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Flooz", "T-Money"] },
   { code: "ne", name: "Niger",                flag: "🇳🇪", phoneCode: "+227", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Airtel Money", "Zamani"] },
   { code: "gw", name: "Guinée-Bissau",        flag: "🇬🇼", phoneCode: "+245", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money"] },
-  // Autres
   { code: "gn", name: "Guinée Conakry",       flag: "🇬🇳", phoneCode: "+224", currency: "GNF", currencySymbol: "FG",   xafRate: 14.5,   operators: ["Orange Money", "MTN Mobile Money"] },
   { code: "cd", name: "RD Congo",             flag: "🇨🇩", phoneCode: "+243", currency: "CDF", currencySymbol: "FC",   xafRate: 4.70,   operators: ["M-Pesa", "Airtel Money", "Orange Money"] },
   { code: "rw", name: "Rwanda",               flag: "🇷🇼", phoneCode: "+250", currency: "RWF", currencySymbol: "FRw",  xafRate: 1.98,   operators: ["MTN Mobile Money", "Airtel Money"] },
@@ -246,7 +243,6 @@ function ActivityItem({ item, C, userCountry }: { item: any; C: any; userCountry
   );
 }
 
-// Balance card
 function BalanceCard({
   icon, label, value, currency, color, C, isDark, action, onAction,
 }: any) {
@@ -280,11 +276,10 @@ function BalanceCard({
   );
 }
 
-// Segmented mode tabs
 function ModeSegmented({ payMode, setPayMode, C, isDark }: any) {
   const tabs = [
     { key: "cameroun",      icon: "smartphone" as const, label: "Cameroun",     sub: "MTN · Orange", color: "#11998e" },
-    { key: "international", icon: "globe" as const,      label: "International", sub: "Mobile Money",  color: INFO },
+    { key: "international", icon: "globe" as const,      label: "International", sub: "Mobile Money · Carte",  color: INFO },
     { key: "historique",    icon: "list" as const,       label: "Historique",    sub: "Transactions",  color: PURPLE },
   ];
   return (
@@ -328,6 +323,7 @@ function ModeSegmented({ payMode, setPayMode, C, isDark }: any) {
 //  MAIN
 // ═══════════════════════════════════════════════════════════════
 type PayMode = "cameroun" | "international" | "historique";
+type IntlMethod = "mobilemoney" | "card";
 
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
@@ -368,11 +364,18 @@ export default function WalletScreen() {
   const [fapshiAmount, setFapshiAmount] = useState("");
   const [fapshiDesc, setFapshiDesc] = useState("Rechargement SBH");
 
+  // ── International : Mobile Money (par défaut) ou Carte ──
+  const [intlMethod, setIntlMethod] = useState<IntlMethod>("mobilemoney");
   const [intlCountry, setIntlCountry] = useState<PayCountry>(INTL_COUNTRIES[0]);
   const [intlPhone, setIntlPhone] = useState("");
   const [intlAmount, setIntlAmount] = useState("");
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
+
+  // ── Carte bancaire (NelsiusPay) ──
+  const [cardAmount, setCardAmount] = useState("");
+  const [nelsiusRef, setNelsiusRef] = useState<string | null>(null);
+  const [nelsiusPolling, setNelsiusPolling] = useState(false);
 
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferTarget, setTransferTarget] = useState<"main" | "withdrawal" | null>(null);
@@ -391,12 +394,11 @@ export default function WalletScreen() {
   const balance = user?.balance ?? 0;
   const referral = user?.referralBalance ?? 0;
 
-  // Entry animations
   const entry0 = useEntry(60);
   const entry1 = useEntry(140);
   const entry2 = useEntry(220);
 
-  // ═══ Handlers ═══
+  // ═══ Handlers transfert / retrait (inchangés) ═══
   const handleTransfer = async () => {
     const ref = user?.referralBalance ?? 0;
     if (ref <= 0) { Alert.alert("Solde insuffisant", "Vous n'avez aucun solde parrainage à transférer."); return; }
@@ -543,6 +545,7 @@ export default function WalletScreen() {
     if (payMode === "historique") loadActivities();
   }, [payMode, loadActivities]);
 
+  // ═══ Fapshi (Cameroun) — inchangé ═══
   const confirmFapshiPayment = async (transId: string, amount: number) => {
     const MAX_ATTEMPTS = 3;
     const DELAY_MS = 5000;
@@ -621,6 +624,7 @@ export default function WalletScreen() {
     }
   };
 
+  // ═══ Mobile Money International (AccountPe — via apiClient) ═══
   const handleIntlPay = async () => {
     const amountLocal = parseInt(intlAmount, 10);
     const minLocal = getEquivalentLocal(500, intlCountry);
@@ -633,46 +637,101 @@ export default function WalletScreen() {
     setSubmitting(true);
     try {
       const amountXAF = getEquivalentXAF(amountLocal, intlCountry);
-      const res = await fetch(`${BASE_URL}api/create-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: user?.email ?? `${user?.id}@sbh.local`,
-          userId: user?.id ?? "",
-          username: user?.name ?? user?.email?.split("@")[0] ?? "user",
-          country: intlCountry.code.toUpperCase(),
-          phone: intlPhone.trim(),
-          amount: amountLocal,
-          amountXAF,
-          currency: intlCountry.currency,
-        }),
+      const res = await apiClient.wallet.createIntlPayment({
+        amount: amountLocal,
+        amountXAF,
+        currency: intlCountry.currency,
+        country: intlCountry.code.toUpperCase(),
+        phone: intlPhone.trim(),
+        username: user?.name ?? undefined,
+        email: user?.email ?? undefined,
       });
-      const data = await res.json();
-      if (data.success && data.checkoutUrl) {
-        try {
-          const token = await getFreshToken();
-          await fetch(`${BASE_URL}api/wallet/record-pending-recharge`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              transId: data.transId ?? data.transactionId ?? "",
-              amount: getEquivalentXAF(parseInt(intlAmount, 10), intlCountry),
-              method: `Mobile Money ${intlCountry.name}`,
-              phone: intlPhone.trim(),
-            }),
-          });
-        } catch {}
-        await WebBrowser.openBrowserAsync(data.checkoutUrl);
+      if (res && (res as any).success && (res as any).checkoutUrl) {
+        const checkoutUrl = (res as any).checkoutUrl as string;
+        const ref = (res as any).transId as string | undefined;
+        await WebBrowser.openBrowserAsync(checkoutUrl);
         await refreshUser();
         loadActivities();
         Alert.alert(
           "Paiement initié",
-          "Votre solde sera crédité automatiquement après confirmation de l'opérateur.\n\nSi votre solde n'est pas mis à jour dans 5 minutes, contactez le support.",
+          "Votre solde sera crédité automatiquement après confirmation de l'opérateur.\n\n" +
+          (ref ? `Référence : ${ref}\n\n` : "") +
+          "Si votre solde n'est pas mis à jour dans 5 minutes, ouvrez l'historique pour vérifier.",
           [{ text: "OK" }]
         );
-        if (payMode === "historique") loadActivities();
       } else {
-        Alert.alert("Erreur paiement", data.error ?? data.message ?? "Impossible d'initier le paiement.");
+        Alert.alert("Erreur paiement", (res as any)?.error ?? "Impossible d'initier le paiement.");
+      }
+    } catch (e: any) {
+      Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
+    } finally { setSubmitting(false); }
+  };
+
+  // ═══ Carte bancaire NelsiusPay ═══
+  const handleNelsiusPay = async () => {
+    const amount = parseInt(cardAmount, 10);
+    if (!amount || amount < 1) {
+      Alert.alert("Montant invalide", "Entrez un montant valide.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSubmitting(true);
+    try {
+      const res = await apiClient.wallet.nelsiuspayCheckout({
+        amount,
+        currency: intlCountry.currency,
+      });
+      if (res && (res as any).success && (res as any).checkoutUrl) {
+        const reference = (res as any).reference as string;
+        setNelsiusRef(reference);
+        const checkoutUrl = (res as any).checkoutUrl as string;
+
+        await WebBrowser.openBrowserAsync(checkoutUrl);
+
+        setNelsiusPolling(true);
+        let credited = false;
+        for (let i = 0; i < 6; i++) {
+          await new Promise<void>((resolve) => setTimeout(resolve, i === 0 ? 1000 : 4000));
+          try {
+            const statusRes = await apiClient.wallet.nelsiuspayStatus(reference);
+            if (statusRes && (statusRes as any).success) {
+              const st = (statusRes as any).status;
+              if (st === "CONFIRMED") {
+                credited = true;
+                await refreshUser();
+                loadActivities();
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                const creditedXAF = (statusRes as any).creditedAmountXAF;
+                Alert.alert(
+                  "Paiement confirmé !",
+                  creditedXAF
+                    ? `${creditedXAF.toLocaleString("fr-FR")} FCFA ont été crédités.`
+                    : "Votre paiement a été confirmé."
+                );
+                break;
+              }
+              if (st === "FAILED") {
+                Alert.alert("Paiement non confirmé", "Le paiement a échoué. Aucun montant n'a été débité.");
+                break;
+              }
+            }
+          } catch {
+            // on continue le polling
+          }
+        }
+        setNelsiusPolling(false);
+        if (!credited) {
+          await refreshUser();
+          loadActivities();
+          Alert.alert(
+            "Paiement en cours",
+            `Votre paiement est en cours de traitement.\nRéférence : ${reference}\n\n` +
+            "Il sera crédité automatiquement dès confirmation. Vous pouvez vérifier plus tard.",
+            [{ text: "OK" }]
+          );
+        }
+      } else {
+        Alert.alert("Erreur paiement", (res as any)?.error ?? "Impossible d'initier le paiement par carte.");
       }
     } catch (e: any) {
       Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
@@ -690,7 +749,7 @@ export default function WalletScreen() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <StarBackground dark={isDark} />
 
-      {/* Polling overlay */}
+      {/* Polling overlay (Fapshi) */}
       <Modal visible={isPolling} transparent animationType="fade">
         <View style={styles.pollingOverlay}>
           <View style={[styles.pollingCard, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -706,6 +765,21 @@ export default function WalletScreen() {
             </View>
             <Text style={[styles.pollingAttemptText, { color: C.textMuted }]}>
               Tentative {pollingAttempt}/8
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Polling overlay (NelsiusPay) */}
+      <Modal visible={nelsiusPolling} transparent animationType="fade">
+        <View style={styles.pollingOverlay}>
+          <View style={[styles.pollingCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: GOLD + "22", alignItems: "center", justifyContent: "center" }}>
+              <ActivityIndicator size="large" color={GOLD} />
+            </View>
+            <Text style={[styles.pollingTitle, { color: C.text }]}>Vérification du paiement carte</Text>
+            <Text style={[styles.pollingDesc, { color: C.textMuted }]}>
+              Nous interrogeons le prestataire pour confirmer votre paiement...
             </Text>
           </View>
         </View>
@@ -772,7 +846,6 @@ export default function WalletScreen() {
             gap: 12,
           }}
         >
-          {/* Main balance - large card */}
           <View
             style={[
               styles.mainBalanceCard,
@@ -831,7 +904,6 @@ export default function WalletScreen() {
             </LinearGradient>
           </View>
 
-          {/* Secondary balances */}
           <View style={styles.balanceRow}>
             <BalanceCard
               icon="gift"
@@ -872,7 +944,7 @@ export default function WalletScreen() {
           <ModeSegmented payMode={payMode} setPayMode={setPayMode} C={C} isDark={isDark} />
         </Animated.View>
 
-        {/* ═══ CAMEROUN FORM ═══ */}
+        {/* ═══ CAMEROUN FORM (inchangé) ═══ */}
         {payMode === "cameroun" && (
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <Animated.View
@@ -994,119 +1066,291 @@ export default function WalletScreen() {
                 </View>
               </View>
 
-              <View style={styles.formBody}>
-                <View>
-                  <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Pays</Text>
-                  <Pressable
-                    style={[styles.countryBtn, { backgroundColor: C.inputBg, borderColor: INFO + "40" }]}
-                    onPress={() => { setShowCountryModal(true); setCountrySearch(""); }}
-                  >
-                    <Text style={styles.countryFlag}>{intlCountry.flag}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.countryName, { color: C.text }]} numberOfLines={1}>{intlCountry.name}</Text>
-                      <Text style={[styles.countrySub, { color: C.textMuted }]} numberOfLines={1}>
-                        {intlCountry.phoneCode} · {intlCountry.operators.join(" · ")}
-                      </Text>
-                    </View>
-                    <Feather name="chevron-down" size={16} color={INFO} />
-                  </Pressable>
-                </View>
-
-                <View>
-                  <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Numéro Mobile Money</Text>
-                  <View style={[styles.phoneRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
-                    <View style={[styles.phoneCodeBox, { backgroundColor: INFO + "14" }]}>
-                      <Text style={[styles.phoneCodeText, { color: INFO }]}>{intlCountry.phoneCode}</Text>
-                    </View>
-                    <TextInput
-                      style={[styles.phoneInput, { color: C.text }]}
-                      placeholder="6XX XXX XXX"
-                      placeholderTextColor={C.textMuted}
-                      keyboardType="phone-pad"
-                      value={intlPhone}
-                      onChangeText={setIntlPhone}
-                    />
-                  </View>
-                </View>
-
-                <View>
-                  <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>
-                    Montant ({intlCountry.currencySymbol})
-                  </Text>
-                  <View style={styles.presetsWrap}>
-                    {amountPresets.map((p) => {
-                      const isActive = intlAmount === String(p.local);
-                      return (
-                        <Pressable
-                          key={p.xaf}
-                          style={({ pressed }) => [
-                            styles.presetChip,
-                            {
-                              backgroundColor: isActive ? INFO : C.inputBg,
-                              borderColor: isActive ? INFO : C.inputBorder,
-                            },
-                            pressed && { opacity: 0.85 },
-                          ]}
-                          onPress={() => { setIntlAmount(String(p.local)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                        >
-                          <Text style={[styles.presetChipText, { color: isActive ? "#fff" : C.text }]}>
-                            {p.local.toLocaleString()}
-                          </Text>
-                          <Text style={[styles.presetChipSub, { color: isActive ? "rgba(255,255,255,0.75)" : C.textMuted }]}>
-                            {intlCountry.currencySymbol}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <View style={[styles.inputRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
-                    <Feather name="edit-3" size={16} color={C.textMuted} />
-                    <TextInput
-                      style={[styles.input, { color: C.text }]}
-                      placeholder={`Montant en ${intlCountry.currencySymbol}`}
-                      placeholderTextColor={C.textMuted}
-                      keyboardType="numeric"
-                      value={intlAmount}
-                      onChangeText={setIntlAmount}
-                    />
-                    <Text style={[styles.inputSuffix, { color: C.textMuted }]}>{intlCountry.currencySymbol}</Text>
-                  </View>
-
-                  {intlAmount && (
-                    <View style={[styles.conversionRow, { backgroundColor: INFO + "10", borderColor: INFO + "30" }]}>
-                      <Feather name="refresh-cw" size={12} color={INFO} />
-                      <Text style={[styles.conversionText, { color: INFO }]}>
-                        ≈ {getEquivalentXAF(parseInt(intlAmount) || 0, intlCountry).toLocaleString("fr-FR")} FCFA
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={[styles.infoBanner, { backgroundColor: INFO + "0D", borderColor: INFO + "25" }]}>
-                  <Feather name="shield" size={14} color={INFO} />
-                  <Text style={[styles.infoBannerText, { color: INFO }]}>
-                    Paiement sécurisé · Solde crédité automatiquement après confirmation
-                  </Text>
-                </View>
-                <View style={[styles.infoBanner, { backgroundColor: WARNING + "10", borderColor: WARNING + "25" }]}>
-                  <Feather name="clock" size={14} color={WARNING} />
-                  <Text style={[styles.infoBannerText, { color: WARNING }]}>
-                    Délai de crédit : 5 à 30 minutes selon l'opérateur choisi
-                  </Text>
-                </View>
-
+              {/* Sous-toggle : Mobile Money / Carte */}
+              <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 14 }}>
                 <Pressable
-                  style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.9 }, submitting && { opacity: 0.6 }]}
-                  onPress={handleIntlPay}
-                  disabled={submitting}
+                  onPress={() => { setIntlMethod("mobilemoney"); Haptics.selectionAsync(); }}
+                  style={({ pressed }) => [
+                    {
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingVertical: 11,
+                      borderRadius: 12,
+                      borderWidth: 1.5,
+                      backgroundColor: intlMethod === "mobilemoney" ? INFO + "18" : C.inputBg,
+                      borderColor: intlMethod === "mobilemoney" ? INFO : C.border,
+                    },
+                    pressed && { opacity: 0.9 },
+                  ]}
                 >
-                  <LinearGradient colors={isDark ? [NAVY_LIGHT, NAVY] : [INFO, "#2563EB"]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                    {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="credit-card" size={18} color="#fff" />}
-                    <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Procéder au paiement"}</Text>
-                    {!submitting && <Feather name="arrow-right" size={18} color={isDark ? GOLD : "#fff"} />}
-                  </LinearGradient>
+                  <Feather name="smartphone" size={14} color={intlMethod === "mobilemoney" ? INFO : C.textMuted} />
+                  <Text
+                    style={[
+                      styles.methodBtnText,
+                      { color: intlMethod === "mobilemoney" ? INFO : C.text, marginLeft: 6 },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Mobile Money
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => { setIntlMethod("card"); Haptics.selectionAsync(); }}
+                  style={({ pressed }) => [
+                    {
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingVertical: 11,
+                      borderRadius: 12,
+                      borderWidth: 1.5,
+                      backgroundColor: intlMethod === "card" ? GOLD + "18" : C.inputBg,
+                      borderColor: intlMethod === "card" ? GOLD : C.border,
+                    },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Feather name="credit-card" size={14} color={intlMethod === "card" ? GOLD : C.textMuted} />
+                  <Text
+                    style={[
+                      styles.methodBtnText,
+                      { color: intlMethod === "card" ? GOLD : C.text, marginLeft: 6 },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Carte bancaire
+                  </Text>
                 </Pressable>
               </View>
+
+              {/* ── CONTENU MOBILE MONEY ── */}
+              {intlMethod === "mobilemoney" && (
+                <View style={styles.formBody}>
+                  <View>
+                    <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Pays</Text>
+                    <Pressable
+                      style={[styles.countryBtn, { backgroundColor: C.inputBg, borderColor: INFO + "40" }]}
+                      onPress={() => { setShowCountryModal(true); setCountrySearch(""); }}
+                    >
+                      <Text style={styles.countryFlag}>{intlCountry.flag}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.countryName, { color: C.text }]} numberOfLines={1}>{intlCountry.name}</Text>
+                        <Text style={[styles.countrySub, { color: C.textMuted }]} numberOfLines={1}>
+                          {intlCountry.phoneCode} · {intlCountry.operators.join(" · ")}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-down" size={16} color={INFO} />
+                    </Pressable>
+                  </View>
+
+                  <View>
+                    <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Numéro Mobile Money</Text>
+                    <View style={[styles.phoneRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                      <View style={[styles.phoneCodeBox, { backgroundColor: INFO + "14" }]}>
+                        <Text style={[styles.phoneCodeText, { color: INFO }]}>{intlCountry.phoneCode}</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.phoneInput, { color: C.text }]}
+                        placeholder="6XX XXX XXX"
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="phone-pad"
+                        value={intlPhone}
+                        onChangeText={setIntlPhone}
+                      />
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>
+                      Montant ({intlCountry.currencySymbol})
+                    </Text>
+                    <View style={styles.presetsWrap}>
+                      {amountPresets.map((p) => {
+                        const isActive = intlAmount === String(p.local);
+                        return (
+                          <Pressable
+                            key={p.xaf}
+                            style={({ pressed }) => [
+                              styles.presetChip,
+                              {
+                                backgroundColor: isActive ? INFO : C.inputBg,
+                                borderColor: isActive ? INFO : C.inputBorder,
+                              },
+                              pressed && { opacity: 0.85 },
+                            ]}
+                            onPress={() => { setIntlAmount(String(p.local)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                          >
+                            <Text style={[styles.presetChipText, { color: isActive ? "#fff" : C.text }]}>
+                              {p.local.toLocaleString()}
+                            </Text>
+                            <Text style={[styles.presetChipSub, { color: isActive ? "rgba(255,255,255,0.75)" : C.textMuted }]}>
+                              {intlCountry.currencySymbol}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <View style={[styles.inputRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                      <Feather name="edit-3" size={16} color={C.textMuted} />
+                      <TextInput
+                        style={[styles.input, { color: C.text }]}
+                        placeholder={`Montant en ${intlCountry.currencySymbol}`}
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="numeric"
+                        value={intlAmount}
+                        onChangeText={setIntlAmount}
+                      />
+                      <Text style={[styles.inputSuffix, { color: C.textMuted }]}>{intlCountry.currencySymbol}</Text>
+                    </View>
+
+                    {intlAmount && (
+                      <View style={[styles.conversionRow, { backgroundColor: INFO + "10", borderColor: INFO + "30" }]}>
+                        <Feather name="refresh-cw" size={12} color={INFO} />
+                        <Text style={[styles.conversionText, { color: INFO }]}>
+                          ≈ {getEquivalentXAF(parseInt(intlAmount) || 0, intlCountry).toLocaleString("fr-FR")} FCFA
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={[styles.infoBanner, { backgroundColor: INFO + "0D", borderColor: INFO + "25" }]}>
+                    <Feather name="shield" size={14} color={INFO} />
+                    <Text style={[styles.infoBannerText, { color: INFO }]}>
+                      Paiement sécurisé · Solde crédité automatiquement après confirmation
+                    </Text>
+                  </View>
+                  <View style={[styles.infoBanner, { backgroundColor: WARNING + "10", borderColor: WARNING + "25" }]}>
+                    <Feather name="clock" size={14} color={WARNING} />
+                    <Text style={[styles.infoBannerText, { color: WARNING }]}>
+                      Délai de crédit : 5 à 30 minutes selon l'opérateur choisi
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.9 }, submitting && { opacity: 0.6 }]}
+                    onPress={handleIntlPay}
+                    disabled={submitting}
+                  >
+                    <LinearGradient colors={isDark ? [NAVY_LIGHT, NAVY] : [INFO, "#2563EB"]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                      {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="credit-card" size={18} color="#fff" />}
+                      <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Procéder au paiement"}</Text>
+                      {!submitting && <Feather name="arrow-right" size={18} color={isDark ? GOLD : "#fff"} />}
+                    </LinearGradient>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* ── CONTENU CARTE BANCAIRE ── */}
+              {intlMethod === "card" && (
+                <View style={styles.formBody}>
+                  <View>
+                    <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Pays / devise</Text>
+                    <Pressable
+                      style={[styles.countryBtn, { backgroundColor: C.inputBg, borderColor: GOLD + "40" }]}
+                      onPress={() => { setShowCountryModal(true); setCountrySearch(""); }}
+                    >
+                      <Text style={styles.countryFlag}>{intlCountry.flag}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.countryName, { color: C.text }]} numberOfLines={1}>
+                          {intlCountry.name}
+                        </Text>
+                        <Text style={[styles.countrySub, { color: C.textMuted }]} numberOfLines={1}>
+                          {intlCountry.currencySymbol} · {intlCountry.currency}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-down" size={16} color={GOLD} />
+                    </Pressable>
+                  </View>
+
+                  <View>
+                    <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>
+                      Montant ({intlCountry.currencySymbol})
+                    </Text>
+                    <View style={styles.presetsWrap}>
+                      {[2000, 5000, 10000, 20000, 50000, 100000].map((xaf) => {
+                        const local = getEquivalentLocal(xaf, intlCountry);
+                        const isActive = cardAmount === String(local);
+                        return (
+                          <Pressable
+                            key={xaf}
+                            style={({ pressed }) => [
+                              styles.presetChip,
+                              {
+                                backgroundColor: isActive ? GOLD : C.inputBg,
+                                borderColor: isActive ? GOLD : C.inputBorder,
+                              },
+                              pressed && { opacity: 0.85 },
+                            ]}
+                            onPress={() => { setCardAmount(String(local)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                          >
+                            <Text style={[styles.presetChipText, { color: isActive ? "#000" : C.text }]}>
+                              {local.toLocaleString()}
+                            </Text>
+                            <Text style={[styles.presetChipSub, { color: isActive ? "rgba(0,0,0,0.65)" : C.textMuted }]}>
+                              {intlCountry.currencySymbol}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <View style={[styles.inputRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                      <Feather name="credit-card" size={16} color={C.textMuted} />
+                      <TextInput
+                        style={[styles.input, { color: C.text }]}
+                        placeholder={`Montant en ${intlCountry.currencySymbol}`}
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="numeric"
+                        value={cardAmount}
+                        onChangeText={setCardAmount}
+                      />
+                      <Text style={[styles.inputSuffix, { color: C.textMuted }]}>
+                        {intlCountry.currencySymbol}
+                      </Text>
+                    </View>
+                    {cardAmount && (
+                      <View style={[styles.conversionRow, { backgroundColor: GOLD + "10", borderColor: GOLD + "30" }]}>
+                        <Feather name="refresh-cw" size={12} color={GOLD} />
+                        <Text style={[styles.conversionText, { color: GOLD }]}>
+                          ≈ {getEquivalentXAF(parseInt(cardAmount) || 0, intlCountry).toLocaleString("fr-FR")} FCFA
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={[styles.infoBanner, { backgroundColor: GOLD + "10", borderColor: GOLD + "25" }]}>
+                    <Feather name="shield" size={14} color={GOLD} />
+                    <Text style={[styles.infoBannerText, { color: GOLD }]}>
+                      Paiement 100% sécurisé · Visa / Mastercard · Crédit automatique après confirmation
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.9 }, submitting && { opacity: 0.6 }]}
+                    onPress={handleNelsiusPay}
+                    disabled={submitting}
+                  >
+                    <LinearGradient
+                      colors={[GOLD_SOFT, GOLD]}
+                      style={styles.payBtnGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator size="small" color="#000" />
+                      ) : (
+                        <Feather name="credit-card" size={18} color="#000" />
+                      )}
+                      <Text style={[styles.payBtnText, { color: "#000" }]}>
+                        {submitting ? "Traitement..." : "Payer par carte"}
+                      </Text>
+                      {!submitting && <Feather name="arrow-right" size={18} color="#000" />}
+                    </LinearGradient>
+                  </Pressable>
+                </View>
+              )}
             </Animated.View>
           </KeyboardAvoidingView>
         )}
@@ -1505,6 +1749,7 @@ export default function WalletScreen() {
                     onPress={() => {
                       setIntlCountry(item);
                       setIntlAmount("");
+                      setCardAmount("");
                       setShowCountryModal(false);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
@@ -1535,7 +1780,6 @@ export default function WalletScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  /* Header */
   header: {
     paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: "row", alignItems: "center", gap: 12,
@@ -1559,7 +1803,6 @@ const styles = StyleSheet.create({
 
   content: { padding: 14, gap: 16 },
 
-  /* Main balance */
   mainBalanceCard: {
     borderRadius: 22, overflow: "hidden",
     borderWidth: 1,
@@ -1594,7 +1837,6 @@ const styles = StyleSheet.create({
   },
   secureChipText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.3 },
 
-  /* Secondary balance cards */
   balanceRow: { flexDirection: "row", gap: 10 },
   balanceCard: {
     flex: 1, borderRadius: 18, borderWidth: 1.5, padding: 14, gap: 4,
@@ -1617,7 +1859,6 @@ const styles = StyleSheet.create({
   },
   balanceActionText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.2 },
 
-  /* Segmented control */
   segment: {
     flexDirection: "row", borderRadius: 16, borderWidth: 1, padding: 4,
   },
@@ -1633,7 +1874,6 @@ const styles = StyleSheet.create({
   segmentLabel: { fontFamily: "Inter_700Bold", fontSize: 12.5, letterSpacing: -0.1 },
   segmentSub: { fontFamily: "Inter_400Regular", fontSize: 10.5, marginTop: 1 },
 
-  /* Form */
   formSection: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
   formHeader: {
     flexDirection: "row", alignItems: "center", gap: 12,
@@ -1713,7 +1953,6 @@ const styles = StyleSheet.create({
   methodDot: { width: 8, height: 8, borderRadius: 4 },
   methodChipText: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
 
-  /* History */
   histHeader: {
     flexDirection: "row", alignItems: "center",
     justifyContent: "space-between",
@@ -1732,13 +1971,11 @@ const styles = StyleSheet.create({
     width: 42, height: 42, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
-  histTitle_: { fontFamily: "Inter_600SemiBold", fontSize: 13.5 },
   histMeta: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 2 },
   histAmount: { fontFamily: "Inter_700Bold", fontSize: 13.5 },
   histBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   histBadgeText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.2 },
 
-  /* Empty */
   emptyHistory: {
     borderRadius: 16, borderWidth: 1, padding: 28,
     alignItems: "center", gap: 12,
@@ -1750,7 +1987,6 @@ const styles = StyleSheet.create({
   emptyTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14.5, textAlign: "center" },
   emptyText: { fontFamily: "Inter_400Regular", fontSize: 12.5, textAlign: "center", lineHeight: 18 },
 
-  /* Modal */
   modalOverlay: { flex: 1, backgroundColor: "rgba(10,28,58,0.55)", justifyContent: "flex-end" },
   modalSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: "88%", paddingTop: 8 },
   modalGrabber: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(128,128,128,0.3)", marginBottom: 6 },
@@ -1765,7 +2001,6 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
 
-  /* Transfer */
   transferInfoBox: {
     flexDirection: "row", alignItems: "center", gap: 10,
     borderRadius: 12, padding: 12, borderWidth: 1,
@@ -1792,7 +2027,6 @@ const styles = StyleSheet.create({
   },
   transferConfirmText: { fontFamily: "Inter_700Bold", fontSize: 14.5, letterSpacing: 0.1 },
 
-  /* Withdraw */
   withdrawInfo: {
     flexDirection: "row", alignItems: "center", gap: 12,
     borderRadius: 14, padding: 14, borderWidth: 1,
@@ -1814,7 +2048,6 @@ const styles = StyleSheet.create({
   withdrawSubmitText: { fontFamily: "Inter_700Bold", fontSize: 14.5, color: "#fff", letterSpacing: 0.1 },
   withdrawHint: { fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center", lineHeight: 16 },
 
-  /* Search + Country options */
   searchBar: {
     flexDirection: "row", alignItems: "center", gap: 10,
     borderWidth: 1, borderRadius: 12,
@@ -1830,7 +2063,6 @@ const styles = StyleSheet.create({
   countryOptionName: { fontFamily: "Inter_600SemiBold", fontSize: 14.5 },
   countryOptionSub: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 2 },
 
-  /* Polling */
   pollingOverlay: {
     flex: 1, backgroundColor: "rgba(10,28,58,0.65)",
     alignItems: "center", justifyContent: "center", padding: 30,

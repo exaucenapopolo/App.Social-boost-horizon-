@@ -23,6 +23,7 @@ const FAPSHI_SECRET = process.env.FAPSHI_SECRET_KEY  ?? "";
 const FAPSHI_BASE   = "https://live.fapshi.com";
 const INTL_PAYMENT_BACKEND = "https://social-boost-exaucenapopolo2.replit.app";
 const ADMIN_WHATSAPP = "+237699853665";
+const ACCOUNTPE_BASE = "https://api.accountpe.com/api/payin";
 
 const router: ReturnType<typeof Router> = Router();
 
@@ -44,6 +45,70 @@ setInterval(() => {
     if (now - e.ts > WALLET_CACHE_MS) walletActivCache.delete(uid);
   }
 }, 10 * 60_000);
+
+// ─────────────────────────────────────────────────────────────
+// AccountPe / Swychr — helpers d'authentification et vérification
+// ─────────────────────────────────────────────────────────────
+async function accountPeAuth(): Promise<string | null> {
+  const email = process.env.ACCOUNTPE_USERNAME ?? "";
+  const password = process.env.ACCOUNTPE_PASSWORD ?? "";
+  if (!email || !password) {
+    console.warn("[accountpe] ACCOUNTPE_USERNAME / ACCOUNTPE_PASSWORD manquants");
+    return null;
+  }
+  try {
+    const r = await fetch(`${ACCOUNTPE_BASE}/admin/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) {
+      console.error("[accountpe] auth HTTP", r.status, await r.text().catch(() => ""));
+      return null;
+    }
+    const data = (await r.json()) as Record<string, unknown>;
+    return typeof data.token === "string" ? data.token : null;
+  } catch (e: any) {
+    console.error("[accountpe] auth exception:", e?.message);
+    return null;
+  }
+}
+
+async function accountPeVerify(transId: string): Promise<{
+  status: string;
+  transactionId: string;
+  amount: number;
+  currency: string;
+} | null> {
+  const token = await accountPeAuth();
+  if (!token) return null;
+  try {
+    const r = await fetch(`${ACCOUNTPE_BASE}/payment_link_status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ transaction_id: transId }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) return null;
+    const raw = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    const attrs = ((raw.data as any)?.data?.attributes
+      ?? (raw.data as any)?.attributes
+      ?? raw) as Record<string, unknown>;
+    return {
+      status: String(attrs?.status ?? "").toLowerCase().trim(),
+      transactionId: String(attrs?.transaction_id ?? transId),
+      amount: Number(attrs?.amount ?? 0),
+      currency: String(attrs?.currency ?? "").toUpperCase(),
+    };
+  } catch (e: any) {
+    console.warn("[accountpe] verify exception:", e?.message);
+    return null;
+  }
+}
 
 async function logActivity(
   uid: string,
@@ -263,6 +328,7 @@ router.get("/wallet/activities", requireAuth, async (req: AuthRequest, res: Expr
     activites = actSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
     recharges = rechSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
   } catch {
+    // Fallback silencieux ci-dessous
   }
 
   if (activites.length === 0 || recharges.length === 0) {
@@ -333,7 +399,7 @@ router.post("/wallet/recharge", requireAuth, async (req: AuthRequest, res: Expre
   if (txId) {
     try {
       const r: any = await fetch(`${FAPSHI_BASE}/payment-status/${txId}`, {
-        headers: { "apiuser": FAPSHI_USER, "apikey": FAPSHI_SECRET },
+        headers: { apiuser: FAPSHI_USER, apikey: FAPSHI_SECRET },
         signal: AbortSignal.timeout(10000),
       });
       if (r.ok) {
@@ -429,7 +495,7 @@ router.post("/wallet/fapshi-confirm", requireAuth, async (req: AuthRequest, res:
 
   try {
     const r: any = await fetch(`${FAPSHI_BASE}/payment-status/${transId}`, {
-      headers: { "apiuser": FAPSHI_USER, "apikey": FAPSHI_SECRET },
+      headers: { apiuser: FAPSHI_USER, apikey: FAPSHI_SECRET },
       signal: AbortSignal.timeout(10000),
     });
     if (!r.ok) {
@@ -876,7 +942,7 @@ router.post("/wallet/withdraw", requireAuth, async (req: AuthRequest, res: Expre
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(swychrPayload),
       signal: AbortSignal.timeout(20000),
-    }).catch((e) => console.warn("[withdraw] SwychrConnect payout error:", e));
+    }).catch((e) => console.warn("[withdraw] payout error:", e));
 
     const feeInfo = fee > 0 ? `\n💳 Frais: ${fee} FCFA (depuis ${feeSource === "main" ? "solde principal" : "solde retrait"})` : "";
     const adminMsg =
@@ -910,35 +976,59 @@ router.post("/wallet/withdraw", requireAuth, async (req: AuthRequest, res: Expre
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// CORRECTIF : /wallet/record-pending-recharge
+// ─────────────────────────────────────────────────────────────
+// AVANT : catch {} + res.json({ success: true }) → masquait toute
+//         erreur d'écriture Firestore, la recharge n'était pas
+//         réellement enregistrée mais le client pensait que oui.
+// APRÈS :  toute erreur remonte au client avec status 500.
+//         Idempotent (si le doc existe déjà, on ne le recrée pas).
+// ═══════════════════════════════════════════════════════════════
 router.post("/wallet/record-pending-recharge", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const { transId, amount, method, phone } = req.body ?? {};
   if (!amount || Number(amount) < 1) {
     res.status(400).json({ success: false, error: "amount requis" });
     return;
   }
+  const tid = String(transId ?? "").trim();
+  if (!tid) {
+    res.status(400).json({ success: false, error: "transId requis" });
+    return;
+  }
+
   try {
     getFirebaseAdmin();
     const db = getFirestore();
     const userDoc = await db.doc(`users/${req.uid!}`).get();
+    if (!userDoc.exists) {
+      res.status(404).json({ success: false, error: "Utilisateur introuvable" });
+      return;
+    }
     const balanceBefore = Number(userDoc.data()?.balance ?? 0);
 
-    const tid = transId ?? "";
-
-    if (tid) {
-      await db.collection("rechargements").doc(`swychr_${tid}`).set({
-        amount:        Number(amount),
-        method:        method ?? "Mobile Money International",
-        phone:         phone ?? "",
-        transId:       tid,
-        transactionId: tid,
-        status:        "pending",
-        userId:        req.uid!,
-        balanceBefore,
-        createdAt:     new Date().toISOString(),
-        depositNotifSent:  false,
-        referralProcessed: false,
-      }, { merge: false });
+    // Idempotent : si le doc existe déjà (même transId), on ne le recrée pas.
+    const rechargeRef = db.collection("rechargements").doc(`swychr_${tid}`);
+    const existing = await rechargeRef.get();
+    if (existing.exists) {
+      res.json({ success: true, alreadyExists: true });
+      return;
     }
+
+    await rechargeRef.set({
+      amount: Number(amount),
+      method: method ?? "Mobile Money International",
+      phone: phone ?? "",
+      transId: tid,
+      transactionId: tid,
+      status: "pending",
+      provider: "swychr",
+      userId: req.uid!,
+      balanceBefore,
+      createdAt: new Date().toISOString(),
+      referralProcessed: false,
+      depositNotifSent: false,
+    });
 
     await logActivity(
       req.uid!,
@@ -949,154 +1039,168 @@ router.post("/wallet/record-pending-recharge", requireAuth, async (req: AuthRequ
       "pending",
       { transId: tid, phone: phone ?? "" }
     );
+
     res.json({ success: true });
-  } catch {
-    res.json({ success: true });
+  } catch (e: any) {
+    console.error("[record-pending-recharge] erreur:", e);
+    // On ne masque PLUS l'erreur : le client doit savoir.
+    res.status(500).json({ success: false, error: e?.message ?? "Erreur d'enregistrement" });
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// CORRECTIF : /webhook/swychr
+// ─────────────────────────────────────────────────────────────
+// AVANT : se fiait au delta de solde (balanceIncrease >= amount-1).
+//         Aucune vérification auprès du prestataire, crédit non
+//         idempotent (double crédit possible via retry).
+// APRÈS :  vérifie le statut réel auprès d'AccountPe avant tout
+//         crédit. Le crédit est fait dans une transaction Firestore
+//         atomique + idempotente (flag processed).
+//         En cas de doute (auth KO, HTTP KO), on répond "deferred"
+//         et on ne crédite PAS.
+// ═══════════════════════════════════════════════════════════════
+const SWYCHR_SUCCESS = ["1", "success", "completed", "terminé", "succès", "reussi", "successful", "paid", "ok"];
+const SWYCHR_FAILED  = ["-1", "2", "failed", "echec", "annulé", "cancelled", "rejected", "error"];
 
 router.post("/webhook/swychr", async (req: Request, res: ExpressResponse) => {
   try {
     const { userId, amount: rawAmount, transId, phone, method, status: extStatus } = req.body ?? {};
 
-    if (!userId || !transId) {
-      res.status(400).json({ success: false, error: "userId et transId requis" });
+    if (!transId) {
+      res.status(400).json({ success: false, error: "transId requis" });
+      return;
+    }
+    const tid = String(transId);
+
+    // 1) Vérification auprès d'AccountPe (source de vérité)
+    const verify = await accountPeVerify(tid);
+    if (!verify) {
+      // Impossible de vérifier maintenant → on ne crédite pas.
+      console.warn(`[webhook/swychr] Vérification AccountPe impossible pour ${tid}`);
+      res.status(202).json({ success: true, deferred: true });
       return;
     }
 
-    const confirmedStatuses = ["confirmed", "success", "SUCCESSFUL", "PAID", "paid", "completed"];
-    if (extStatus && !confirmedStatuses.includes(String(extStatus))) {
-      res.json({ success: false, message: `Statut non confirmé: ${extStatus}` });
-      return;
-    }
+    const providerStatus = verify.status;
+    const providerTxId   = verify.transactionId;
 
-    const amount = Number(rawAmount ?? 0);
-    if (amount <= 0) {
-      res.status(400).json({ success: false, error: "Montant invalide" });
+    // 2) Contrôle transId renvoyé par le prestataire
+    if (providerTxId && providerTxId !== tid) {
+      console.error(`[webhook/swychr] Mismatch transId: reçu=${tid} prestataire=${providerTxId}`);
+      res.status(400).json({ success: false, error: "transaction_id mismatch" });
       return;
     }
 
     getFirebaseAdmin();
     const db = getFirestore();
+    const rechargeRef = db.collection("rechargements").doc(`swychr_${tid}`);
 
-    const rechargeRef = db.collection("rechargements").doc(`swychr_${transId}`);
-
-    let alreadyConfirmed = false;
-    let userName = "";
-    let createdAt = new Date().toISOString();
-    let debtRepaidSwychr = 0;
-    let swychrUnblocked = false;
-
-    await db.runTransaction(async (t: Transaction) => {
-      const existing = await t.get(rechargeRef);
-      if (existing.exists && (existing.data()?.status === "confirmed" || existing.data()?.processed === true)) {
-        alreadyConfirmed = true;
-        return;
-      }
-
-      const userRef = db.doc(`users/${userId}`);
-      const userDoc = await t.get(userRef);
-      if (!userDoc.exists) throw Object.assign(new Error("Utilisateur introuvable"), { code: 404 });
-
-      const userData    = userDoc.data()!;
-      const currentBal  = asNumber(userData.balance);
-      const balanceBefore = asNumber(existing.data()?.balanceBefore ?? currentBal - amount);
-      userName = String(userData.name ?? "").split(" ")[0] || "";
-      createdAt = asIsoDate(existing.data()?.createdAt) ?? new Date().toISOString();
-
-      const balanceIncrease = currentBal - balanceBefore;
-      const paymentVerified = balanceIncrease >= (amount - 1);
-
-      if (!paymentVerified && !existing.exists) {
-        console.warn(`[webhook/swychr] ⚠️ Solde non crédité pour ${transId} — attendu +${amount} FCFA, delta: ${balanceIncrease}`);
-        t.set(rechargeRef, {
-          amount,
-          method:        method ?? "Mobile Money International",
-          phone:         phone ?? "",
-          transId,
-          transactionId: transId,
-          status:        "pending",
-          userId,
-          createdAt,
-          balanceBefore: currentBal,
-          depositNotifSent:  false,
-          referralProcessed: false,
-        }, { merge: true });
-        alreadyConfirmed = true;
-        return;
-      }
-
-      const frozenDebt = asNumber(userData.frozenDebt ?? 0);
-      const isBlocked  = !!userData.blocked;
-      const swychrUpdates: Record<string, unknown> = {};
-
-      if (frozenDebt > 0) {
-        const repayable = Math.min(amount, frozenDebt);
-        debtRepaidSwychr = repayable;
-        swychrUpdates.balance    = currentBal - repayable;
-        swychrUpdates.frozenDebt = frozenDebt - repayable;
-        if (frozenDebt <= amount && isBlocked) {
-          swychrUpdates.blocked    = false;
-          swychrUpdates.blockedAt  = null;
-          swychrUnblocked = true;
+    // 3) Statut non-succès : on marque "failed" éventuellement, jamais on crédite
+    if (!SWYCHR_SUCCESS.includes(providerStatus)) {
+      if (SWYCHR_FAILED.includes(providerStatus)) {
+        const snap = await rechargeRef.get();
+        if (snap.exists && snap.data()?.status === "pending") {
+          await rechargeRef.update({
+            status: "failed",
+            failureReason: providerStatus,
+            updatedAt: new Date().toISOString(),
+          });
         }
-        t.update(userRef, swychrUpdates);
       }
-
-      t.set(rechargeRef, {
-        amount,
-        method:           method ?? "Mobile Money International",
-        phone:            phone ?? "",
-        transId,
-        transactionId:    transId,
-        status:           "confirmed",
-        userId,
-        createdAt,
-        depositNotifSent:  false,
-        referralProcessed: false,
-        debtRepaid:        debtRepaidSwychr > 0 ? debtRepaidSwychr : undefined,
-        processed:         true,
-        processedAt:       new Date().toISOString(),
-      }, { merge: true });
-
-      t.set(db.collection("activites").doc(), {
-        userId,
-        type:      "depot",
-        label:     "Dépôt international confirmé",
-        amount,
-        status:    "confirmed",
-        transId,
-        createdAt: new Date().toISOString(),
-      });
-    });
-
-    if (alreadyConfirmed) {
-      res.json({ success: true, message: "Déjà traité" });
+      // Statut "pending" ou inconnu : on répond sans créditer
+      res.json({ success: true, status: providerStatus, credited: false });
       return;
     }
 
-    const greeting = userName ? `, ${userName}` : "";
-    let swychrPushTitle = "💰 Rechargement confirmé !";
-    let swychrPushBody  = `${amount.toLocaleString("fr-FR")} FCFA ont bien été crédités sur votre solde${greeting}. Vous pouvez maintenant passer vos commandes.`;
-    if (debtRepaidSwychr > 0 && swychrUnblocked) {
-      swychrPushTitle = "✅ Compte débloqué !";
-      swychrPushBody  = `Votre dette de ${debtRepaidSwychr.toLocaleString("fr-FR")} FCFA a été remboursée${greeting}. Votre compte est maintenant débloqué. Bonne continuation !`;
-    } else if (debtRepaidSwychr > 0) {
-      swychrPushTitle = "📉 Remboursement partiel de dette";
-      swychrPushBody  = `${debtRepaidSwychr.toLocaleString("fr-FR")} FCFA de votre recharge ont été appliqués à votre dette${greeting}.`;
+    // 4) Succès confirmé : crédit idempotent en transaction
+    let alreadyCredited = false;
+    let creditedAmount = 0;
+    let newBalance = 0;
+    let firstName = "";
+    let finalUserId = String(userId ?? "");
+
+    // Contrôle montant : on croit ce qui est STOCKÉ, pas ce qui est reçu
+    await db.runTransaction(async (t: Transaction) => {
+      const rechargeDoc = await t.get(rechargeRef);
+      if (!rechargeDoc.exists) {
+        throw Object.assign(new Error("Recharge inconnue"), { code: 404 });
+      }
+      const rdata = rechargeDoc.data() ?? {};
+
+      if (rdata.status === "confirmed" || rdata.processed === true) {
+        alreadyCredited = true;
+        creditedAmount = Number(rdata.amount ?? 0);
+        return;
+      }
+
+      // On utilise le userId stocké côté serveur (source de vérité)
+      finalUserId = String(rdata.userId ?? finalUserId ?? "");
+      if (!finalUserId) throw new Error("userId manquant dans la recharge");
+
+      // Contrôle montant : le montant déclaré par le webhook doit correspondre
+      const declaredAmount = Number(rawAmount ?? 0);
+      const storedAmount   = Number(rdata.amount ?? 0);
+      if (declaredAmount > 0 && storedAmount > 0 && Math.abs(declaredAmount - storedAmount) > 1) {
+        throw new Error(`Montant incohérent (webhook=${declaredAmount}, stocké=${storedAmount})`);
+      }
+
+      const realUserRef = db.doc(`users/${finalUserId}`);
+      const userDoc = await t.get(realUserRef);
+      if (!userDoc.exists) throw new Error("Utilisateur introuvable");
+      const udata = userDoc.data() ?? {};
+      firstName = String(udata.name ?? "").split(" ")[0] || "";
+      const currentBal = Number(udata.balance ?? 0);
+      creditedAmount = storedAmount;
+      if (creditedAmount <= 0) throw new Error("Montant invalide");
+      newBalance = currentBal + creditedAmount;
+
+      t.update(realUserRef, { balance: newBalance });
+      t.update(rechargeRef, {
+        status: "confirmed",
+        processed: true,
+        processedAt: new Date().toISOString(),
+        depositNotifSent: true,
+      });
+    });
+
+    if (alreadyCredited) {
+      res.json({ success: true, alreadyConfirmed: true });
+      return;
     }
-    getUserPushToken(userId).then((token) =>
-      sendExpoPush(token, swychrPushTitle, swychrPushBody, { screen: "wallet" }, "wallet")
-    ).catch(() => {});
 
-    await rechargeRef.update({ depositNotifSent: true }).catch(() => {});
+    // 5) Activités + push
+    try {
+      await db.collection("activites").add({
+        userId: finalUserId,
+        type: "depot",
+        label: "Dépôt international confirmé",
+        amount: creditedAmount,
+        status: "confirmed",
+        transId: tid,
+        createdAt: new Date().toISOString(),
+      });
 
-    invalidateWalletCache(userId);
+      const greeting = firstName ? `, ${firstName}` : "";
+      const pushToken = await getUserPushToken(finalUserId);
+      await sendExpoPush(
+        pushToken,
+        "💰 Rechargement confirmé !",
+        `${creditedAmount.toLocaleString("fr-FR")} FCFA ont bien été crédités sur votre solde${greeting}.`,
+        { screen: "wallet" },
+        "wallet"
+      );
+    } catch (e: any) {
+      console.warn("[webhook/swychr] post-credit:", e?.message);
+    }
 
-    console.log(`[webhook/swychr] ✅ Paiement ${transId} confirmé pour ${userId} (${amount} FCFA${debtRepaidSwychr > 0 ? `, dette remboursée: ${debtRepaidSwychr}` : ""})`);
-    res.json({ success: true, credited: amount });
+    invalidateWalletCache(finalUserId);
+
+    console.log(`[webhook/swychr] ✅ ${tid} confirmé (+${creditedAmount} FCFA pour ${finalUserId})`);
+    res.json({ success: true, credited: creditedAmount });
   } catch (e: any) {
-    res.status(500).json({ success: false, error: e?.message });
+    console.error("[webhook/swychr] erreur:", e);
+    res.status(500).json({ success: false, error: e?.message ?? "Erreur interne" });
   }
 });
 

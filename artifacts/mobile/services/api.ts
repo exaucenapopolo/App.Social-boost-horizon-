@@ -5,7 +5,6 @@ const _rawBaseUrl: string =
   (process.env.EXPO_PUBLIC_DOMAIN
     ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
     : "");
-// Always ensure BASE_URL ends with "/" so that `${BASE_URL}api/...` produces a valid URL
 export const BASE_URL: string = _rawBaseUrl.endsWith("/") ? _rawBaseUrl : _rawBaseUrl + "/";
 
 export interface ApiResponse<T> {
@@ -88,6 +87,53 @@ export interface WalletData {
   recharges: RemoteRecharge[];
 }
 
+// ─────────────────────────────────────────────────────────────
+// Paiements internationaux
+// ─────────────────────────────────────────────────────────────
+
+export interface IntlPaymentPayload {
+  amount: number;         // montant local entier
+  amountXAF: number;      // équivalent FCFA (source de vérité)
+  currency: string;       // devise locale (ex: "XOF", "GHS")
+  country: string;        // code ISO2 (ex: "CM", "SN")
+  phone: string;          // numéro Mobile Money
+  username?: string;
+  email?: string;
+}
+
+export interface IntlPaymentResponse {
+  success: boolean;
+  checkoutUrl?: string;
+  transId?: string;
+  transactionId?: string;
+  amount?: number;
+  currency?: string;
+  error?: string;
+}
+
+export interface NelsiusCheckoutPayload {
+  amount: number;         // montant local entier
+  currency: string;       // devise locale (ex: "EUR", "USD", "XAF")
+}
+
+export interface NelsiusCheckoutResponse {
+  success: boolean;
+  checkoutUrl?: string;
+  reference?: string;
+  creditedAmountXAF?: number;
+  requestedAmount?: number;
+  requestedCurrency?: string;
+  error?: string;
+}
+
+export interface NelsiusStatusResponse {
+  success: boolean;
+  status?: "CONFIRMED" | "PENDING" | "FAILED";
+  creditedAmountXAF?: number;
+  newBalance?: number;
+  error?: string;
+}
+
 async function authedRequest<T>(
   path: string,
   options?: RequestInit
@@ -102,14 +148,39 @@ async function authedRequest<T>(
       Authorization: `Bearer ${token}`,
       ...(options?.headers as Record<string, string> | undefined),
     };
-    // Strip leading slash from path to avoid double-slash when BASE_URL ends with "/"
     const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
     const res = await fetch(`${BASE_URL}${normalizedPath}`, {
       ...options,
       headers,
     });
-    const json = (await res.json()) as ApiResponse<T>;
+    let json: ApiResponse<T>;
+    try {
+      json = (await res.json()) as ApiResponse<T>;
+    } catch {
+      return { success: false, error: `Réponse serveur invalide (HTTP ${res.status})` };
+    }
     return json;
+  } catch {
+    return { success: false, error: "Réseau indisponible" };
+  }
+}
+
+// Requête sans wrapper ApiResponse (pour create-payment qui renvoie
+// un format légèrement différent)
+async function authedRaw<T>(path: string, options?: RequestInit): Promise<T | { success: false; error: string }> {
+  try {
+    const token = await getFreshToken();
+    if (!token) return { success: false, error: "Non authentifié" };
+    const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+    const res = await fetch(`${BASE_URL}${normalizedPath}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(options?.headers as Record<string, string> | undefined),
+      },
+    });
+    return (await res.json()) as T;
   } catch {
     return { success: false, error: "Réseau indisponible" };
   }
@@ -168,15 +239,53 @@ export const apiClient = {
         body: JSON.stringify({ target }),
       }),
     activities: () => authedRequest<any[]>("/api/wallet/activities"),
+
     fapshiConfirm: (transId: string, amount: number) =>
-      authedRequest<{ credited?: number; newBalance?: number }>("/api/wallet/fapshi-confirm", {
-        method: "POST",
-        body: JSON.stringify({ transId, amount }),
-      }),
-    withdraw: (payload: { amount: number; phone: string; country: string; countryName: string; method: string; feeSource?: "main" | "withdrawal" }) =>
-      authedRequest<{ newWithdrawalBalance?: number; fee?: number }>("/api/wallet/withdraw", {
+      authedRequest<{ credited?: number; newBalance?: number }>(
+        "/api/wallet/fapshi-confirm",
+        { method: "POST", body: JSON.stringify({ transId, amount }) }
+      ),
+
+    withdraw: (payload: {
+      amount: number;
+      phone: string;
+      country: string;
+      countryName: string;
+      method: string;
+      feeSource?: "main" | "withdrawal";
+    }) =>
+      authedRequest<{ newWithdrawalBalance?: number; fee?: number }>(
+        "/api/wallet/withdraw",
+        { method: "POST", body: JSON.stringify(payload) }
+      ),
+
+    /**
+     * Créer un paiement Mobile Money international (AccountPe/Swychr).
+     * Le serveur utilise l'uid extrait du Bearer Firebase — pas besoin de l'envoyer.
+     */
+    createIntlPayment: (payload: IntlPaymentPayload) =>
+      authedRaw<IntlPaymentResponse>("/api/create-payment", {
         method: "POST",
         body: JSON.stringify(payload),
+      }),
+
+    /**
+     * Créer un checkout NelsiusPay (carte bancaire Visa/Mastercard).
+     */
+    nelsiuspayCheckout: (payload: NelsiusCheckoutPayload) =>
+      authedRaw<NelsiusCheckoutResponse>("/api/nelsiuspay/checkout", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    /**
+     * Vérifier le statut d'une transaction NelsiusPay.
+     * Idempotent côté serveur — peut être appelé plusieurs fois.
+     */
+    nelsiuspayStatus: (reference: string) =>
+      authedRaw<NelsiusStatusResponse>("/api/nelsiuspay/status", {
+        method: "POST",
+        body: JSON.stringify({ reference }),
       }),
   },
 
