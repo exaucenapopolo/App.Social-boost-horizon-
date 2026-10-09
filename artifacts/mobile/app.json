@@ -48,7 +48,7 @@
   "typedRoutes": true,
   "reactCompiler": false,
   "autolinkingModuleResolution": true
-   }
+   },
 
     "extra": {
       "router": {
