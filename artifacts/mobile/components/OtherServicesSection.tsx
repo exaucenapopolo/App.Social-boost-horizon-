@@ -25,20 +25,18 @@ import { COUNTRIES, formatCurrency } from "@/lib/countries";
 import { BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 
-// ─── Palette identique à login.tsx ───
+// ─── Palette identique login ───
 const NAVY        = "#0F2A5C";
 const NAVY_LIGHT  = "#1E3F7A";
 const GOLD        = "#C9A961";
 const GOLD_DK     = "#B08D4A";
 const GOLD_SOFT   = "#F7F1E1";
-const BG          = "#FAF9F6";
 const SURFACE     = "#FFFFFF";
 const TEXT        = "#0F172A";
 const TEXT_MUTED  = "#64748B";
 const TEXT_SOFT   = "#94A3B8";
 const BORDER      = "#E8E4DA";
 const SUCCESS     = "#10B981";
-const GOLD_BORDER = "#EDE6D5";
 
 const D_SURFACE    = "#0F2A5C";
 const D_BORDER     = "rgba(201,169,97,0.14)";
@@ -109,7 +107,6 @@ const TIKTOK_COUNTRIES = [
 
 const BADGE_PLATFORMS = ["Facebook", "Instagram", "TikTok", "YouTube", "Twitter/X"];
 
-// ─── Services externes mis en avant ───
 const FEATURED_EXTERNAL = [
   {
     id: "foreign-number",
@@ -173,14 +170,12 @@ async function postServiceRequest(
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
-        serviceType,
-        fields,
+        serviceType, fields,
         whatsappCountryCode: waCode,
         whatsappPhone: waPhone,
       }),
     });
-    const json = await res.json();
-    return json;
+    return await res.json();
   } catch (e: any) {
     console.error("[service-request] erreur réseau:", e?.message ?? e);
     return { success: false, error: "Erreur réseau. Vérifiez votre connexion." };
@@ -335,21 +330,16 @@ function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) 
       </View>
       <Text
         style={{
-          fontFamily: "Inter_700Bold",
-          fontSize: 20,
-          color: theme.text,
-          textAlign: "center",
+          fontFamily: "Inter_700Bold", fontSize: 20,
+          color: theme.text, textAlign: "center",
         }}
       >
         Demande envoyée
       </Text>
       <Text
         style={{
-          fontFamily: "Inter_400Regular",
-          fontSize: 14,
-          color: theme.textMuted,
-          textAlign: "center",
-          lineHeight: 21,
+          fontFamily: "Inter_400Regular", fontSize: 14,
+          color: theme.textMuted, textAlign: "center", lineHeight: 21,
         }}
       >
         Notre équipe vous contactera sur WhatsApp très prochainement pour finaliser votre commande.
@@ -381,37 +371,14 @@ function WaField({
       </Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <TextInput
-          style={[
-            ms.input,
-            {
-              width: 72,
-              color: theme.text,
-              backgroundColor: theme.inputBg,
-              borderColor: theme.inputBorder,
-              textAlign: "center",
-            },
-          ]}
-          value={waCode}
-          onChangeText={setWaCode}
-          keyboardType="phone-pad"
-          placeholder="+237"
-          placeholderTextColor={theme.textMuted}
+          style={[ms.input, { width: 72, color: theme.text, backgroundColor: theme.inputBg, borderColor: theme.inputBorder, textAlign: "center" }]}
+          value={waCode} onChangeText={setWaCode} keyboardType="phone-pad"
+          placeholder="+237" placeholderTextColor={theme.textMuted}
         />
         <TextInput
-          style={[
-            ms.input,
-            {
-              flex: 1,
-              color: theme.text,
-              backgroundColor: theme.inputBg,
-              borderColor: theme.inputBorder,
-            },
-          ]}
-          value={waPhone}
-          onChangeText={setWaPhone}
-          keyboardType="phone-pad"
-          placeholder="6XX XXX XXX"
-          placeholderTextColor={theme.textMuted}
+          style={[ms.input, { flex: 1, color: theme.text, backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+          value={waPhone} onChangeText={setWaPhone} keyboardType="phone-pad"
+          placeholder="6XX XXX XXX" placeholderTextColor={theme.textMuted}
         />
       </View>
     </View>
@@ -448,7 +415,6 @@ function SubmitButton({
   );
 }
 
-// ─── Modal explicatif ───
 function ServiceInfoModal({
   visible, onClose, service, theme,
 }: {
@@ -458,7 +424,6 @@ function ServiceInfoModal({
   theme: any;
 }) {
   if (!service) return null;
-
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={ms.infoOverlay}>
@@ -497,12 +462,8 @@ function ServiceInfoModal({
                 </View>
                 <Text
                   style={{
-                    flex: 1,
-                    fontFamily: "Inter_400Regular",
-                    fontSize: 13,
-                    color: theme.textSecondary,
-                    lineHeight: 19,
-                    marginTop: 2,
+                    flex: 1, fontFamily: "Inter_400Regular", fontSize: 13,
+                    color: theme.textSecondary, lineHeight: 19, marginTop: 2,
                   }}
                 >
                   {b}
@@ -513,10 +474,7 @@ function ServiceInfoModal({
 
           <Pressable
             style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9 }]}
-            onPress={() => {
-              onClose();
-              Linking.openURL(service.url);
-            }}
+            onPress={() => { onClose(); Linking.openURL(service.url); }}
           >
             <LinearGradient
               colors={[NAVY_LIGHT, NAVY]}
@@ -578,21 +536,14 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-      }
-    } catch {
-      Alert.alert("Erreur", "Vérifiez votre connexion internet.");
-    } finally {
-      setLoading(false);
-    }
+      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
+    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
+    finally { setLoading(false); }
   };
 
   return (
     <ModalShell visible={visible} onClose={handleClose} title="Site web sur mesure" icon="globe" theme={theme}>
-      {success ? (
-        <SuccessScreen onClose={handleClose} theme={theme} />
-      ) : (
+      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
             Nous créons votre site web professionnel depuis 2021. Plus de 50 sites réalisés dans 15 pays.
@@ -610,8 +561,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
 
           {showPortfolio && (
             <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
+              horizontal showsHorizontalScrollIndicator={false}
               style={{ marginHorizontal: -18 }}
               contentContainerStyle={{ paddingHorizontal: 18, gap: 10 }}
             >
@@ -670,13 +620,9 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
                 ]}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>
-                    {t.label}
-                  </Text>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>{t.label}</Text>
                 </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>
-                  {priceFmt(t.fcfa)}
-                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>{priceFmt(t.fcfa)}</Text>
                 {siteType.label === t.label && (
                   <Feather name="check-circle" size={16} color={theme.accent} style={{ marginLeft: 6 }} />
                 )}
@@ -738,21 +684,14 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-      }
-    } catch {
-      Alert.alert("Erreur", "Vérifiez votre connexion internet.");
-    } finally {
-      setLoading(false);
-    }
+      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
+    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
+    finally { setLoading(false); }
   };
 
   return (
     <ModalShell visible={visible} onClose={handleClose} title="Application mobile" icon="smartphone" theme={theme}>
-      {success ? (
-        <SuccessScreen onClose={handleClose} theme={theme} />
-      ) : (
+      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
             Développons votre application mobile Android / iOS avec support 3 mois inclus.
@@ -789,13 +728,9 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                 ]}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>
-                    {p.label}
-                  </Text>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>{p.label}</Text>
                 </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>
-                  {priceFmt(p.fcfa)}
-                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>{priceFmt(p.fcfa)}</Text>
                 {pkg.label === p.label && (
                   <Feather name="check-circle" size={16} color={theme.accent} style={{ marginLeft: 6 }} />
                 )}
@@ -846,29 +781,21 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-      }
-    } catch {
-      Alert.alert("Erreur", "Vérifiez votre connexion internet.");
-    } finally {
-      setLoading(false);
-    }
+      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
+    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
+    finally { setLoading(false); }
   };
 
   return (
     <ModalShell visible={visible} onClose={handleClose} title="Campagne publicitaire" icon="radio" theme={theme}>
-      {success ? (
-        <SuccessScreen onClose={handleClose} theme={theme} />
-      ) : (
+      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
             Boostez votre visibilité avec nos campagnes Facebook et Instagram ciblées.
           </Text>
 
           <TagRow
-            label="Réseau *"
-            value={adPlatform}
+            label="Réseau *" value={adPlatform}
             options={["Facebook", "Instagram"]}
             onSelect={(v) => setAdPlatform(v as any)}
             theme={theme}
@@ -891,13 +818,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                     },
                   ]}
                 >
-                  <Text
-                    style={{
-                      fontFamily: "Inter_600SemiBold",
-                      fontSize: 12,
-                      color: duration.label === d.label ? theme.accent : theme.text,
-                    }}
-                  >
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: duration.label === d.label ? theme.accent : theme.text }}>
                     {d.label}
                   </Text>
                   <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: theme.textMuted }}>
@@ -953,8 +874,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
   const submit = async () => {
     if (!waPhone.trim()) { Alert.alert("WhatsApp requis", "Entrez votre numéro WhatsApp."); return; }
     const allFields: Record<string, string> = {
-      Service: `${service.label} (${priceFmt(service.fcfa)})`,
-      ...fields,
+      Service: `${service.label} (${priceFmt(service.fcfa)})`, ...fields,
     };
     if (service.label === "Compte TikTok monétisable") allFields["Pays de création"] = tiktokCountry;
     if (service.label === "Badge vérifié") allFields["Plateforme"] = badgePlatform;
@@ -964,23 +884,16 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-      }
-    } catch {
-      Alert.alert("Erreur", "Vérifiez votre connexion internet.");
-    } finally {
-      setLoading(false);
-    }
+      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
+    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
+    finally { setLoading(false); }
   };
 
   const renderFields = () => {
     const n = service.label;
 
     if (n === "Canva Pro") {
-      return (
-        <FieldInput label="Votre adresse email *" value={fields.email ?? ""} onChange={(v) => setField("email", v)} placeholder="exemple@email.com" theme={theme} keyboardType="email-address" />
-      );
+      return <FieldInput label="Votre adresse email *" value={fields.email ?? ""} onChange={(v) => setField("email", v)} placeholder="exemple@email.com" theme={theme} keyboardType="email-address" />;
     }
 
     if (n === "Compte PayPal éligible") {
@@ -1115,9 +1028,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
 
   return (
     <ModalShell visible={visible} onClose={handleClose} title="Comptes et monétisation" icon="award" theme={theme}>
-      {success ? (
-        <SuccessScreen onClose={handleClose} theme={theme} />
-      ) : (
+      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
             Choisissez le service et remplissez les informations requises pour la création / livraison.
@@ -1142,9 +1053,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                 <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>
                   {svc.label}
                 </Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>
-                  {priceFmt(svc.fcfa)}
-                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>{priceFmt(svc.fcfa)}</Text>
                 {service.label === svc.label && (
                   <Feather name="check-circle" size={16} color={theme.accent} style={{ marginLeft: 6 }} />
                 )}
@@ -1172,7 +1081,8 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
 // ─── Composant principal ───
 export default function OtherServicesSection() {
   const { user } = useAuth();
-  const { isDark } = useTheme();
+  const { isDark: ctxIsDark } = useTheme();
+  const isDark = ctxIsDark === true;
 
   const theme = useMemo(() => ({
     text:          isDark ? D_TEXT        : TEXT,
@@ -1246,10 +1156,7 @@ export default function OtherServicesSection() {
             <Pressable
               style={ms.infoBtn}
               hitSlop={12}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                handleInfoTap(svc);
-              }}
+              onPress={(e) => { e.stopPropagation?.(); handleInfoTap(svc); }}
             >
               <Feather name="help-circle" size={16} color={theme.textMuted} />
             </Pressable>
@@ -1324,193 +1231,100 @@ const ms = StyleSheet.create({
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceCard: {
-    width: "47.8%",
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    gap: 8,
-    minHeight: 132,
-    position: "relative",
+    width: "47.8%", borderRadius: 16, borderWidth: 1,
+    padding: 14, gap: 8, minHeight: 132, position: "relative",
     shadowColor: NAVY,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
+    shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
   },
   serviceIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 42, height: 42, borderRadius: 12, borderWidth: 1,
+    alignItems: "center", justifyContent: "center",
   },
-  serviceLabel: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 13.5,
-    lineHeight: 18,
-    letterSpacing: 0.1,
-  },
+  serviceLabel: { fontFamily: "Inter_700Bold", fontSize: 13.5, lineHeight: 18, letterSpacing: 0.1 },
   serviceSub: { fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 15 },
   featuredBadge: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    zIndex: 2,
+    position: "absolute", top: 10, left: 10,
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, zIndex: 2,
   },
-  featuredBadgeText: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 9,
-    color: NAVY,
-    letterSpacing: 0.3,
-  },
+  featuredBadgeText: { fontFamily: "Inter_700Bold", fontSize: 9, color: NAVY, letterSpacing: 0.3 },
   infoBtn: { position: "absolute", top: 10, right: 10, zIndex: 2, padding: 2 },
 
   infoOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15,42,92,0.35)",
-    justifyContent: "center",
-    padding: 22,
+    flex: 1, backgroundColor: "rgba(15,42,92,0.35)",
+    justifyContent: "center", padding: 22,
   },
   infoCard: {
-    borderRadius: 20,
-    padding: 22,
-    gap: 16,
+    borderRadius: 20, padding: 22, gap: 16,
     shadowColor: NAVY,
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-    elevation: 12,
+    shadowOpacity: 0.22, shadowRadius: 24, elevation: 12,
   },
   infoHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   infoIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
+    width: 44, height: 44, borderRadius: 12,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
   infoTitle: { flex: 1, fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: 0.1 },
   infoDesc: { fontFamily: "Inter_400Regular", fontSize: 13.5, lineHeight: 20 },
   bulletDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    marginTop: 2,
+    width: 20, height: 20, borderRadius: 10,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, marginTop: 2,
   },
 
   overlay: { flex: 1, backgroundColor: "rgba(15,42,92,0.35)", justifyContent: "flex-end" },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: "94%",
-  },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "94%" },
   sheetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderBottomWidth: 1,
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", padding: 16, borderBottomWidth: 1,
   },
   sheetIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
   sheetTitle: { fontFamily: "Inter_700Bold", fontSize: 16, flex: 1 },
   closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: "center", justifyContent: "center",
   },
   input: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontFamily: "Inter_400Regular",
-    fontSize: 14,
+    borderRadius: 12, borderWidth: 1,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontFamily: "Inter_400Regular", fontSize: 14,
   },
-  tag: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
+  tag: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   radioRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
+    flexDirection: "row", alignItems: "center",
+    borderRadius: 12, borderWidth: 1, padding: 12,
   },
   durationTag: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    minWidth: "47%",
-    flex: 1,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
+    borderWidth: 1, alignItems: "center", minWidth: "47%", flex: 1,
   },
   priceBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 12,
-    flexWrap: "wrap",
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderRadius: 10, borderWidth: 1, padding: 12, flexWrap: "wrap",
   },
   submitBtn: { borderRadius: 12, overflow: "hidden" },
   submitGradient: {
-    height: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
+    height: 52, flexDirection: "row",
+    alignItems: "center", justifyContent: "center", gap: 10,
   },
   submitText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" },
   portfolioBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 10,
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderRadius: 10, borderWidth: 1, padding: 10,
   },
   portfolioCard: {
-    width: 130,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 10,
-    gap: 4,
+    width: 130, borderRadius: 12, borderWidth: 1, padding: 10, gap: 4,
   },
   portfolioBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginBottom: 4,
+    alignSelf: "flex-start", borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3, marginBottom: 4,
   },
   successIcon: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
+    width: 76, height: 76, borderRadius: 38,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
 });
