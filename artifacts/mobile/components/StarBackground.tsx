@@ -5,10 +5,10 @@ const { width, height } = Dimensions.get("screen");
 
 const NAVY = "#0F2A5C";
 const GOLD = "#C9A961";
-const BG   = "#FAF9F6";
+const WARM_BG = "#F7F5F0";
 
 // ─────────────────────────────────────────────────────────────
-//  Mode NUIT : ancien starfield (uniquement si dark = true)
+//  Mode NUIT : starfield (inchangé)
 // ─────────────────────────────────────────────────────────────
 const STAR_POSITIONS = [
   { x: 0.12, y: 0.08 }, { x: 0.28, y: 0.14 }, { x: 0.45, y: 0.06 },
@@ -70,35 +70,34 @@ function DarkLayer() {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Mode CLAIR (par défaut) : fond identique à la page de connexion
-//  (halos navy/or doux + points + anneaux fins)
+//  Mode CLAIR premium : base chaude, halos doux, hairlines fines
 // ─────────────────────────────────────────────────────────────
 function LightLayer() {
   return (
     <>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: BG }]} />
-      {/* Halos */}
-      <View style={ss.blobTopRight} />
-      <View style={ss.blobBottomLeft} />
-      <View style={ss.blobOffsetRight} />
-      <View style={ss.centerGlow} />
-      {/* Points */}
-      <View style={[ss.dot, ss.dot1]} />
-      <View style={[ss.dot, ss.dot2]} />
-      <View style={[ss.dot, ss.dot3]} />
-      <View style={[ss.dotGold, ss.dot4]} />
-      <View style={[ss.dotGold, ss.dot5]} />
-      {/* Anneaux */}
-      <View style={ss.ringGold} />
-      <View style={ss.ringNavy} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: WARM_BG }]} />
+
+      {/* Halos radiaux doux */}
+      <View style={ss.glowTopRight} />
+      <View style={ss.glowBottomLeft} />
+      <View style={ss.glowCenter} />
+
+      {/* Hairlines dorées et navy (élégance minimale) */}
+      <View style={[ss.hairlineGold, { top: 130, left: 34, width: 58 }]} />
+      <View style={[ss.hairlineGold, { top: "48%", right: 42, width: 46 }]} />
+      <View style={[ss.hairlineNavy, { bottom: 180, left: 48, width: 38 }]} />
+
+      {/* Points accent */}
+      <View style={[ss.dotNavy, { top: 190, left: 44, width: 5, height: 5, opacity: 0.20 }]} />
+      <View style={[ss.dotGold, { top: 360, right: 52, width: 6, height: 6, opacity: 0.28 }]} />
+      <View style={[ss.dotNavy, { bottom: 240, left: 40, width: 4, height: 4, opacity: 0.18 }]} />
+      <View style={[ss.dotGold, { bottom: 160, right: 44, width: 4, height: 4, opacity: 0.22 }]} />
     </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
 //  Composant public
-//  - Par défaut : fond CLAIR (identique login) — pour toutes les pages
-//  - dark = true : fond sombre (starfield) — utilisé par le toggle nuit
 // ─────────────────────────────────────────────────────────────
 export default function StarBackground({ dark = false }: { dark?: boolean }) {
   return (
@@ -109,44 +108,27 @@ export default function StarBackground({ dark = false }: { dark?: boolean }) {
 }
 
 const ss = StyleSheet.create({
-  /* Halos (identiques AuthBackground) */
-  blobTopRight: {
-    position: "absolute", top: -120, right: -110,
-    width: 300, height: 300, borderRadius: 150,
-    backgroundColor: NAVY, opacity: 0.05,
+  glowTopRight: {
+    position: "absolute", top: -140, right: -120,
+    width: 320, height: 320, borderRadius: 160,
+    backgroundColor: NAVY, opacity: 0.045,
   },
-  blobBottomLeft: {
-    position: "absolute", bottom: 20, left: -150,
+  glowBottomLeft: {
+    position: "absolute", bottom: -60, left: -140,
     width: 340, height: 340, borderRadius: 170,
     backgroundColor: GOLD, opacity: 0.07,
   },
-  blobOffsetRight: {
-    position: "absolute", top: "42%", right: -95,
-    width: 220, height: 220, borderRadius: 110,
-    backgroundColor: NAVY, opacity: 0.04,
-  },
-  centerGlow: {
-    position: "absolute", top: -70, left: "50%", marginLeft: -190,
-    width: 340, height: 340, borderRadius: 170,
+  glowCenter: {
+    position: "absolute", top: -80, left: "50%", marginLeft: -180,
+    width: 320, height: 320, borderRadius: 160,
     backgroundColor: GOLD, opacity: 0.045,
   },
-  /* Points */
-  dot: { position: "absolute", backgroundColor: NAVY, borderRadius: 99 },
+  hairlineGold: {
+    position: "absolute", height: 1, backgroundColor: GOLD, opacity: 0.35,
+  },
+  hairlineNavy: {
+    position: "absolute", height: 1, backgroundColor: NAVY, opacity: 0.12,
+  },
+  dotNavy: { position: "absolute", backgroundColor: NAVY, borderRadius: 99 },
   dotGold: { position: "absolute", backgroundColor: GOLD, borderRadius: 99 },
-  dot1: { top: 110, left: 44, width: 6, height: 6, opacity: 0.18 },
-  dot2: { top: 268, right: 52, width: 5, height: 5, opacity: 0.14 },
-  dot3: { bottom: 220, left: 38, width: 4, height: 4, opacity: 0.16 },
-  dot4: { bottom: 148, right: 40, width: 8, height: 8, opacity: 0.22 },
-  dot5: { top: "58%", left: 30, width: 5, height: 5, opacity: 0.13 },
-  /* Anneaux */
-  ringGold: {
-    position: "absolute", top: "32%", right: 28,
-    width: 38, height: 38, borderRadius: 19,
-    borderWidth: 1.2, borderColor: GOLD, opacity: 0.28,
-  },
-  ringNavy: {
-    position: "absolute", top: "72%", left: 34,
-    width: 22, height: 22, borderRadius: 11,
-    borderWidth: 1, borderColor: NAVY, opacity: 0.15,
-  },
 });

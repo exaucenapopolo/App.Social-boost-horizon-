@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, router } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -32,22 +33,21 @@ const NOTIF_READ_KEY = "@sbh_notif_read";
 // ═══════════════════════════════════════════════════════════════
 //  CHARTE GRAPHIQUE OFFICIELLE
 // ═══════════════════════════════════════════════════════════════
-const NAVY        = "#0A1C3A";     // Bleu nuit profond (primaire)
+const NAVY        = "#0A1C3A";
 const NAVY_LIGHT  = "#152E54";
-const GOLD        = "#D4AF37";     // Or (secondaire)
+const GOLD        = "#D4AF37";
 const GOLD_SOFT   = "#C6A15B";
 const GOLD_BG     = "rgba(212,175,55,0.10)";
-const GOLD_BG_2   = "rgba(212,175,55,0.18)";
 const GOLD_BORDER = "rgba(212,175,55,0.32)";
 
-// Mode clair
-const LIGHT_BG        = "#F5F6F8";
+// Mode clair (base chaude, plus douce pour les yeux)
+const LIGHT_BG        = "#F7F5F0";
 const LIGHT_SURFACE   = "#FFFFFF";
 const LIGHT_TEXT      = "#1A202C";
 const LIGHT_TEXT_2    = "#718096";
-const LIGHT_BORDER    = "#EAECEF";
-const LIGHT_ICON_BG   = "rgba(10,28,58,0.06)";
-const LIGHT_ICON_BORD = "rgba(10,28,58,0.10)";
+const LIGHT_BORDER    = "rgba(10,28,58,0.08)";
+const LIGHT_ICON_BG   = "rgba(10,28,58,0.05)";
+const LIGHT_ICON_BORD = "rgba(10,28,58,0.08)";
 
 // Mode sombre
 const DARK_BG         = "#0B132B";
@@ -88,7 +88,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 };
 
 // Animation d'entrée en cascade
-function useStagger(count: number, step = 80, duration = 480) {
+function useStagger(count: number, step = 90, duration = 520) {
   const anims = useRef(Array.from({ length: count }, () => new Animated.Value(0))).current;
   useEffect(() => {
     Animated.stagger(
@@ -101,6 +101,18 @@ function useStagger(count: number, step = 80, duration = 480) {
     ).start();
   }, []);
   return anims;
+}
+
+// Press spring réutilisable
+function usePressSpring(to = 0.97) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const onPressIn = useCallback(() => {
+    Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+  }, []);
+  const onPressOut = useCallback(() => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 6 }).start();
+  }, []);
+  return { scale, onPressIn, onPressOut };
 }
 
 export default function HomeScreen() {
@@ -131,7 +143,10 @@ export default function HomeScreen() {
 
   const anims = useStagger(5);
   const translateY = (v: Animated.Value) =>
-    v.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
+    v.interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
+
+  const balancePress = usePressSpring(0.98);
+  const commanderPress = usePressSpring(0.98);
 
   useFocusEffect(
     useCallback(() => {
@@ -183,20 +198,23 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
+      {/* ✅ Fix barre de statut : texte sombre en clair, clair en nuit */}
+      <StatusBar style={isDark ? "light" : "dark"} />
+
       <StarBackground dark={isDark} />
 
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: topPad + 14, paddingBottom: insets.bottom + 110 },
+          { paddingTop: topPad + 16, paddingBottom: insets.bottom + 110 },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={false} onRefresh={handleRefresh} tintColor={GOLD} />
         }
       >
-        {/* ═══ 1. HEADER (épuré : logo + nom | icônes) ═══ */}
+        {/* ═══ 1. HEADER ═══ */}
         <Animated.View style={{ opacity: anims[0], transform: [{ translateY: translateY(anims[0]) }] }}>
           <View style={styles.header}>
             <Pressable
@@ -211,30 +229,16 @@ export default function HomeScreen() {
                 ]}
               >
                 {user?.photoURL ? (
-                  <Image
-                    source={{ uri: user.photoURL }}
-                    style={styles.avatarImg}
-                    contentFit="cover"
-                  />
+                  <Image source={{ uri: user.photoURL }} style={styles.avatarImg} contentFit="cover" />
                 ) : (
-                  <Image
-                    source={{ uri: LOGO_URL }}
-                    style={styles.avatarImg}
-                    contentFit="contain"
-                  />
+                  <Image source={{ uri: LOGO_URL }} style={styles.avatarImg} contentFit="contain" />
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.userName, { color: C.text }]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.userName, { color: C.text }]} numberOfLines={1}>
                   {user?.name?.split(" ")[0] ?? "Utilisateur"}
                 </Text>
-                <Text
-                  style={[styles.userGreet, { color: C.textMuted }]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.userGreet, { color: C.textMuted }]} numberOfLines={1}>
                   {greeting}
                 </Text>
               </View>
@@ -246,7 +250,7 @@ export default function HomeScreen() {
                 style={({ pressed }) => [
                   styles.iconBtn,
                   { backgroundColor: C.surface, borderColor: C.border },
-                  pressed && { transform: [{ scale: 0.94 }] },
+                  pressed && { opacity: 0.85 },
                 ]}
               >
                 <Feather name={isDark ? "sun" : "moon"} size={18} color={isDark ? GOLD : NAVY} />
@@ -256,7 +260,7 @@ export default function HomeScreen() {
                 style={({ pressed }) => [
                   styles.iconBtn,
                   { backgroundColor: C.surface, borderColor: C.border },
-                  pressed && { transform: [{ scale: 0.94 }] },
+                  pressed && { opacity: 0.85 },
                 ]}
               >
                 <Feather name="bell" size={18} color={C.text} />
@@ -266,124 +270,165 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
-        {/* ═══ 2. SOLDE (compact, épuré) ═══ */}
+        {/* ═══ 2. SOLDE ═══ */}
         <Animated.View style={{ opacity: anims[1], transform: [{ translateY: translateY(anims[1]) }] }}>
-          <Pressable
-            onPress={() => go("/(tabs)/wallet")}
-            onPressIn={() => Haptics.selectionAsync()}
-            style={({ pressed }) => [
-              styles.balanceWrap,
-              {
-                shadowColor: isDark ? "#000" : NAVY,
-                shadowOpacity: isDark ? 0.40 : 0.10,
-              },
-              pressed && { transform: [{ scale: 0.97 }] },
-            ]}
-          >
-            <LinearGradient
-              colors={["#132C57", "#0A1C3A", "#071229"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.balanceGrad}
-            >
-              <View style={styles.balanceTopRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.balanceLabel}>Solde disponible</Text>
-                  <Text style={styles.balanceAmount}>{balanceFormatted}</Text>
-                </View>
-                <View style={styles.balanceLogoBox}>
-                  <Image
-                    source={{ uri: LOGO_URL }}
-                    style={styles.balanceLogo}
-                    contentFit="contain"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.balanceDivider} />
-
-              <View style={styles.balanceBottomRow}>
-                <Pressable
-                  style={styles.referralRow}
-                  hitSlop={8}
-                  onPress={() => { Haptics.selectionAsync(); router.push("/parrainage" as any); }}
-                >
-                  <View style={styles.referralIconBox}>
-                    <Feather name="gift" size={12} color={GOLD} />
-                  </View>
-                  <View>
-                    <Text style={styles.referralLabel}>Parrainage</Text>
-                    <Text style={styles.referralValue}>{referralFormatted}</Text>
-                  </View>
-                </Pressable>
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.balanceCta,
-                    pressed && { transform: [{ scale: 0.95 }] },
-                  ]}
-                  onPress={() => go("/(tabs)/wallet")}
-                >
-                  <Text style={styles.balanceCtaText}>Gérer</Text>
-                  <Feather name="chevron-right" size={15} color={GOLD} />
-                </Pressable>
-              </View>
-            </LinearGradient>
-          </Pressable>
-        </Animated.View>
-
-        {/* ═══ 3. COMMANDER (carte d'action principale) ═══ */}
-        <Animated.View style={{ opacity: anims[2], transform: [{ translateY: translateY(anims[2]) }] }}>
-          <Pressable
-            onPress={() => go("/(tabs)/new-order")}
-            onPressIn={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-            style={({ pressed }) => [
-              styles.commanderWrap,
-              {
-                backgroundColor: C.surface,
-                borderColor: C.border,
-                shadowColor: isDark ? "#000" : NAVY,
-                shadowOpacity: isDark ? 0.30 : 0.08,
-              },
-              pressed && { transform: [{ scale: 0.97 }] },
-            ]}
-          >
-            <View
+          <Animated.View style={{ transform: [{ scale: balancePress.scale }] }}>
+            <Pressable
+              onPress={() => go("/(tabs)/wallet")}
+              onPressIn={balancePress.onPressIn}
+              onPressOut={balancePress.onPressOut}
               style={[
-                styles.commanderIconBox,
-                { backgroundColor: isDark ? GOLD_BG : NAVY },
-              ]}
-            >
-              <Feather name="shopping-cart" size={22} color={isDark ? GOLD : "#FFFFFF"} />
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text
-                style={[styles.commanderTitle, { color: isDark ? DARK_TEXT : NAVY }]}
-              >
-                Commander un boost
-              </Text>
-              <Text style={[styles.commanderSub, { color: C.textMuted }]}>
-                Boostez vos réseaux en quelques secondes
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.commanderArrowBox,
+                styles.balanceWrap,
                 {
-                  backgroundColor: isDark ? GOLD_BG : LIGHT_ICON_BG,
-                  borderColor: isDark ? GOLD_BORDER : LIGHT_ICON_BORD,
+                  shadowColor: isDark ? "#000" : NAVY,
+                  shadowOpacity: isDark ? 0.40 : 0.10,
                 },
               ]}
             >
-              <Feather
-                name="chevron-right"
-                size={20}
-                color={isDark ? GOLD : NAVY}
-              />
-            </View>
-          </Pressable>
+              <LinearGradient
+                colors={isDark
+                  ? ["#132C57", "#0A1C3A", "#071229"]
+                  : ["#FFFFFF", "#FBF8F1"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[
+                  styles.balanceGrad,
+                  !isDark && { borderWidth: 1, borderColor: "rgba(212,175,55,0.22)" },
+                ]}
+              >
+                {/* Fine ligne dorée en haut (accent premium en clair) */}
+                {!isDark && <View style={styles.goldTopLine} />}
+
+                <View style={styles.balanceTopRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.balanceLabel, { color: isDark ? "rgba(255,255,255,0.65)" : LIGHT_TEXT_2 }]}>
+                      Solde disponible
+                    </Text>
+                    <Text style={[styles.balanceAmount, { color: isDark ? "#FFFFFF" : NAVY }]}>
+                      {balanceFormatted}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.balanceLogoBox,
+                      isDark && { backgroundColor: "#FFFFFF", borderColor: GOLD_BORDER },
+                      !isDark && { backgroundColor: "#F7F5F0", borderColor: "rgba(10,28,58,0.08)" },
+                    ]}
+                  >
+                    <Image source={{ uri: LOGO_URL }} style={styles.balanceLogo} contentFit="contain" />
+                  </View>
+                </View>
+
+                <View
+                  style={[
+                    styles.balanceDivider,
+                    { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(10,28,58,0.08)" },
+                  ]}
+                />
+
+                <View style={styles.balanceBottomRow}>
+                  <Pressable
+                    style={styles.referralRow}
+                    hitSlop={8}
+                    onPress={() => { Haptics.selectionAsync(); router.push("/parrainage" as any); }}
+                  >
+                    <View
+                      style={[
+                        styles.referralIconBox,
+                        isDark && { backgroundColor: GOLD_BG, borderColor: GOLD_BORDER },
+                        !isDark && { backgroundColor: "rgba(212,175,55,0.12)", borderColor: "rgba(212,175,55,0.28)" },
+                      ]}
+                    >
+                      <Feather name="gift" size={12} color={isDark ? GOLD : GOLD_SOFT} />
+                    </View>
+                    <View>
+                      <Text
+                        style={[
+                          styles.referralLabel,
+                          { color: isDark ? "rgba(255,255,255,0.55)" : LIGHT_TEXT_2 },
+                        ]}
+                      >
+                        Parrainage
+                      </Text>
+                      <Text style={[styles.referralValue, { color: isDark ? GOLD : NAVY }]}>
+                        {referralFormatted}
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.balanceCta,
+                      isDark && { backgroundColor: "rgba(212,175,55,0.15)", borderColor: GOLD_BORDER },
+                      !isDark && { backgroundColor: NAVY, borderColor: NAVY },
+                      pressed && { opacity: 0.9 },
+                    ]}
+                    onPress={() => go("/(tabs)/wallet")}
+                  >
+                    <Text
+                      style={[
+                        styles.balanceCtaText,
+                        { color: isDark ? GOLD : "#FFFFFF" },
+                      ]}
+                    >
+                      Gérer
+                    </Text>
+                    <Feather name="chevron-right" size={15} color={isDark ? GOLD : "#FFFFFF"} />
+                  </Pressable>
+                </View>
+              </LinearGradient>
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
+
+        {/* ═══ 3. COMMANDER ═══ */}
+        <Animated.View style={{ opacity: anims[2], transform: [{ translateY: translateY(anims[2]) }] }}>
+          <Animated.View style={{ transform: [{ scale: commanderPress.scale }] }}>
+            <Pressable
+              onPress={() => go("/(tabs)/new-order")}
+              onPressIn={() => { commanderPress.onPressIn(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}
+              onPressOut={commanderPress.onPressOut}
+              style={[
+                styles.commanderWrap,
+                {
+                  backgroundColor: C.surface,
+                  borderColor: C.border,
+                  shadowColor: isDark ? "#000" : NAVY,
+                  shadowOpacity: isDark ? 0.30 : 0.06,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.commanderIconBox,
+                  { backgroundColor: isDark ? GOLD_BG : NAVY },
+                ]}
+              >
+                <Feather name="shopping-cart" size={22} color={isDark ? GOLD : "#FFFFFF"} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.commanderTitle, { color: C.text }]}>
+                  Commander un boost
+                </Text>
+                <Text style={[styles.commanderSub, { color: C.textMuted }]}>
+                  Boostez vos réseaux en quelques secondes
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.commanderArrowBox,
+                  {
+                    backgroundColor: isDark ? GOLD_BG : LIGHT_ICON_BG,
+                    borderColor: isDark ? GOLD_BORDER : LIGHT_ICON_BORD,
+                  },
+                ]}
+              >
+                <Feather name="chevron-right" size={20} color={C.accentIcon} />
+              </View>
+            </Pressable>
+          </Animated.View>
         </Animated.View>
 
         {/* ═══ 4. SERVICES ═══ */}
@@ -448,7 +493,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
                 <Pressable onPress={() => go("/(tabs)/orders")} hitSlop={6}>
-                  <Text style={[styles.seeAll, { color: isDark ? GOLD : NAVY }]}>
+                  <Text style={[styles.seeAll, { color: C.accentIcon }]}>
                     Voir tout
                   </Text>
                 </Pressable>
@@ -477,7 +522,7 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={[styles.orderPrice, { color: isDark ? GOLD : NAVY }]}>
+                      <Text style={[styles.orderPrice, { color: C.accentIcon }]}>
                         {userCountry && userCountry.xafRate !== 1
                           ? formatCurrency(order.price, userCountry)
                           : `${order.price.toLocaleString("fr-FR")} FCFA`}
@@ -501,7 +546,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { paddingHorizontal: 20, gap: 18 },
+  scroll: { paddingHorizontal: 20, gap: 20 },
 
   /* ═══ Header ═══ */
   header: {
@@ -512,14 +557,14 @@ const styles = StyleSheet.create({
   },
   userRow: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   avatarBox: {
-    width: 44, height: 44, borderRadius: 12,
+    width: 44, height: 44, borderRadius: 14,
     overflow: "hidden", borderWidth: 1,
     alignItems: "center", justifyContent: "center",
   },
   avatarImg: { width: "100%", height: "100%" },
   userName: {
-    fontFamily: "Inter_600SemiBold", fontSize: 18,
-    letterSpacing: -0.2,
+    fontFamily: "Inter_600SemiBold", fontSize: 17,
+    letterSpacing: -0.25,
   },
   userGreet: {
     fontFamily: "Inter_400Regular", fontSize: 12.5,
@@ -528,7 +573,7 @@ const styles = StyleSheet.create({
 
   headerActions: { flexDirection: "row", gap: 8 },
   iconBtn: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 40, height: 40, borderRadius: 13,
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
   dot: {
@@ -536,35 +581,39 @@ const styles = StyleSheet.create({
     width: 8, height: 8, borderRadius: 4, backgroundColor: DANGER,
   },
 
-  /* ═══ Solde (compact) ═══ */
+  /* ═══ Solde ═══ */
   balanceWrap: {
-    borderRadius: 20, overflow: "hidden",
+    borderRadius: 22, overflow: "hidden",
     shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12, elevation: 5,
+    shadowRadius: 14, elevation: 5,
   },
-  balanceGrad: { padding: 20 },
+  balanceGrad: { padding: 22, position: "relative", overflow: "hidden" },
+  goldTopLine: {
+    position: "absolute", top: 0, left: 22, right: 22,
+    height: 2, backgroundColor: GOLD, opacity: 0.55,
+    borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
+  },
   balanceTopRow: {
     flexDirection: "row", alignItems: "flex-start",
     justifyContent: "space-between", gap: 12,
   },
   balanceLabel: {
-    fontFamily: "Inter_400Regular", fontSize: 13,
-    color: "rgba(255,255,255,0.65)", letterSpacing: 0.1,
+    fontFamily: "Inter_500Medium", fontSize: 12,
+    letterSpacing: 0.3, textTransform: "uppercase",
   },
   balanceAmount: {
-    fontFamily: "Inter_700Bold", fontSize: 32,
-    color: "#FFFFFF", marginTop: 6, letterSpacing: -0.5,
+    fontFamily: "Inter_700Bold", fontSize: 30,
+    marginTop: 8, letterSpacing: -0.6,
   },
   balanceLogoBox: {
-    width: 48, height: 48, borderRadius: 14,
-    overflow: "hidden", backgroundColor: "#FFFFFF",
-    borderWidth: 1, borderColor: GOLD_BORDER,
+    width: 46, height: 46, borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
     padding: 6,
   },
   balanceLogo: { width: "100%", height: "100%" },
   balanceDivider: {
-    height: 1, backgroundColor: "rgba(255,255,255,0.08)",
-    marginVertical: 16,
+    height: 1, marginVertical: 16,
   },
   balanceBottomRow: {
     flexDirection: "row", alignItems: "center",
@@ -573,61 +622,59 @@ const styles = StyleSheet.create({
   referralRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   referralIconBox: {
     width: 30, height: 30, borderRadius: 10,
-    backgroundColor: GOLD_BG,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: GOLD_BORDER,
+    borderWidth: 1,
   },
   referralLabel: {
-    fontFamily: "Inter_400Regular", fontSize: 11,
-    color: "rgba(255,255,255,0.55)", letterSpacing: 0.1,
+    fontFamily: "Inter_500Medium", fontSize: 10.5,
+    letterSpacing: 0.3, textTransform: "uppercase",
   },
   referralValue: {
     fontFamily: "Inter_700Bold", fontSize: 14,
-    color: GOLD, marginTop: 1,
+    marginTop: 2, letterSpacing: -0.1,
   },
   balanceCta: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: "rgba(212,175,55,0.15)",
-    borderWidth: 1, borderColor: GOLD_BORDER,
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 11,
+    borderWidth: 1,
   },
   balanceCtaText: {
     fontFamily: "Inter_600SemiBold", fontSize: 12.5,
-    color: GOLD, letterSpacing: 0.2,
+    letterSpacing: 0.2,
   },
 
   /* ═══ Commander ═══ */
   commanderWrap: {
     flexDirection: "row", alignItems: "center",
-    borderRadius: 16, borderWidth: 1,
+    borderRadius: 18, borderWidth: 1,
     padding: 16, gap: 14,
     shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10, elevation: 3,
+    shadowRadius: 12, elevation: 3,
   },
   commanderIconBox: {
-    width: 48, height: 48, borderRadius: 12,
+    width: 48, height: 48, borderRadius: 14,
     alignItems: "center", justifyContent: "center",
   },
   commanderTitle: {
-    fontFamily: "Inter_600SemiBold", fontSize: 16,
-    letterSpacing: 0.05,
+    fontFamily: "Inter_600SemiBold", fontSize: 15.5,
+    letterSpacing: -0.15,
   },
   commanderSub: {
-    fontFamily: "Inter_400Regular", fontSize: 13,
+    fontFamily: "Inter_400Regular", fontSize: 12.5,
     marginTop: 3, letterSpacing: 0.1,
   },
   commanderArrowBox: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 40, height: 40, borderRadius: 13,
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
 
   /* ═══ Section headers ═══ */
-  sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  accentBar: { width: 3, height: 16, borderRadius: 2, backgroundColor: GOLD },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  accentBar: { width: 3, height: 18, borderRadius: 2, backgroundColor: GOLD },
   sectionTitle: {
     fontFamily: "Inter_600SemiBold", fontSize: 16,
-    letterSpacing: -0.1,
+    letterSpacing: -0.15,
   },
   sectionRow: {
     flexDirection: "row", alignItems: "center",
@@ -651,7 +698,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   statLabel: {
-    fontFamily: "Inter_400Regular", fontSize: 12,
+    fontFamily: "Inter_400Regular", fontSize: 11.5,
     textAlign: "center", letterSpacing: 0.1,
   },
 

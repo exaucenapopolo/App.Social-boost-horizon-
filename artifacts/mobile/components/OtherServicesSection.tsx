@@ -2,10 +2,12 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
-import React, { memo, useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -26,7 +28,7 @@ import { BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 
 // ═══════════════════════════════════════════════════════════════
-//  CHARTE GRAPHIQUE (identique au dashboard)
+//  CHARTE GRAPHIQUE
 // ═══════════════════════════════════════════════════════════════
 const NAVY        = "#0A1C3A";
 const NAVY_LIGHT  = "#152E54";
@@ -38,7 +40,7 @@ const GOLD_BORDER = "rgba(212,175,55,0.32)";
 const LIGHT_SURFACE   = "#FFFFFF";
 const LIGHT_TEXT      = "#1A202C";
 const LIGHT_TEXT_2    = "#718096";
-const LIGHT_BORDER    = "#EAECEF";
+const LIGHT_BORDER    = "rgba(10,28,58,0.08)";
 const LIGHT_INPUT_BG  = "#F5F6F8";
 
 const DARK_SURFACE    = "#1C2541";
@@ -196,6 +198,18 @@ type ModalBaseProps = {
   priceFmt: (fcfa: number) => string;
 };
 
+// ─── Helper animation press (spring) ───
+function usePressSpring() {
+  const scale = useRef(new Animated.Value(1)).current;
+  const onPressIn = useCallback(() => {
+    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+  }, []);
+  const onPressOut = useCallback(() => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 6 }).start();
+  }, []);
+  return { scale, onPressIn, onPressOut };
+}
+
 // ─── Champs réutilisables ───
 function FieldInput({
   label, value, onChange, placeholder, multiline, keyboardType, theme, secureTextEntry,
@@ -205,7 +219,7 @@ function FieldInput({
 }) {
   return (
     <View style={{ gap: 6 }}>
-      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
         {label}
       </Text>
       <TextInput
@@ -238,7 +252,7 @@ function TagRow({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
         {label}
       </Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -252,7 +266,7 @@ function TagRow({
                 backgroundColor: value === opt ? theme.accent : theme.inputBg,
                 borderColor: value === opt ? theme.accent : theme.inputBorder,
               },
-              pressed && { transform: [{ scale: 0.96 }] },
+              pressed && { opacity: 0.85 },
             ]}
           >
             <Text
@@ -290,6 +304,7 @@ function ModalShell({
               { backgroundColor: theme.surface, paddingBottom: insets.bottom + 10 },
             ]}
           >
+            <View style={ms.grabber} />
             <View style={[ms.sheetHeader, { borderBottomColor: theme.separator }]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
                 <View
@@ -323,11 +338,25 @@ function ModalShell({
 }
 
 function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) {
+  const scale = useRef(new Animated.Value(0.6)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 8 }),
+      Animated.timing(opacity, { toValue: 1, duration: 320, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+    ]).start();
+  }, []);
   return (
     <View style={{ alignItems: "center", gap: 16, paddingVertical: 30 }}>
-      <View style={[ms.successIcon, { backgroundColor: "rgba(16,185,129,0.10)", borderColor: "rgba(16,185,129,0.25)" }]}>
+      <Animated.View
+        style={[
+          ms.successIcon,
+          { backgroundColor: "rgba(16,185,129,0.10)", borderColor: "rgba(16,185,129,0.25)" },
+          { transform: [{ scale }], opacity },
+        ]}
+      >
         <Feather name="check" size={32} color={SUCCESS} />
-      </View>
+      </Animated.View>
       <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 20, color: theme.text, textAlign: "center", letterSpacing: -0.2 }}>
         Demande envoyée
       </Text>
@@ -354,7 +383,7 @@ function WaField({
 }) {
   return (
     <View style={{ gap: 6 }}>
-      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
         Votre numéro WhatsApp *
       </Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
@@ -559,7 +588,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
           <FieldInput label="Nom entreprise / organisation" value={company} onChange={setCompany} placeholder="Ex: Social Boost Horizon" theme={theme} />
 
           <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
               Type de site *
             </Text>
             {SITE_TYPES.map((t) => (
@@ -572,7 +601,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
                     backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
                     borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
                   },
-                  pressed && { transform: [{ scale: 0.98 }] },
+                  pressed && { opacity: 0.9 },
                 ]}
               >
                 <View style={{ flex: 1 }}>
@@ -668,7 +697,7 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
           <FieldInput label="Écrans / pages souhaitées" value={screens} onChange={setScreens} placeholder="Ex: accueil, profil, boutique..." theme={theme} />
 
           <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
               Package *
             </Text>
             {APP_PACKAGES.map((p) => (
@@ -681,7 +710,7 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                     backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
                     borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
                   },
-                  pressed && { transform: [{ scale: 0.98 }] },
+                  pressed && { opacity: 0.9 },
                 ]}
               >
                 <View style={{ flex: 1 }}>
@@ -754,7 +783,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
           <TagRow label="Réseau *" value={adPlatform} options={["Facebook", "Instagram"]} onSelect={(v) => setAdPlatform(v as any)} theme={theme} />
 
           <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
               Durée de la campagne *
             </Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -768,7 +797,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                       backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
                       borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
                     },
-                    pressed && { transform: [{ scale: 0.97 }] },
+                    pressed && { opacity: 0.9 },
                   ]}
                 >
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: duration.label === d.label ? theme.accentIcon : theme.text }}>
@@ -890,7 +919,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
           <FieldInput label="Numéro de téléphone *" value={fields.tel ?? ""} onChange={(v) => setField("tel", v)} placeholder="+237 6XX XXX XXX" theme={theme} keyboardType="phone-pad" />
           <FieldInput label="Date de naissance *" value={fields.dob ?? ""} onChange={(v) => setField("dob", v)} placeholder="JJ/MM/AAAA (18+)" theme={theme} />
           <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
               Pays de création (éligibles monétisation) *
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -905,7 +934,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                         backgroundColor: tiktokCountry === c ? theme.accent : theme.inputBg,
                         borderColor: tiktokCountry === c ? theme.accent : theme.inputBorder,
                       },
-                      pressed && { transform: [{ scale: 0.96 }] },
+                      pressed && { opacity: 0.85 },
                     ]}
                   >
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: tiktokCountry === c ? "#fff" : theme.textSecondary }}>
@@ -949,7 +978,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
       return (
         <>
           <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
               Plateforme *
             </Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -963,7 +992,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                       backgroundColor: badgePlatform === p ? theme.accent : theme.inputBg,
                       borderColor: badgePlatform === p ? theme.accent : theme.inputBorder,
                     },
-                    pressed && { transform: [{ scale: 0.96 }] },
+                    pressed && { opacity: 0.85 },
                   ]}
                 >
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: badgePlatform === p ? "#fff" : theme.textSecondary }}>
@@ -990,7 +1019,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
           </Text>
 
           <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
               Service souhaité *
             </Text>
             {ACCOUNT_SERVICES.map((svc) => (
@@ -1003,7 +1032,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                     backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
                     borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
                   },
-                  pressed && { transform: [{ scale: 0.98 }] },
+                  pressed && { opacity: 0.9 },
                 ]}
               >
                 <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>
@@ -1034,6 +1063,108 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
   );
 });
 
+// ─── Carte service (avec animation spring) ───
+function FeaturedCard({
+  svc, theme, isDark, onPress, onInfo,
+}: {
+  svc: (typeof FEATURED_EXTERNAL)[0];
+  theme: any; isDark: boolean;
+  onPress: () => void; onInfo: () => void;
+}) {
+  const { scale, onPressIn, onPressOut } = usePressSpring();
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => { onPressIn(); Haptics.selectionAsync(); }}
+        onPressOut={onPressOut}
+        style={[
+          ms.featuredCard,
+          {
+            backgroundColor: theme.surface,
+            borderColor: theme.border,
+            shadowColor: isDark ? "#000" : NAVY,
+            shadowOpacity: isDark ? 0.30 : 0.06,
+          },
+        ]}
+      >
+        <View style={[ms.featuredIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+          <Feather name={svc.icon} size={20} color={theme.accentIcon} />
+        </View>
+
+        <View style={ms.featuredRight}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Text style={[ms.featuredTitle, { color: theme.text }]} numberOfLines={1}>
+              {svc.label}
+            </Text>
+            <View style={[ms.featuredBadge, { borderColor: theme.iconBorder }]}>
+              <Text style={[ms.featuredBadgeText, { color: theme.accentIcon }]}>
+                {svc.badge}
+              </Text>
+            </View>
+          </View>
+          <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
+            {svc.sub}
+          </Text>
+        </View>
+
+        <Pressable
+          style={ms.infoBtn}
+          hitSlop={12}
+          onPress={(e) => { e.stopPropagation?.(); Haptics.selectionAsync(); onInfo(); }}
+        >
+          <Feather name="help-circle" size={18} color={theme.textMuted} />
+        </Pressable>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function ServiceCard({
+  svc, theme, isDark, onPress,
+}: {
+  svc: (typeof MODAL_SERVICES)[0];
+  theme: any; isDark: boolean;
+  onPress: () => void;
+}) {
+  const { scale, onPressIn, onPressOut } = usePressSpring();
+  return (
+    <Animated.View style={{ width: "48%", transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => { onPressIn(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        onPressOut={onPressOut}
+        style={[
+          ms.serviceCard,
+          {
+            backgroundColor: theme.surface,
+            borderColor: theme.border,
+            shadowColor: isDark ? "#000" : NAVY,
+            shadowOpacity: isDark ? 0.25 : 0.05,
+          },
+        ]}
+      >
+        <View style={[ms.serviceIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+          <Feather name={svc.icon} size={22} color={theme.accentIcon} />
+        </View>
+
+        <View style={{ gap: 4, marginTop: 14 }}>
+          <Text style={[ms.serviceLabel, { color: theme.text }]} numberOfLines={2}>
+            {svc.label}
+          </Text>
+          <Text style={[ms.serviceSub, { color: theme.textMuted }]} numberOfLines={2}>
+            {svc.sub}
+          </Text>
+        </View>
+
+        <View style={[ms.cardFooterArrow, { borderColor: theme.iconBorder, backgroundColor: theme.iconBg }]}>
+          <Feather name="arrow-up-right" size={15} color={theme.accentIcon} />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 // ─── Composant principal ───
 export default function OtherServicesSection() {
   const { user } = useAuth();
@@ -1046,11 +1177,12 @@ export default function OtherServicesSection() {
     textMuted:     isDark ? DARK_TEXT_2   : LIGHT_TEXT_2,
     inputBg:       isDark ? DARK_INPUT_BG : LIGHT_INPUT_BG,
     inputBorder:   isDark ? DARK_BORDER   : LIGHT_BORDER,
+    border:        isDark ? DARK_BORDER   : LIGHT_BORDER,
     accent:        isDark ? GOLD          : NAVY,
     accentIcon:    isDark ? GOLD          : NAVY,
     surface:       isDark ? DARK_SURFACE  : LIGHT_SURFACE,
-    iconBg:        isDark ? DARK_ICON_BG  : "rgba(10,28,58,0.06)",
-    iconBorder:    isDark ? DARK_ICON_BORD: "rgba(10,28,58,0.10)",
+    iconBg:        isDark ? DARK_ICON_BG  : "rgba(10,28,58,0.05)",
+    iconBorder:    isDark ? DARK_ICON_BORD: "rgba(10,28,58,0.08)",
     separator:     isDark ? DARK_BORDER   : LIGHT_BORDER,
   }), [isDark]);
 
@@ -1071,18 +1203,17 @@ export default function OtherServicesSection() {
 
   const close = useCallback(() => setOpenModal(null), []);
 
-  const handleExternalTap = (svc: (typeof FEATURED_EXTERNAL)[0]) => {
+  const handleExternalTap = useCallback((svc: (typeof FEATURED_EXTERNAL)[0]) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Linking.openURL(svc.url);
-  };
+  }, []);
 
-  const handleInfoTap = (svc: (typeof FEATURED_EXTERNAL)[0]) => {
-    Haptics.selectionAsync();
+  const handleInfoTap = useCallback((svc: (typeof FEATURED_EXTERNAL)[0]) => {
     setInfoService(svc);
-  };
+  }, []);
 
   return (
-    <View style={{ gap: 18 }}>
+    <View style={{ gap: 20 }}>
       {/* En-tête section */}
       <View style={ms.sectionHeader}>
         <View style={ms.accentBar} />
@@ -1094,104 +1225,30 @@ export default function OtherServicesSection() {
         </View>
       </View>
 
-      {/* Services externes (empilés, mêmes dimensions) */}
+      {/* Services externes */}
       <View style={{ gap: 12 }}>
         {FEATURED_EXTERNAL.map((svc) => (
-          <Pressable
+          <FeaturedCard
             key={svc.id}
+            svc={svc}
+            theme={theme}
+            isDark={isDark}
             onPress={() => handleExternalTap(svc)}
-            onPressIn={() => Haptics.selectionAsync()}
-            style={({ pressed }) => [
-              ms.featuredCard,
-              {
-                backgroundColor: theme.surface,
-                borderColor: isDark ? DARK_BORDER : LIGHT_BORDER,
-                shadowColor: isDark ? "#000" : NAVY,
-                shadowOpacity: isDark ? 0.30 : 0.06,
-              },
-              pressed && { transform: [{ scale: 0.97 }], opacity: 0.96 },
-            ]}
-          >
-            <View style={[ms.featuredIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-              <Feather name={svc.icon} size={22} color={theme.accentIcon} />
-            </View>
-
-            <View style={ms.featuredRight}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <Text style={[ms.featuredTitle, { color: theme.text }]} numberOfLines={1}>
-                  {svc.label}
-                </Text>
-                <View
-                  style={[
-                    ms.featuredBadge,
-                    { borderColor: theme.iconBorder, backgroundColor: "transparent" },
-                  ]}
-                >
-                  <Text style={[ms.featuredBadgeText, { color: theme.accentIcon }]}>
-                    {svc.badge}
-                  </Text>
-                </View>
-              </View>
-              <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
-                {svc.sub}
-              </Text>
-              <View style={ms.featuredCtaRow}>
-                <Text style={[ms.featuredCta, { color: theme.accentIcon }]}>Découvrir</Text>
-                <Feather name="chevron-right" size={16} color={theme.accentIcon} />
-              </View>
-            </View>
-
-            <Pressable
-              style={ms.infoBtn}
-              hitSlop={12}
-              onPress={(e) => { e.stopPropagation?.(); handleInfoTap(svc); }}
-            >
-              <Feather name="help-circle" size={18} color={theme.textMuted} />
-            </Pressable>
-          </Pressable>
+            onInfo={() => handleInfoTap(svc)}
+          />
         ))}
       </View>
 
-      {/* Grille services internes (sans numéros) */}
+      {/* Grille services internes */}
       <View style={ms.grid}>
         {MODAL_SERVICES.map((svc) => (
-          <Pressable
+          <ServiceCard
             key={svc.id}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setOpenModal(svc.id);
-            }}
-            style={({ pressed }) => [
-              ms.serviceCard,
-              {
-                backgroundColor: theme.surface,
-                borderColor: isDark ? DARK_BORDER : LIGHT_BORDER,
-                shadowColor: isDark ? "#000" : NAVY,
-                shadowOpacity: isDark ? 0.25 : 0.05,
-              },
-              pressed && { transform: [{ scale: 0.97 }] },
-            ]}
-          >
-            <View style={[ms.serviceIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-              <Feather name={svc.icon} size={22} color={theme.accentIcon} />
-            </View>
-
-            <Text style={[ms.serviceLabel, { color: theme.text }]} numberOfLines={2}>
-              {svc.label}
-            </Text>
-            <Text style={[ms.serviceSub, { color: theme.textMuted }]} numberOfLines={2}>
-              {svc.sub}
-            </Text>
-
-            <View
-              style={[
-                ms.cardFooterArrow,
-                { borderColor: theme.iconBorder, backgroundColor: theme.iconBg },
-              ]}
-            >
-              <Feather name="chevron-right" size={18} color={theme.accentIcon} />
-            </View>
-          </Pressable>
+            svc={svc}
+            theme={theme}
+            isDark={isDark}
+            onPress={() => setOpenModal(svc.id)}
+          />
         ))}
       </View>
 
@@ -1211,62 +1268,60 @@ export default function OtherServicesSection() {
 }
 
 const ms = StyleSheet.create({
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  accentBar: { width: 3, height: 32, borderRadius: 2, backgroundColor: GOLD },
-  sectionTitle: { fontFamily: "Inter_600SemiBold", fontSize: 16, letterSpacing: -0.1 },
-  sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 3 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  accentBar: { width: 3, height: 28, borderRadius: 2, backgroundColor: GOLD },
+  sectionTitle: { fontFamily: "Inter_600SemiBold", fontSize: 17, letterSpacing: -0.2 },
+  sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 3, letterSpacing: 0.1 },
 
   /* Cartes externes */
   featuredCard: {
     flexDirection: "row", alignItems: "center",
-    borderRadius: 16, borderWidth: 1,
-    padding: 16,
-    gap: 14, position: "relative", minHeight: 96,
+    borderRadius: 18, borderWidth: 1,
+    paddingVertical: 16, paddingLeft: 16, paddingRight: 12,
+    gap: 14, position: "relative",
     shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10, elevation: 2,
+    shadowRadius: 14, elevation: 2,
   },
   featuredIconBox: {
-    width: 50, height: 50, borderRadius: 12,
+    width: 46, height: 46, borderRadius: 14,
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
-  featuredRight: { flex: 1, gap: 5 },
-  featuredTitle: { fontFamily: "Inter_600SemiBold", fontSize: 15, letterSpacing: -0.1 },
-  featuredSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, letterSpacing: 0.05 },
-  featuredCtaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  featuredCta: { fontFamily: "Inter_600SemiBold", fontSize: 12.5, letterSpacing: 0.1 },
+  featuredRight: { flex: 1, gap: 4 },
+  featuredTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14.5, letterSpacing: -0.15 },
+  featuredSub: { fontFamily: "Inter_400Regular", fontSize: 12, letterSpacing: 0.1 },
   featuredBadge: {
-    borderRadius: 6, borderWidth: 1,
-    paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 999, borderWidth: 1,
+    paddingHorizontal: 9, paddingVertical: 2,
   },
   featuredBadgeText: {
     fontFamily: "Inter_600SemiBold", fontSize: 9,
-    letterSpacing: 0.3,
+    letterSpacing: 0.4, textTransform: "uppercase",
   },
-  infoBtn: { padding: 6, alignSelf: "flex-start" },
+  infoBtn: { padding: 8 },
 
-  /* Grille services internes */
+  /* Grille */
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceCard: {
-    width: "47.8%", borderRadius: 16, borderWidth: 1,
-    padding: 16, minHeight: 158, gap: 12, position: "relative",
+    width: "100%", borderRadius: 18, borderWidth: 1,
+    padding: 16, minHeight: 165, gap: 10, position: "relative",
     shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8, elevation: 1,
+    shadowRadius: 10, elevation: 1,
   },
   serviceIconBox: {
-    width: 46, height: 46, borderRadius: 12,
+    width: 46, height: 46, borderRadius: 14,
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
   serviceLabel: {
-    fontFamily: "Inter_600SemiBold", fontSize: 15,
-    lineHeight: 20, letterSpacing: -0.1, marginTop: 2,
+    fontFamily: "Inter_600SemiBold", fontSize: 14.5,
+    lineHeight: 19, letterSpacing: -0.15,
   },
   serviceSub: {
-    fontFamily: "Inter_400Regular", fontSize: 12.5,
-    lineHeight: 17, letterSpacing: 0.05,
+    fontFamily: "Inter_400Regular", fontSize: 12,
+    lineHeight: 16, letterSpacing: 0.1,
   },
   cardFooterArrow: {
-    position: "absolute", bottom: 14, right: 14,
-    width: 32, height: 32, borderRadius: 10,
+    position: "absolute", top: 16, right: 16,
+    width: 30, height: 30, borderRadius: 10,
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
 
@@ -1276,14 +1331,14 @@ const ms = StyleSheet.create({
     justifyContent: "center", padding: 22,
   },
   infoCard: {
-    borderRadius: 20, padding: 24, gap: 18,
+    borderRadius: 22, padding: 24, gap: 18,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.25, shadowRadius: 24, elevation: 12,
   },
   infoHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   infoIconBox: {
-    width: 46, height: 46, borderRadius: 12,
+    width: 46, height: 46, borderRadius: 14,
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
   infoTitle: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 16, letterSpacing: -0.1 },
@@ -1294,7 +1349,11 @@ const ms = StyleSheet.create({
     borderWidth: 1, marginTop: 2,
   },
   overlay: { flex: 1, backgroundColor: "rgba(10,28,58,0.45)", justifyContent: "flex-end" },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "94%" },
+  sheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: "94%" },
+  grabber: {
+    alignSelf: "center", width: 40, height: 4, borderRadius: 2,
+    backgroundColor: "rgba(128,128,128,0.25)", marginTop: 8,
+  },
   sheetHeader: {
     flexDirection: "row", alignItems: "center",
     justifyContent: "space-between", padding: 20, borderBottomWidth: 1,
@@ -1329,7 +1388,7 @@ const ms = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     borderRadius: 12, borderWidth: 1, padding: 14, flexWrap: "wrap",
   },
-  submitBtn: { borderRadius: 12, overflow: "hidden", marginTop: 4 },
+  submitBtn: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
   submitGradient: {
     height: 54, flexDirection: "row",
     alignItems: "center", justifyContent: "center", gap: 8,
