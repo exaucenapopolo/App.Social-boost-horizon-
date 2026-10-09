@@ -1,9 +1,12 @@
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { StatusBar } from "expo-status-bar";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Platform,
   Pressable,
   RefreshControl,
@@ -20,6 +23,36 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { apiClient } from "@/services/api";
 import { COUNTRIES, formatCurrency } from "@/lib/countries";
+
+// Palette
+const NAVY        = "#0A1C3A";
+const NAVY_LIGHT  = "#152E54";
+const GOLD        = "#D4AF37";
+const GOLD_SOFT   = "#C6A15B";
+
+const LIGHT_BG        = "#F7F5F0";
+const LIGHT_SURFACE   = "#FFFFFF";
+const LIGHT_TEXT      = "#1A202C";
+const LIGHT_TEXT_2    = "#718096";
+const LIGHT_BORDER    = "rgba(10,28,58,0.08)";
+const LIGHT_INPUT_BG  = "#F5F6F8";
+const LIGHT_ICON_BG   = "rgba(10,28,58,0.05)";
+const LIGHT_ICON_BORD = "rgba(10,28,58,0.08)";
+
+const DARK_BG         = "#0B132B";
+const DARK_SURFACE    = "#1C2541";
+const DARK_TEXT       = "#F8F9FA";
+const DARK_TEXT_2     = "#A0AEC0";
+const DARK_BORDER     = "rgba(255,255,255,0.08)";
+const DARK_INPUT_BG   = "rgba(255,255,255,0.04)";
+const DARK_ICON_BG    = "rgba(212,175,55,0.12)";
+const DARK_ICON_BORD  = "rgba(212,175,55,0.26)";
+
+const SUCCESS = "#10B981";
+const WARNING = "#F59E0B";
+const INFO    = "#3B82F6";
+const DANGER  = "#EF4444";
+const PURPLE  = "#8B5CF6";
 
 type NotifType = "order_done" | "order_partial" | "order_cancelled" | "referral" | "nouveau_filleul" | "depot" | "info";
 
@@ -41,13 +74,13 @@ interface NotifItem {
 }
 
 const TYPE_CONFIG: Record<string, { icon: React.ComponentProps<typeof Feather>["name"]; color: string; bg: string }> = {
-  order_done:      { icon: "check-circle",  color: "#4CAF50", bg: "rgba(76,175,80,0.12)" },
-  order_partial:   { icon: "alert-triangle", color: "#FF9800", bg: "rgba(255,152,0,0.12)" },
-  order_cancelled: { icon: "x-circle",      color: "#F44336", bg: "rgba(244,67,54,0.12)" },
-  referral:        { icon: "gift",           color: "#FFD700", bg: "rgba(255,215,0,0.12)" },
-  nouveau_filleul: { icon: "user-plus",      color: "#1E90FF", bg: "rgba(30,144,255,0.12)" },
-  depot:           { icon: "dollar-sign",    color: "#4CAF50", bg: "rgba(76,175,80,0.12)" },
-  info:            { icon: "bell",           color: "#9C27B0", bg: "rgba(156,39,176,0.12)" },
+  order_done:      { icon: "check-circle",  color: SUCCESS, bg: "rgba(16,185,129,0.12)" },
+  order_partial:   { icon: "alert-triangle", color: WARNING, bg: "rgba(245,158,11,0.12)" },
+  order_cancelled: { icon: "x-circle",      color: DANGER, bg: "rgba(239,68,68,0.12)" },
+  referral:        { icon: "gift",           color: GOLD, bg: "rgba(212,175,55,0.12)" },
+  nouveau_filleul: { icon: "user-plus",      color: INFO, bg: "rgba(59,130,246,0.12)" },
+  depot:           { icon: "dollar-sign",    color: SUCCESS, bg: "rgba(16,185,129,0.12)" },
+  info:            { icon: "bell",           color: PURPLE, bg: "rgba(139,92,246,0.12)" },
 };
 
 const READ_KEY = "@sbh_notif_read";
@@ -66,10 +99,79 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
+function useEntry(delay = 0, duration = 420) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1, duration, delay, useNativeDriver: true, easing: Easing.out(Easing.cubic),
+    }).start();
+  }, []);
+  return anim;
+}
+
+// Empty state (SVG-like)
+function EmptyNotifs({ C, isDark }: any) {
+  const float = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, { toValue: 1, duration: 2400, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
+        Animated.timing(float, { toValue: 0, duration: 2400, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  const translateY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+
+  return (
+    <View style={styles.emptyWrap}>
+      <Animated.View style={{ width: 140, height: 140, alignItems: "center", justifyContent: "center", transform: [{ translateY }] }}>
+        <View style={{
+          position: "absolute", width: 130, height: 130, borderRadius: 65,
+          borderWidth: 1, borderColor: C.iconBorder, opacity: 0.5,
+        }} />
+        <View style={{
+          width: 96, height: 96, borderRadius: 48,
+          backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <Feather name="bell-off" size={44} color={C.accentIcon} />
+        </View>
+        <View style={{ position: "absolute", top: 10, right: 20, width: 10, height: 10, borderRadius: 5, backgroundColor: GOLD, opacity: 0.55 }} />
+        <View style={{ position: "absolute", bottom: 16, left: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: INFO, opacity: 0.45 }} />
+        <View style={{ position: "absolute", top: 60, left: -4, width: 6, height: 6, borderRadius: 3, backgroundColor: SUCCESS, opacity: 0.4 }} />
+      </Animated.View>
+      <Text style={[styles.emptyTitle, { color: C.text }]}>Aucune notification</Text>
+      <Text style={[styles.emptyText, { color: C.textMuted }]}>
+        Vos commandes, bonus de parrainage et alertes importantes apparaîtront ici.
+      </Text>
+    </View>
+  );
+}
+
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { isDark: ctxIsDark, toggleTheme } = useTheme();
+  const isDark = ctxIsDark === true;
   const { user } = useAuth();
+
+  const C = useMemo(() => ({
+    bg:            isDark ? DARK_BG         : LIGHT_BG,
+    surface:       isDark ? DARK_SURFACE    : LIGHT_SURFACE,
+    border:        isDark ? DARK_BORDER     : LIGHT_BORDER,
+    separator:     isDark ? DARK_BORDER     : LIGHT_BORDER,
+    text:          isDark ? DARK_TEXT       : LIGHT_TEXT,
+    textSecondary: isDark ? DARK_TEXT_2     : LIGHT_TEXT_2,
+    textMuted:     isDark ? DARK_TEXT_2     : LIGHT_TEXT_2,
+    inputBg:       isDark ? DARK_INPUT_BG   : LIGHT_INPUT_BG,
+    inputBorder:   isDark ? DARK_BORDER     : LIGHT_BORDER,
+    iconBg:        isDark ? DARK_ICON_BG    : LIGHT_ICON_BG,
+    iconBorder:    isDark ? DARK_ICON_BORD  : LIGHT_ICON_BORD,
+    accent:        isDark ? GOLD            : NAVY,
+    accentIcon:    isDark ? GOLD            : NAVY,
+  }), [isDark]);
+
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
 
   const userCountry = user?.country
@@ -160,29 +262,66 @@ export default function NotificationsScreen() {
     } catch {}
   };
 
+  const goBack = () => {
+    if (router.canGoBack?.()) router.back();
+    else router.push("/(tabs)" as any);
+  };
+
   const unread = notifs.filter((n) => !readIds.has(n.id)).length;
-  const c = colors;
+
+  const entry0 = useEntry(60);
 
   return (
-    <View style={[styles.root, { backgroundColor: c.background }]}>
-      <StarBackground />
+    <View style={[styles.root, { backgroundColor: C.bg }]}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <StarBackground dark={isDark} />
 
       <LinearGradient
-        colors={[c.gradientStart, c.gradientEnd]}
+        colors={isDark ? ["#132C57", "#0A1C3A"] : ["#FFFFFF", "#FBF8F1"]}
         style={[styles.header, { paddingTop: topPad + 12 }]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
       >
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={20} color="#fff" />
+        {!isDark && <View style={styles.headerGoldLine} />}
+
+        <Pressable
+          onPress={goBack}
+          style={({ pressed }) => [
+            styles.backBtn,
+            {
+              backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(10,28,58,0.05)",
+              borderColor: isDark ? "transparent" : LIGHT_BORDER,
+              borderWidth: isDark ? 0 : 1,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Feather name="chevron-left" size={20} color={isDark ? "#fff" : NAVY} />
         </Pressable>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          {unread > 0 && (
-            <Text style={styles.headerSub}>{unread} non lue{unread > 1 ? "s" : ""}</Text>
-          )}
+
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: isDark ? "#FFFFFF" : NAVY }]}>
+            Notifications
+          </Text>
+          <Text style={[styles.headerSub, { color: isDark ? "rgba(255,255,255,0.7)" : LIGHT_TEXT_2 }]}>
+            {unread > 0
+              ? `${unread} non lue${unread > 1 ? "s" : ""}`
+              : `${notifs.length} au total`}
+          </Text>
         </View>
-        <Pressable onPress={toggleTheme} style={styles.themeBtn}>
-          <Feather name={isDark ? "sun" : "moon"} size={18} color="#fff" />
+
+        <Pressable
+          onPress={() => { Haptics.selectionAsync(); toggleTheme(); }}
+          style={({ pressed }) => [
+            styles.backBtn,
+            {
+              backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(10,28,58,0.05)",
+              borderColor: isDark ? "transparent" : LIGHT_BORDER,
+              borderWidth: isDark ? 0 : 1,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Feather name={isDark ? "sun" : "moon"} size={18} color={isDark ? GOLD : NAVY} />
         </Pressable>
       </LinearGradient>
 
@@ -190,159 +329,191 @@ export default function NotificationsScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={isDark ? GOLD : NAVY}
+          />
         }
       >
         {loading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator color={c.accent} size="large" />
-            <Text style={[styles.loadingText, { color: c.textMuted }]}>Chargement...</Text>
+            <ActivityIndicator color={C.accentIcon} size="large" />
+            <Text style={[styles.loadingText, { color: C.textMuted }]}>Chargement...</Text>
           </View>
         ) : notifs.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Feather name="bell-off" size={52} color={c.textMuted} />
-            <Text style={[styles.emptyTitle, { color: c.text }]}>Aucune notification</Text>
-            <Text style={[styles.emptyText, { color: c.textMuted }]}>
-              Vos commandes, bonus de parrainage et alertes importants apparaîtront ici.
-            </Text>
-          </View>
+          <EmptyNotifs C={C} isDark={isDark} />
         ) : (
           <>
             {unread > 0 && (
-              <Pressable style={styles.markAllBtn} onPress={markAllRead}>
-                <Feather name="check-circle" size={14} color={c.accent} />
-                <Text style={[styles.markAllText, { color: c.accent }]}>Tout marquer comme lu</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.markAllBtn,
+                  { backgroundColor: C.iconBg, borderColor: C.iconBorder },
+                  pressed && { opacity: 0.85 },
+                ]}
+                onPress={markAllRead}
+              >
+                <Feather name="check-circle" size={14} color={C.accentIcon} />
+                <Text style={[styles.markAllText, { color: C.accentIcon }]}>
+                  Tout marquer comme lu
+                </Text>
               </Pressable>
             )}
 
-            {notifs.map((notif) => {
-              const cfg = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.info;
-              const isRead = readIds.has(notif.id);
-              return (
-                <Pressable
-                  key={notif.id}
-                  style={[
-                    styles.notifCard,
-                    { backgroundColor: c.card, borderColor: isRead ? c.cardBorder : cfg.color + "50" },
-                    !isRead && { borderLeftWidth: 3, borderLeftColor: cfg.color },
-                  ]}
-                  onPress={() => handleNotifPress(notif)}
-                >
-                  <View style={[styles.notifIcon, { backgroundColor: cfg.bg }]}>
-                    <Feather name={cfg.icon} size={20} color={cfg.color} />
-                  </View>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <View style={styles.notifTitleRow}>
-                      <Text style={[styles.notifTitle, { color: c.text }]} numberOfLines={1}>
-                        {notif.title}
-                      </Text>
-                      {!isRead && <View style={[styles.unreadDot, { backgroundColor: cfg.color }]} />}
+            <Animated.View style={{
+              opacity: entry0,
+              transform: [{ translateY: entry0.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+              gap: 10,
+            }}>
+              {notifs.map((notif, idx) => {
+                const cfg = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.info;
+                const isRead = readIds.has(notif.id);
+                return (
+                  <Pressable
+                    key={notif.id}
+                    style={({ pressed }) => [
+                      styles.notifCard,
+                      {
+                        backgroundColor: C.surface,
+                        borderColor: isRead ? C.border : cfg.color + "50",
+                        shadowColor: isDark ? "#000" : NAVY,
+                        shadowOpacity: isDark ? 0.25 : 0.04,
+                      },
+                      !isRead && { borderLeftWidth: 3, borderLeftColor: cfg.color },
+                      pressed && { opacity: 0.9 },
+                    ]}
+                    onPress={() => handleNotifPress(notif)}
+                  >
+                    <View style={[styles.notifIcon, { backgroundColor: cfg.bg }]}>
+                      <Feather name={cfg.icon} size={20} color={cfg.color} />
                     </View>
-                    <Text style={[styles.notifMessage, { color: c.textSecondary ?? c.textMuted }]} numberOfLines={4}>
-                      {notif.message}
-                    </Text>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <View style={styles.notifTitleRow}>
+                        <Text style={[styles.notifTitle, { color: C.text }]} numberOfLines={1}>
+                          {notif.title}
+                        </Text>
+                        {!isRead && <View style={[styles.unreadDot, { backgroundColor: cfg.color }]} />}
+                      </View>
+                      <Text style={[styles.notifMessage, { color: C.textSecondary }]} numberOfLines={4}>
+                        {notif.message}
+                      </Text>
 
-                    {/* Refund badge for partial/cancelled */}
-                    {(notif.type === "order_partial" || notif.type === "order_cancelled") &&
-                      (notif.refundAmount ?? 0) > 0 && (
-                        <View style={[styles.refundBadge, { backgroundColor: "#4CAF5015", borderColor: "#4CAF5030" }]}>
-                          <Feather name="refresh-cw" size={12} color="#4CAF50" />
-                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#4CAF50" }}>
-                            {userCountry && userCountry.xafRate !== 1
-                              ? `${formatCurrency(notif.refundAmount ?? 0, userCountry)} remboursés`
-                              : `${(notif.refundAmount ?? 0).toLocaleString("fr-FR")} FCFA remboursés`}
+                      {(notif.type === "order_partial" || notif.type === "order_cancelled") &&
+                        (notif.refundAmount ?? 0) > 0 && (
+                          <View style={[styles.refundBadge, { backgroundColor: SUCCESS + "15", borderColor: SUCCESS + "30" }]}>
+                            <Feather name="refresh-cw" size={12} color={SUCCESS} />
+                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: SUCCESS }}>
+                              {userCountry && userCountry.xafRate !== 1
+                                ? `${formatCurrency(notif.refundAmount ?? 0, userCountry)} remboursés`
+                                : `${(notif.refundAmount ?? 0).toLocaleString("fr-FR")} FCFA remboursés`}
+                            </Text>
+                          </View>
+                        )}
+
+                      {notif.type === "referral" && (notif.amount ?? 0) > 0 && (
+                        <Text style={[styles.notifAmount, { color: isDark ? GOLD : NAVY }]}>
+                          +{userCountry && userCountry.xafRate !== 1
+                            ? formatCurrency(notif.amount ?? 0, userCountry)
+                            : `${(notif.amount ?? 0).toLocaleString("fr-FR")} FCFA`}
+                        </Text>
+                      )}
+
+                      {notif.type === "nouveau_filleul" && notif.filleulName && (
+                        <View style={[styles.refundBadge, { backgroundColor: INFO + "15", borderColor: INFO + "30" }]}>
+                          <Feather name="user" size={12} color={INFO} />
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: INFO }}>
+                            {notif.filleulName}
                           </Text>
                         </View>
                       )}
 
-                    {/* Bonus amount for referral */}
-                    {notif.type === "referral" && (notif.amount ?? 0) > 0 && (
-                      <Text style={[styles.notifAmount, { color: cfg.color }]}>
-                        +{userCountry && userCountry.xafRate !== 1
-                          ? formatCurrency(notif.amount ?? 0, userCountry)
-                          : `${(notif.amount ?? 0).toLocaleString("fr-FR")} FCFA`}
-                      </Text>
-                    )}
-
-                    {/* Filleul name */}
-                    {notif.type === "nouveau_filleul" && notif.filleulName && (
-                      <View style={[styles.refundBadge, { backgroundColor: "#1E90FF15", borderColor: "#1E90FF30" }]}>
-                        <Feather name="user" size={12} color="#1E90FF" />
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#1E90FF" }}>
-                          {notif.filleulName}
-                        </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
+                        <Text style={[styles.notifTime, { color: C.textMuted }]}>{timeAgo(notif.createdAt)}</Text>
+                        {(notif.type === "order_done" || notif.type === "order_partial" || notif.type === "order_cancelled") && (
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: C.accentIcon }}>
+                            Voir commandes
+                          </Text>
+                        )}
+                        {(notif.type === "referral" || notif.type === "nouveau_filleul") && (
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: isDark ? GOLD : NAVY }}>
+                            Voir parrainage
+                          </Text>
+                        )}
+                        {notif.type === "depot" && (
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: SUCCESS }}>
+                            Voir portefeuille
+                          </Text>
+                        )}
                       </View>
-                    )}
-
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
-                      <Text style={[styles.notifTime, { color: c.textMuted }]}>{timeAgo(notif.createdAt)}</Text>
-                      {(notif.type === "order_done" || notif.type === "order_partial" || notif.type === "order_cancelled") && (
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: c.accent }}>Voir commandes →</Text>
-                      )}
-                      {(notif.type === "referral" || notif.type === "nouveau_filleul") && (
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: "#FFD700" }}>Voir parrainage →</Text>
-                      )}
-                      {notif.type === "depot" && (
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: "#4CAF50" }}>Voir portefeuille →</Text>
-                      )}
                     </View>
-                  </View>
-                </Pressable>
-              );
-            })}
+                  </Pressable>
+                );
+              })}
+            </Animated.View>
           </>
         )}
 
-        <View style={styles.footerNote}>
-          <Feather name="info" size={13} color={c.textMuted} />
-          <Text style={[styles.footerText, { color: c.textMuted }]}>
-            Commandes, bonus parrainage, filleuls et alertes importantes.
-          </Text>
-        </View>
+        {notifs.length > 0 && (
+          <View style={styles.footerNote}>
+            <Feather name="info" size={13} color={C.textMuted} />
+            <Text style={[styles.footerText, { color: C.textMuted }]}>
+              Commandes, bonus parrainage, filleuls et alertes importantes.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
 }
 
+// Haptics requis pour toggleTheme
+import * as Haptics from "expo-haptics";
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: {
-    paddingHorizontal: 16, paddingBottom: 16,
-    flexDirection: "row", alignItems: "flex-end",
+    paddingHorizontal: 16, paddingBottom: 14,
+    flexDirection: "row", alignItems: "center", gap: 12,
+    position: "relative",
+  },
+  headerGoldLine: {
+    position: "absolute", top: 0, left: 20, right: 20, height: 2,
+    backgroundColor: GOLD, opacity: 0.35,
+    borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
   },
   backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    width: 40, height: 40, borderRadius: 13,
     alignItems: "center", justifyContent: "center",
   },
-  themeBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#fff" },
-  headerSub: { fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 2 },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 20, letterSpacing: -0.3 },
+  headerSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 3 },
+
   content: { padding: 16, gap: 10 },
   loadingState: { alignItems: "center", paddingVertical: 60, gap: 12 },
   loadingText: { fontFamily: "Inter_400Regular", fontSize: 14 },
+
   markAllBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    alignSelf: "flex-end", paddingVertical: 6, paddingHorizontal: 12,
-    borderRadius: 20,
+    alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 12, borderWidth: 1,
   },
   markAllText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+
   notifCard: {
     flexDirection: "row", alignItems: "flex-start", gap: 12,
-    borderRadius: 14, padding: 14,
+    borderRadius: 16, padding: 14,
     borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8, elevation: 1,
   },
   notifIcon: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 44, height: 44, borderRadius: 14,
     alignItems: "center", justifyContent: "center",
     flexShrink: 0,
   },
   notifTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  notifTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14, flex: 1 },
+  notifTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14, flex: 1, letterSpacing: -0.1 },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
   notifMessage: { fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 19 },
   notifAmount: { fontFamily: "Inter_700Bold", fontSize: 13, marginTop: 2 },
@@ -352,9 +523,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, alignSelf: "flex-start", marginTop: 2,
   },
   notifTime: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 2 },
-  emptyState: { alignItems: "center", paddingVertical: 60, gap: 12 },
-  emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
-  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center", maxWidth: 260 },
+
+  emptyWrap: {
+    alignItems: "center", justifyContent: "center",
+    paddingVertical: 60, paddingHorizontal: 30, gap: 12,
+  },
+  emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18, textAlign: "center", letterSpacing: -0.2 },
+  emptyText: { fontFamily: "Inter_400Regular", fontSize: 13.5, textAlign: "center", maxWidth: 280, lineHeight: 20 },
+
   footerNote: {
     flexDirection: "row", alignItems: "center", gap: 6,
     justifyContent: "center", marginTop: 8,

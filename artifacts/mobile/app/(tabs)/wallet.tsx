@@ -2,10 +2,14 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useEffect, useState } from "react";
+import { router } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -27,6 +31,41 @@ import { apiClient, BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 import { COUNTRIES, Country, formatCurrency } from "@/lib/countries";
 
+// ═══════════════════════════════════════════════════════════════
+//  PALETTE
+// ═══════════════════════════════════════════════════════════════
+const NAVY        = "#0A1C3A";
+const NAVY_LIGHT  = "#152E54";
+const GOLD        = "#D4AF37";
+const GOLD_SOFT   = "#C6A15B";
+
+const LIGHT_BG        = "#F7F5F0";
+const LIGHT_SURFACE   = "#FFFFFF";
+const LIGHT_TEXT      = "#1A202C";
+const LIGHT_TEXT_2    = "#718096";
+const LIGHT_BORDER    = "rgba(10,28,58,0.08)";
+const LIGHT_INPUT_BG  = "#F5F6F8";
+const LIGHT_ICON_BG   = "rgba(10,28,58,0.05)";
+const LIGHT_ICON_BORD = "rgba(10,28,58,0.08)";
+
+const DARK_BG         = "#0B132B";
+const DARK_SURFACE    = "#1C2541";
+const DARK_TEXT       = "#F8F9FA";
+const DARK_TEXT_2     = "#A0AEC0";
+const DARK_BORDER     = "rgba(255,255,255,0.08)";
+const DARK_INPUT_BG   = "rgba(255,255,255,0.04)";
+const DARK_ICON_BG    = "rgba(212,175,55,0.12)";
+const DARK_ICON_BORD  = "rgba(212,175,55,0.26)";
+
+const SUCCESS = "#10B981";
+const WARNING = "#F59E0B";
+const INFO    = "#3B82F6";
+const DANGER  = "#EF4444";
+const PURPLE  = "#8B5CF6";
+
+// ═══════════════════════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════════════════════
 const AMOUNTS_FCFA = [500, 1000, 2000, 5000, 10000, 20000];
 
 export interface PayCountry extends Country {
@@ -34,133 +73,158 @@ export interface PayCountry extends Country {
 }
 
 const INTL_COUNTRIES: PayCountry[] = [
-  // ── Zone XAF (FCFA Afrique centrale) ────────────────────────────────────
+  // XAF
   { code: "cm", name: "Cameroun",             flag: "🇨🇲", phoneCode: "+237", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Orange Money"] },
   { code: "ga", name: "Gabon",                flag: "🇬🇦", phoneCode: "+241", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Airtel Money"] },
   { code: "cg", name: "Congo Brazzaville",    flag: "🇨🇬", phoneCode: "+242", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Airtel Money"] },
   { code: "td", name: "Tchad",                flag: "🇹🇩", phoneCode: "+235", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Airtel Money"] },
   { code: "cf", name: "Centrafrique",         flag: "🇨🇫", phoneCode: "+236", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money"] },
   { code: "gq", name: "Guinée Équatoriale",   flag: "🇬🇶", phoneCode: "+240", currency: "XAF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Airtel Money"] },
-  // ── Zone XOF (FCFA Afrique de l'Ouest) ──────────────────────────────────
+  // XOF
   { code: "sn", name: "Sénégal",              flag: "🇸🇳", phoneCode: "+221", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Orange Money", "Wave"] },
   { code: "ci", name: "Côte d'Ivoire",        flag: "🇨🇮", phoneCode: "+225", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Orange Money", "MTN Mobile Money", "Wave"] },
   { code: "ml", name: "Mali",                 flag: "🇲🇱", phoneCode: "+223", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Orange Money", "Moov Money"] },
   { code: "bf", name: "Burkina Faso",         flag: "🇧🇫", phoneCode: "+226", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Orange Money", "Moov Money"] },
-  { code: "bj", name: "Bénin",               flag: "🇧🇯", phoneCode: "+229", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Moov Money"] },
-  { code: "tg", name: "Togo",                flag: "🇹🇬", phoneCode: "+228", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Flooz", "T-Money"] },
-  { code: "ne", name: "Niger",               flag: "🇳🇪", phoneCode: "+227", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Airtel Money", "Zamani"] },
-  { code: "gw", name: "Guinée-Bissau",       flag: "🇬🇼", phoneCode: "+245", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money"] },
-  // ── Guinée Conakry (GNF — hors zone CFA) ───────────────────────────────
-  { code: "gn", name: "Guinée Conakry",      flag: "🇬🇳", phoneCode: "+224", currency: "GNF", currencySymbol: "FG",   xafRate: 14.5,   operators: ["Orange Money", "MTN Mobile Money"] },
-  // ── Afrique centrale / Est ──────────────────────────────────────────────
-  { code: "cd", name: "RD Congo",            flag: "🇨🇩", phoneCode: "+243", currency: "CDF", currencySymbol: "FC",   xafRate: 4.70,   operators: ["M-Pesa", "Airtel Money", "Orange Money"] },
-  { code: "rw", name: "Rwanda",              flag: "🇷🇼", phoneCode: "+250", currency: "RWF", currencySymbol: "FRw",  xafRate: 1.98,   operators: ["MTN Mobile Money", "Airtel Money"] },
-  { code: "ug", name: "Ouganda",             flag: "🇺🇬", phoneCode: "+256", currency: "UGX", currencySymbol: "USh",  xafRate: 5.64,   operators: ["MTN Mobile Money", "Airtel Money"] },
-  { code: "tz", name: "Tanzanie",            flag: "🇹🇿", phoneCode: "+255", currency: "TZS", currencySymbol: "TSh",  xafRate: 3.81,   operators: ["M-Pesa", "Airtel Money"] },
-  { code: "ke", name: "Kenya",               flag: "🇰🇪", phoneCode: "+254", currency: "KES", currencySymbol: "KSh",  xafRate: 0.20,   operators: ["M-Pesa"] },
-  { code: "et", name: "Éthiopie",            flag: "🇪🇹", phoneCode: "+251", currency: "ETB", currencySymbol: "Br",   xafRate: 0.19,   operators: ["Telebirr"] },
-  { code: "zm", name: "Zambie",              flag: "🇿🇲", phoneCode: "+260", currency: "ZMW", currencySymbol: "ZK",   xafRate: 0.041,  operators: ["MTN Mobile Money", "Airtel Money"] },
-  { code: "mw", name: "Malawi",              flag: "🇲🇼", phoneCode: "+265", currency: "MWK", currencySymbol: "MK",   xafRate: 2.67,   operators: ["TNM Mpamba", "Airtel Money"] },
-  // ── Afrique de l'Ouest hors CFA ─────────────────────────────────────────
-  { code: "gh", name: "Ghana",               flag: "🇬🇭", phoneCode: "+233", currency: "GHS", currencySymbol: "GH₵",  xafRate: 0.024,  operators: ["MTN Mobile Money", "AirtelTigo Money"] },
-  { code: "ng", name: "Nigéria",             flag: "🇳🇬", phoneCode: "+234", currency: "NGN", currencySymbol: "₦",    xafRate: 2.44,   operators: ["MTN Mobile Money", "Airtel Money", "OPay"] },
-  { code: "sl", name: "Sierra Leone",        flag: "🇸🇱", phoneCode: "+232", currency: "SLE", currencySymbol: "Le",   xafRate: 0.034,  operators: ["Orange Money"] },
-  { code: "mr", name: "Mauritanie",         flag: "🇲🇷", phoneCode: "+222", currency: "MRU", currencySymbol: "UM",   xafRate: 0.056,  operators: ["Masrvi", "Bankily"] },
-  { code: "gm", name: "Gambie",             flag: "🇬🇲", phoneCode: "+220", currency: "GMD", currencySymbol: "D",    xafRate: 0.097,  operators: ["QMoney", "Afrimoney"] },
-  // ── Afrique australe / île ───────────────────────────────────────────
-  { code: "mg", name: "Madagascar",         flag: "🇲🇬", phoneCode: "+261", currency: "MGA", currencySymbol: "Ar",   xafRate: 68,     operators: ["MVola", "Orange Money", "Airtel Money"] },
-  { code: "mz", name: "Mozambique",         flag: "🇲🇿", phoneCode: "+258", currency: "MZN", currencySymbol: "MT",   xafRate: 0.099,  operators: ["M-Pesa", "Airtel Money"] },
-  // ── International ─────────────────────────────────────────────────────
-  { code: "ca", name: "Canada",              flag: "🇨🇦", phoneCode: "+1",   currency: "CAD", currencySymbol: "C$",   xafRate: 0.0021, operators: ["Interac"] },
-  { code: "fr", name: "France",              flag: "🇫🇷", phoneCode: "+33",  currency: "EUR", currencySymbol: "€",    xafRate: 0.00152,operators: ["Virement SEPA", "Lydia"] },
+  { code: "bj", name: "Bénin",                flag: "🇧🇯", phoneCode: "+229", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money", "Moov Money"] },
+  { code: "tg", name: "Togo",                 flag: "🇹🇬", phoneCode: "+228", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Flooz", "T-Money"] },
+  { code: "ne", name: "Niger",                flag: "🇳🇪", phoneCode: "+227", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["Airtel Money", "Zamani"] },
+  { code: "gw", name: "Guinée-Bissau",        flag: "🇬🇼", phoneCode: "+245", currency: "XOF", currencySymbol: "FCFA", xafRate: 1,      operators: ["MTN Mobile Money"] },
+  // Autres
+  { code: "gn", name: "Guinée Conakry",       flag: "🇬🇳", phoneCode: "+224", currency: "GNF", currencySymbol: "FG",   xafRate: 14.5,   operators: ["Orange Money", "MTN Mobile Money"] },
+  { code: "cd", name: "RD Congo",             flag: "🇨🇩", phoneCode: "+243", currency: "CDF", currencySymbol: "FC",   xafRate: 4.70,   operators: ["M-Pesa", "Airtel Money", "Orange Money"] },
+  { code: "rw", name: "Rwanda",               flag: "🇷🇼", phoneCode: "+250", currency: "RWF", currencySymbol: "FRw",  xafRate: 1.98,   operators: ["MTN Mobile Money", "Airtel Money"] },
+  { code: "ug", name: "Ouganda",              flag: "🇺🇬", phoneCode: "+256", currency: "UGX", currencySymbol: "USh",  xafRate: 5.64,   operators: ["MTN Mobile Money", "Airtel Money"] },
+  { code: "tz", name: "Tanzanie",             flag: "🇹🇿", phoneCode: "+255", currency: "TZS", currencySymbol: "TSh",  xafRate: 3.81,   operators: ["M-Pesa", "Airtel Money"] },
+  { code: "ke", name: "Kenya",                flag: "🇰🇪", phoneCode: "+254", currency: "KES", currencySymbol: "KSh",  xafRate: 0.20,   operators: ["M-Pesa"] },
+  { code: "et", name: "Éthiopie",             flag: "🇪🇹", phoneCode: "+251", currency: "ETB", currencySymbol: "Br",   xafRate: 0.19,   operators: ["Telebirr"] },
+  { code: "zm", name: "Zambie",               flag: "🇿🇲", phoneCode: "+260", currency: "ZMW", currencySymbol: "ZK",   xafRate: 0.041,  operators: ["MTN Mobile Money", "Airtel Money"] },
+  { code: "mw", name: "Malawi",               flag: "🇲🇼", phoneCode: "+265", currency: "MWK", currencySymbol: "MK",   xafRate: 2.67,   operators: ["TNM Mpamba", "Airtel Money"] },
+  { code: "gh", name: "Ghana",                flag: "🇬🇭", phoneCode: "+233", currency: "GHS", currencySymbol: "GH₵",  xafRate: 0.024,  operators: ["MTN Mobile Money", "AirtelTigo Money"] },
+  { code: "ng", name: "Nigéria",              flag: "🇳🇬", phoneCode: "+234", currency: "NGN", currencySymbol: "₦",    xafRate: 2.44,   operators: ["MTN Mobile Money", "Airtel Money", "OPay"] },
+  { code: "sl", name: "Sierra Leone",         flag: "🇸🇱", phoneCode: "+232", currency: "SLE", currencySymbol: "Le",   xafRate: 0.034,  operators: ["Orange Money"] },
+  { code: "mr", name: "Mauritanie",           flag: "🇲🇷", phoneCode: "+222", currency: "MRU", currencySymbol: "UM",   xafRate: 0.056,  operators: ["Masrvi", "Bankily"] },
+  { code: "gm", name: "Gambie",               flag: "🇬🇲", phoneCode: "+220", currency: "GMD", currencySymbol: "D",    xafRate: 0.097,  operators: ["QMoney", "Afrimoney"] },
+  { code: "mg", name: "Madagascar",           flag: "🇲🇬", phoneCode: "+261", currency: "MGA", currencySymbol: "Ar",   xafRate: 68,     operators: ["MVola", "Orange Money", "Airtel Money"] },
+  { code: "mz", name: "Mozambique",           flag: "🇲🇿", phoneCode: "+258", currency: "MZN", currencySymbol: "MT",   xafRate: 0.099,  operators: ["M-Pesa", "Airtel Money"] },
+  { code: "ca", name: "Canada",               flag: "🇨🇦", phoneCode: "+1",   currency: "CAD", currencySymbol: "C$",   xafRate: 0.0021, operators: ["Interac"] },
+  { code: "fr", name: "France",               flag: "🇫🇷", phoneCode: "+33",  currency: "EUR", currencySymbol: "€",    xafRate: 0.00152,operators: ["Virement SEPA", "Lydia"] },
 ];
 
 function getEquivalentLocal(amountXAF: number, country: PayCountry): number {
   if (country.xafRate === 1) return amountXAF;
   return Math.round(amountXAF * country.xafRate);
 }
-
 function getEquivalentXAF(localAmount: number, country: PayCountry): number {
   if (country.xafRate === 1) return localAmount;
   return Math.round(localAmount / country.xafRate);
 }
 
 const STATUS_CONFIG = {
-  pending:   { label: "En attente", color: "#FF9800", bg: "rgba(255,152,0,0.12)" },
-  confirmed: { label: "Confirmé",   color: "#4CAF50", bg: "rgba(76,175,80,0.12)" },
-  rejected:  { label: "Rejeté",     color: "#FF6B6B", bg: "rgba(255,107,107,0.12)" },
+  pending:   { label: "En attente", color: WARNING, bg: "rgba(245,158,11,0.12)" },
+  confirmed: { label: "Confirmé",   color: SUCCESS, bg: "rgba(16,185,129,0.12)" },
+  rejected:  { label: "Rejeté",     color: DANGER,  bg: "rgba(239,68,68,0.12)" },
 };
 
-function RechargeItem({ item, colors, userCountry }: { item: Recharge; colors: any; userCountry?: Country | null }) {
+const ACTIVITY_TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string; prefix: string }> = {
+  depot:         { icon: "arrow-down-circle", color: "#11998e", bg: "rgba(17,153,142,0.12)", prefix: "+" },
+  commande:      { icon: "shopping-cart",    color: INFO,      bg: "rgba(59,130,246,0.12)", prefix: "-" },
+  remboursement: { icon: "refresh-ccw",      color: SUCCESS,   bg: "rgba(16,185,129,0.12)", prefix: "+" },
+  annulation:    { icon: "x-circle",         color: "#FF5722", bg: "rgba(255,87,34,0.12)",  prefix: "" },
+  transfert:     { icon: "arrow-right-circle",color: GOLD,     bg: "rgba(212,175,55,0.12)", prefix: "" },
+  retrait:       { icon: "download",         color: PURPLE,    bg: "rgba(139,92,246,0.12)", prefix: "-" },
+  parrainage:    { icon: "gift",             color: GOLD,      bg: "rgba(212,175,55,0.12)", prefix: "+" },
+};
+
+const ACTIVITY_STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
+  confirmed:    { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
+  completed:    { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
+  success:      { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
+  pending:      { label: "En attente",  color: WARNING, bg: "rgba(245,158,11,0.15)" },
+  "En attente": { label: "En attente",  color: WARNING, bg: "rgba(245,158,11,0.15)" },
+  rejected:     { label: "Rejeté",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
+  failed:       { label: "Échoué",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
+  annulée:      { label: "Annulé",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
+};
+
+function getActivityStatusCfg(status: string) {
+  return ACTIVITY_STATUS_LABEL[status] ?? { label: status ?? "—", color: LIGHT_TEXT_2, bg: "rgba(158,158,158,0.1)" };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ANIMATIONS
+// ═══════════════════════════════════════════════════════════════
+function usePressSpring(to = 0.97) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const onPressIn = useCallback(() => {
+    Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+  }, []);
+  const onPressOut = useCallback(() => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 6 }).start();
+  }, []);
+  return { scale, onPressIn, onPressOut };
+}
+
+function useEntry(delay = 0, duration = 420) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1, duration, delay, useNativeDriver: true, easing: Easing.out(Easing.cubic),
+    }).start();
+  }, []);
+  return anim;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SUB COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+
+function RechargeItem({ item, C, userCountry }: { item: Recharge; C: any; userCountry?: Country | null }) {
   const cfg = STATUS_CONFIG[item.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending;
   const date = new Date(item.createdAt);
   return (
-    <View style={[styles.rechargeItem, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-      <View style={[styles.rechargeIconBox, { backgroundColor: "rgba(30,144,255,0.12)" }]}>
-        <Feather name="arrow-down-circle" size={22} color={colors.accent} />
+    <View style={[styles.histItem, { backgroundColor: C.surface, borderColor: C.border }]}>
+      <View style={[styles.histIcon, { backgroundColor: "#11998e" + "18" }]}>
+        <Feather name="arrow-down-circle" size={20} color="#11998e" />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.rechargeMethod, { color: colors.text }]}>{item.method ?? "Dépôt"}</Text>
-        <Text style={[styles.rechargeMeta, { color: colors.textMuted }]}>
+        <Text style={[styles.histTitle, { color: C.text }]} numberOfLines={1}>
+          {item.method ?? "Dépôt"}
+        </Text>
+        <Text style={[styles.histMeta, { color: C.textMuted }]}>
           {date.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
           {item.phone ? ` • ${item.phone}` : ""}
         </Text>
       </View>
       <View style={{ alignItems: "flex-end", gap: 4 }}>
-        <Text style={styles.rechargeAmount}>
+        <Text style={[styles.histAmount, { color: SUCCESS }]}>
           +{userCountry && userCountry.xafRate !== 1
             ? formatCurrency(item.amount ?? 0, userCountry)
             : `${(item.amount ?? 0).toLocaleString("fr-FR")} FCFA`}
         </Text>
-        <View style={[styles.rechargeBadge, { backgroundColor: cfg.bg }]}>
-          <Text style={[styles.rechargeBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
+        <View style={[styles.histBadge, { backgroundColor: cfg.bg }]}>
+          <Text style={[styles.histBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
         </View>
       </View>
     </View>
   );
 }
 
-const ACTIVITY_TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string; prefix: string }> = {
-  depot:         { icon: "arrow-down-circle", color: "#11998e", bg: "rgba(17,153,142,0.12)", prefix: "+" },
-  commande:      { icon: "shopping-cart",    color: "#1E90FF", bg: "rgba(30,144,255,0.12)", prefix: "-" },
-  remboursement: { icon: "refresh-ccw",      color: "#4CAF50", bg: "rgba(76,175,80,0.12)",  prefix: "+" },
-  annulation:    { icon: "x-circle",         color: "#FF5722", bg: "rgba(255,87,34,0.12)",  prefix: "" },
-  transfert:     { icon: "arrow-right-circle",color: "#FFD700",bg: "rgba(255,215,0,0.12)",  prefix: "" },
-  retrait:       { icon: "download",          color: "#9C27B0", bg: "rgba(156,39,176,0.12)", prefix: "-" },
-  parrainage:    { icon: "gift",              color: "#FFD700", bg: "rgba(255,215,0,0.12)",  prefix: "+" },
-};
-
-const ACTIVITY_STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
-  confirmed:    { label: "Effectué",    color: "#4CAF50", bg: "rgba(76,175,80,0.15)" },
-  completed:    { label: "Effectué",    color: "#4CAF50", bg: "rgba(76,175,80,0.15)" },
-  success:      { label: "Effectué",    color: "#4CAF50", bg: "rgba(76,175,80,0.15)" },
-  pending:      { label: "En attente",  color: "#FF9800", bg: "rgba(255,152,0,0.15)" },
-  "En attente": { label: "En attente",  color: "#FF9800", bg: "rgba(255,152,0,0.15)" },
-  rejected:     { label: "Rejeté",      color: "#FF6B6B", bg: "rgba(255,107,107,0.15)" },
-  failed:       { label: "Échoué",      color: "#FF6B6B", bg: "rgba(255,107,107,0.15)" },
-  annulée:      { label: "Annulé",      color: "#FF6B6B", bg: "rgba(255,107,107,0.15)" },
-};
-
-function getActivityStatusCfg(status: string) {
-  return ACTIVITY_STATUS_LABEL[status] ?? { label: status ?? "—", color: "#9E9E9E", bg: "rgba(158,158,158,0.1)" };
-}
-
-function ActivityItem({ item, colors, userCountry }: { item: any; colors: any; userCountry?: Country | null }) {
-  const cfg = ACTIVITY_TYPE_CONFIG[item.type] ?? { icon: "activity", color: colors.accent, bg: colors.accent + "18", prefix: "" };
+function ActivityItem({ item, C, userCountry }: { item: any; C: any; userCountry?: Country | null }) {
+  const cfg = ACTIVITY_TYPE_CONFIG[item.type] ?? { icon: "activity", color: C.accentIcon, bg: C.iconBg, prefix: "" };
   const scfg = getActivityStatusCfg(item.status ?? "");
   const date = new Date(item.createdAt ?? Date.now());
   const amount = Number(item.amount ?? 0);
 
   return (
-    <View style={[styles.rechargeItem, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-      <View style={[styles.rechargeIconBox, { backgroundColor: cfg.bg }]}>
-        <Feather name={cfg.icon} size={20} color={cfg.color} />
+    <View style={[styles.histItem, { backgroundColor: C.surface, borderColor: C.border }]}>
+      <View style={[styles.histIcon, { backgroundColor: cfg.bg }]}>
+        <Feather name={cfg.icon} size={18} color={cfg.color} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.rechargeMethod, { color: colors.text }]} numberOfLines={1}>
+        <Text style={[styles.histTitle, { color: C.text }]} numberOfLines={1}>
           {item.label ?? item.type ?? "Transaction"}
         </Text>
-        <Text style={[styles.rechargeMeta, { color: colors.textMuted }]}>
+        <Text style={[styles.histMeta, { color: C.textMuted }]}>
           {date.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
           {" · "}
           {date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
@@ -168,27 +232,123 @@ function ActivityItem({ item, colors, userCountry }: { item: any; colors: any; u
       </View>
       <View style={{ alignItems: "flex-end", gap: 4 }}>
         {amount > 0 && (
-          <Text style={[styles.rechargeAmount, { color: cfg.color }]}>
+          <Text style={[styles.histAmount, { color: cfg.color }]}>
             {cfg.prefix}{userCountry && userCountry.xafRate !== 1
             ? formatCurrency(amount, userCountry)
             : `${amount.toLocaleString("fr-FR")} FCFA`}
           </Text>
         )}
-        <View style={[styles.rechargeBadge, { backgroundColor: scfg.bg }]}>
-          <Text style={[styles.rechargeBadgeText, { color: scfg.color }]}>{scfg.label}</Text>
+        <View style={[styles.histBadge, { backgroundColor: scfg.bg }]}>
+          <Text style={[styles.histBadgeText, { color: scfg.color }]}>{scfg.label}</Text>
         </View>
       </View>
     </View>
   );
 }
 
+// Balance card
+function BalanceCard({
+  icon, label, value, currency, color, C, isDark, action, onAction,
+}: any) {
+  const { scale, onPressIn, onPressOut } = usePressSpring(0.97);
+  return (
+    <Animated.View style={[styles.balanceCard, { backgroundColor: C.surface, borderColor: color + "40", transform: [{ scale }] }]}>
+      <Pressable onPressIn={onPressIn} onPressOut={onPressOut} style={{ gap: 6 }}>
+        <View style={[styles.balanceIconBox, { backgroundColor: color + "18", borderColor: color + "30" }]}>
+          <Feather name={icon} size={16} color={color} />
+        </View>
+        <Text style={[styles.balanceLabel, { color: C.textMuted }]}>{label}</Text>
+        <Text style={[styles.balanceValue, { color: C.text }]} numberOfLines={1} adjustsFontSizeToFit>
+          {value}
+        </Text>
+        <Text style={[styles.balanceCurrency, { color }]}>{currency}</Text>
+        {action && (
+          <Pressable
+            onPress={onAction}
+            style={({ pressed }) => [
+              styles.balanceAction,
+              { backgroundColor: color + "15", borderColor: color + "30" },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Feather name="arrow-up-right" size={10} color={color} />
+            <Text style={[styles.balanceActionText, { color }]}>{action}</Text>
+          </Pressable>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// Segmented mode tabs
+function ModeSegmented({ payMode, setPayMode, C, isDark }: any) {
+  const tabs = [
+    { key: "cameroun",      icon: "smartphone" as const, label: "Cameroun",     sub: "MTN · Orange", color: "#11998e" },
+    { key: "international", icon: "globe" as const,      label: "International", sub: "Mobile Money",  color: INFO },
+    { key: "historique",    icon: "list" as const,       label: "Historique",    sub: "Transactions",  color: PURPLE },
+  ];
+  return (
+    <View style={[styles.segment, { backgroundColor: C.surface, borderColor: C.border }]}>
+      {tabs.map((t, i) => {
+        const active = payMode === t.key;
+        return (
+          <React.Fragment key={t.key}>
+            {i > 0 && <View style={[styles.segmentDivider, { backgroundColor: C.border }]} />}
+            <Pressable
+              style={({ pressed }) => [
+                styles.segmentBtn,
+                active && { backgroundColor: t.color + "14" },
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={() => {
+                setPayMode(t.key);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <View style={[styles.segmentIconBox, { backgroundColor: active ? t.color + "20" : C.iconBg }]}>
+                <Feather name={t.icon} size={14} color={active ? t.color : C.textMuted} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.segmentLabel, { color: active ? t.color : C.text }]} numberOfLines={1}>
+                  {t.label}
+                </Text>
+                <Text style={[styles.segmentSub, { color: C.textMuted }]} numberOfLines={1}>
+                  {t.sub}
+                </Text>
+              </View>
+            </Pressable>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN
+// ═══════════════════════════════════════════════════════════════
 type PayMode = "cameroun" | "international" | "historique";
 
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
   const { recharges, isLoading } = useWallet();
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { isDark: ctxIsDark, toggleTheme } = useTheme();
+  const isDark = ctxIsDark === true;
+
+  const C = useMemo(() => ({
+    bg:          isDark ? DARK_BG         : LIGHT_BG,
+    surface:     isDark ? DARK_SURFACE    : LIGHT_SURFACE,
+    border:      isDark ? DARK_BORDER     : LIGHT_BORDER,
+    separator:   isDark ? DARK_BORDER     : LIGHT_BORDER,
+    text:        isDark ? DARK_TEXT       : LIGHT_TEXT,
+    textMuted:   isDark ? DARK_TEXT_2     : LIGHT_TEXT_2,
+    inputBg:     isDark ? DARK_INPUT_BG   : LIGHT_INPUT_BG,
+    inputBorder: isDark ? DARK_BORDER     : LIGHT_BORDER,
+    iconBg:      isDark ? DARK_ICON_BG    : LIGHT_ICON_BG,
+    iconBorder:  isDark ? DARK_ICON_BORD  : LIGHT_ICON_BORD,
+    accentIcon:  isDark ? GOLD            : NAVY,
+  }), [isDark]);
 
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
 
@@ -214,7 +374,6 @@ export default function WalletScreen() {
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
 
-  // Transfer: Parrainage → Principal ou Retrait
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferTarget, setTransferTarget] = useState<"main" | "withdrawal" | null>(null);
   const [transferring, setTransferring] = useState(false);
@@ -229,17 +388,19 @@ export default function WalletScreen() {
   const [wdCountrySearch, setWdCountrySearch] = useState("");
 
   const withdrawal = user?.withdrawalBalance ?? 0;
+  const balance = user?.balance ?? 0;
+  const referral = user?.referralBalance ?? 0;
 
+  // Entry animations
+  const entry0 = useEntry(60);
+  const entry1 = useEntry(140);
+  const entry2 = useEntry(220);
+
+  // ═══ Handlers ═══
   const handleTransfer = async () => {
-    const referral = user?.referralBalance ?? 0;
-    if (referral <= 0) {
-      Alert.alert("Solde insuffisant", "Vous n'avez aucun solde parrainage à transférer.");
-      return;
-    }
-    if (!transferTarget) {
-      Alert.alert("Destination requise", "Choisissez vers quel solde transférer.");
-      return;
-    }
+    const ref = user?.referralBalance ?? 0;
+    if (ref <= 0) { Alert.alert("Solde insuffisant", "Vous n'avez aucun solde parrainage à transférer."); return; }
+    if (!transferTarget) { Alert.alert("Destination requise", "Choisissez vers quel solde transférer."); return; }
     setTransferring(true);
     try {
       const res = await apiClient.wallet.transfer(transferTarget);
@@ -247,19 +408,14 @@ export default function WalletScreen() {
         await refreshUser();
         setShowTransferModal(false);
         setTransferTarget(null);
-        Alert.alert(
-          "✅ Transfert réussi !",
-          `${referral.toLocaleString()} FCFA transférés vers votre solde ${transferTarget === "main" ? "principal" : "de retrait"}.`
-        );
+        Alert.alert("Transfert réussi !", `${ref.toLocaleString()} FCFA transférés vers votre solde ${transferTarget === "main" ? "principal" : "de retrait"}.`);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         Alert.alert("Erreur", res.error ?? "Le transfert a échoué.");
       }
     } catch (e: any) {
       Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
-    } finally {
-      setTransferring(false);
-    }
+    } finally { setTransferring(false); }
   };
 
   const WITHDRAWAL_FEE = 455;
@@ -280,74 +436,43 @@ export default function WalletScreen() {
       if (res.success) {
         await refreshUser();
         setShowWithdrawModal(false);
-        setWdAmount("");
-        setWdPhone("");
+        setWdAmount(""); setWdPhone("");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert(
-          "✅ Retrait soumis",
-          `Votre demande de retrait de ${amt.toLocaleString()} FCFA a été enregistrée.\n\nNotre équipe va traiter votre demande sous 24h ouvrables.`
-        );
+        Alert.alert("Retrait soumis", `Votre demande de retrait de ${amt.toLocaleString()} FCFA a été enregistrée.\n\nNotre équipe va traiter votre demande sous 24h ouvrables.`);
       } else {
         Alert.alert("Erreur", res.error ?? "Le retrait a échoué.");
       }
     } catch (e: any) {
       Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
-    } finally {
-      setWdSubmitting(false);
-    }
+    } finally { setWdSubmitting(false); }
   };
 
   const handleWithdraw = () => {
     const MIN = 1500;
     const amt = parseInt(wdAmount, 10);
-    if (!amt || amt < MIN) {
-      Alert.alert("Montant invalide", `Le retrait minimum est ${MIN.toLocaleString()} FCFA.`);
-      return;
-    }
-    if (amt > withdrawal) {
-      Alert.alert("Solde insuffisant", `Votre solde retrait est de ${withdrawal.toLocaleString()} FCFA.`);
-      return;
-    }
-    if (!wdPhone.trim()) {
-      Alert.alert("Numéro requis", "Entrez votre numéro de téléphone Mobile Money.");
-      return;
-    }
+    if (!amt || amt < MIN) { Alert.alert("Montant invalide", `Le retrait minimum est ${MIN.toLocaleString()} FCFA.`); return; }
+    if (amt > withdrawal) { Alert.alert("Solde insuffisant", `Votre solde retrait est de ${withdrawal.toLocaleString()} FCFA.`); return; }
+    if (!wdPhone.trim()) { Alert.alert("Numéro requis", "Entrez votre numéro de téléphone Mobile Money."); return; }
 
     const fee = amt < WITHDRAWAL_FEE_THRESHOLD ? WITHDRAWAL_FEE : 0;
-    if (fee === 0) {
-      doWithdraw(undefined);
-      return;
-    }
+    if (fee === 0) { doWithdraw(undefined); return; }
 
     const mainBal = user?.balance ?? 0;
     const canPayFromMain = mainBal >= fee;
     const canPayFromWithdrawal = withdrawal >= amt + fee;
 
     if (!canPayFromMain && !canPayFromWithdrawal) {
-      Alert.alert(
-        "Frais de retrait requis",
-        `Des frais de ${fee} FCFA s'appliquent car votre retrait est inférieur à ${WITHDRAWAL_FEE_THRESHOLD.toLocaleString()} FCFA.\n\nVous n'avez pas suffisamment de fonds pour payer ces frais.\n\n• Solde principal : ${mainBal.toLocaleString()} FCFA\n• Solde retrait après retrait : ${(withdrawal - amt).toLocaleString()} FCFA\n\nVeuillez recharger votre solde ou augmenter le montant du retrait.`
-      );
+      Alert.alert("Frais de retrait requis", `Des frais de ${fee} FCFA s'appliquent car votre retrait est inférieur à ${WITHDRAWAL_FEE_THRESHOLD.toLocaleString()} FCFA.\n\nVous n'avez pas suffisamment de fonds pour payer ces frais.\n\n• Solde principal : ${mainBal.toLocaleString()} FCFA\n• Solde retrait après retrait : ${(withdrawal - amt).toLocaleString()} FCFA\n\nVeuillez recharger votre solde ou augmenter le montant du retrait.`);
       return;
     }
 
     const buttons: any[] = [];
-    if (canPayFromMain) {
-      buttons.push({
-        text: `💳 Solde principal (${mainBal.toLocaleString()} FCFA)`,
-        onPress: () => doWithdraw("main"),
-      });
-    }
-    if (canPayFromWithdrawal) {
-      buttons.push({
-        text: `🏦 Solde retrait (${(withdrawal - amt).toLocaleString()} FCFA restant)`,
-        onPress: () => doWithdraw("withdrawal"),
-      });
-    }
+    if (canPayFromMain) buttons.push({ text: `Solde principal (${mainBal.toLocaleString()} FCFA)`, onPress: () => doWithdraw("main") });
+    if (canPayFromWithdrawal) buttons.push({ text: `Solde retrait (${(withdrawal - amt).toLocaleString()} FCFA restant)`, onPress: () => doWithdraw("withdrawal") });
     buttons.push({ text: "Annuler", style: "cancel" });
 
     Alert.alert(
-      "💳 Frais de retrait : 455 FCFA",
+      `Frais de retrait : ${fee} FCFA`,
       `Des frais de ${fee} FCFA s'appliquent aux retraits inférieurs à ${WITHDRAWAL_FEE_THRESHOLD.toLocaleString()} FCFA.\n\nDepuis quel solde souhaitez-vous payer ces frais ?`,
       buttons
     );
@@ -356,7 +481,6 @@ export default function WalletScreen() {
   const filteredWdCountries = INTL_COUNTRIES.filter(
     (c) => !wdCountrySearch || c.name.toLowerCase().includes(wdCountrySearch.toLowerCase())
   );
-
   const filteredCountries = INTL_COUNTRIES.filter(
     (c) => !countrySearch || c.name.toLowerCase().includes(countrySearch.toLowerCase())
   );
@@ -366,7 +490,6 @@ export default function WalletScreen() {
     local: getEquivalentLocal(a, intlCountry),
   }));
 
-  // Only show payment-related activities (not orders / cancellations / refunds)
   const PAYMENT_TYPES = new Set(["depot", "parrainage", "transfert", "retrait"]);
 
   const mergeRecharges = (acts: any[], contextRecharges: any[]): any[] => {
@@ -400,7 +523,6 @@ export default function WalletScreen() {
       const fromApi: any[] = res.success && Array.isArray(res.data)
         ? (res.data as any[]).filter((a) => PAYMENT_TYPES.has(a.type))
         : [];
-      // Always merge rechargements from WalletContext to catch pending ones
       setActivities(mergeRecharges(fromApi, recharges as any[]));
     } catch {
       const fallback = (recharges as any[]).map((r) => ({
@@ -414,58 +536,44 @@ export default function WalletScreen() {
       setActivities(fallback.sort(
         (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ));
-    } finally {
-      setLoadingActivities(false);
-    }
+    } finally { setLoadingActivities(false); }
   }, [recharges]);
 
   useEffect(() => {
     if (payMode === "historique") loadActivities();
   }, [payMode, loadActivities]);
 
-  // Quick poll right after browser close (3 × 5s = 15s)
-  // The server-side Fapshi poller handles payments that take longer (every 2 min, 24h)
   const confirmFapshiPayment = async (transId: string, amount: number) => {
     const MAX_ATTEMPTS = 3;
     const DELAY_MS = 5000;
-
     setIsPolling(true);
     setPollingAttempt(0);
-
     let credited = false;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       setPollingAttempt(attempt);
       try {
         const res = await apiClient.wallet.fapshiConfirm(transId, amount);
-        // success = newly credited OR already credited by webhook
         if (res.success && (res.data?.credited || (res as any).alreadyCredited)) {
           credited = true;
           await refreshUser();
           loadActivities();
           setIsPolling(false);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert(
-            "✅ Paiement confirmé !",
-            `${(res.data?.credited ?? amount).toLocaleString()} FCFA ont été crédités sur votre solde.`
-          );
+          Alert.alert("Paiement confirmé !", `${(res.data?.credited ?? amount).toLocaleString()} FCFA ont été crédités sur votre solde.`);
           return;
         }
       } catch {}
-
       if (attempt < MAX_ATTEMPTS) {
         await new Promise<void>((resolve) => setTimeout(resolve, DELAY_MS));
       }
     }
-
     setIsPolling(false);
     if (!credited) {
       await refreshUser();
       loadActivities();
       Alert.alert(
-        "⏳ Paiement en cours de traitement",
-        "Votre paiement est en cours de validation par l'opérateur Mobile Money.\n\n" +
-        "Notre serveur vérifie automatiquement toutes les 2 minutes et créditera votre solde dès confirmation — même si vous fermez l'application.\n\n" +
-        "Vous recevrez une notification push dès que c'est fait. ✅",
+        "Paiement en cours de traitement",
+        "Votre paiement est en cours de validation par l'opérateur Mobile Money.\n\nNotre serveur vérifie automatiquement toutes les 2 minutes et créditera votre solde dès confirmation — même si vous fermez l'application.\n\nVous recevrez une notification push dès que c'est fait.",
         [{ text: "OK" }]
       );
     }
@@ -473,10 +581,7 @@ export default function WalletScreen() {
 
   const handleFapshiPay = async () => {
     const amount = parseInt(fapshiAmount, 10);
-    if (!amount || amount < 100) {
-      Alert.alert("Montant invalide", "Le montant minimum est 100 FCFA.");
-      return;
-    }
+    if (!amount || amount < 100) { Alert.alert("Montant invalide", "Le montant minimum est 100 FCFA."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
     try {
@@ -493,7 +598,6 @@ export default function WalletScreen() {
       if (data.checkoutUrl) {
         setPendingTransId(data.transId ?? null);
         setPendingAmount(amount);
-        // Record pending in history immediately so user sees it
         try {
           const token = await getFreshToken();
           await fetch(`${BASE_URL}api/wallet/record-pending-recharge`, {
@@ -503,15 +607,9 @@ export default function WalletScreen() {
           });
           loadActivities();
         } catch {}
-
-        // Open Fapshi checkout browser
         setSubmitting(false);
         await WebBrowser.openBrowserAsync(data.checkoutUrl);
-
-        // Browser closed — start polling regardless of result type
-        if (data.transId) {
-          await confirmFapshiPayment(data.transId, amount);
-        }
+        if (data.transId) await confirmFapshiPayment(data.transId, amount);
       } else {
         Alert.alert("Erreur paiement", data.error ?? data.message ?? "Impossible d'initier le paiement.");
       }
@@ -530,10 +628,7 @@ export default function WalletScreen() {
       Alert.alert("Montant invalide", `Le minimum est ${minLocal.toLocaleString()} ${intlCountry.currencySymbol}.`);
       return;
     }
-    if (!intlPhone.trim()) {
-      Alert.alert("Numéro requis", "Entrez votre numéro Mobile Money.");
-      return;
-    }
+    if (!intlPhone.trim()) { Alert.alert("Numéro requis", "Entrez votre numéro Mobile Money."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
     try {
@@ -571,8 +666,8 @@ export default function WalletScreen() {
         await refreshUser();
         loadActivities();
         Alert.alert(
-          "✅ Paiement initié",
-          `Votre solde sera crédité automatiquement après confirmation de l'opérateur.\n\nSi votre solde n'est pas mis à jour dans 5 minutes, contactez le support.`,
+          "Paiement initié",
+          "Votre solde sera crédité automatiquement après confirmation de l'opérateur.\n\nSi votre solde n'est pas mis à jour dans 5 minutes, contactez le support.",
           [{ text: "OK" }]
         );
         if (payMode === "historique") loadActivities();
@@ -581,60 +676,86 @@ export default function WalletScreen() {
       }
     } catch (e: any) {
       Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   };
 
-  const balance = user?.balance ?? 0;
-  const referral = user?.referralBalance ?? 0;
-  // withdrawalBalance declared above with const withdrawal = ...
+  const goBack = () => {
+    Haptics.selectionAsync();
+    if (router.canGoBack?.()) router.back();
+    else router.push("/(tabs)" as any);
+  };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <StarBackground />
+    <View style={[styles.root, { backgroundColor: C.bg }]}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <StarBackground dark={isDark} />
 
-      {/* Polling overlay — shown while verifying Fapshi payment */}
+      {/* Polling overlay */}
       <Modal visible={isPolling} transparent animationType="fade">
         <View style={styles.pollingOverlay}>
-          <View style={[styles.pollingCard, { backgroundColor: colors.card }]}>
-            <ActivityIndicator size="large" color="#11998e" />
-            <Text style={[styles.pollingTitle, { color: colors.text }]}>
-              Vérification du paiement
-            </Text>
-            <Text style={[styles.pollingDesc, { color: colors.textMuted }]}>
+          <View style={[styles.pollingCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: "#11998e18", alignItems: "center", justifyContent: "center" }}>
+              <ActivityIndicator size="large" color="#11998e" />
+            </View>
+            <Text style={[styles.pollingTitle, { color: C.text }]}>Vérification du paiement</Text>
+            <Text style={[styles.pollingDesc, { color: C.textMuted }]}>
               En attente de confirmation par l'opérateur...
             </Text>
-            <View style={[styles.pollingProgress, { backgroundColor: colors.inputBg }]}>
-              <View
-                style={[
-                  styles.pollingBar,
-                  {
-                    width: `${Math.min((pollingAttempt / 8) * 100, 100)}%`,
-                    backgroundColor: "#11998e",
-                  },
-                ]}
-              />
+            <View style={[styles.pollingProgress, { backgroundColor: C.inputBg }]}>
+              <View style={[styles.pollingBar, { width: `${Math.min((pollingAttempt / 8) * 100, 100)}%`, backgroundColor: "#11998e" }]} />
             </View>
-            <Text style={[styles.pollingAttemptText, { color: colors.textMuted }]}>
+            <Text style={[styles.pollingAttemptText, { color: C.textMuted }]}>
               Tentative {pollingAttempt}/8
             </Text>
           </View>
         </View>
       </Modal>
 
-      {/* Header */}
+      {/* ═══ HEADER ═══ */}
       <LinearGradient
-        colors={["#11998e", "#38ef7d"]}
+        colors={isDark ? ["#132C57", "#0A1C3A"] : ["#FFFFFF", "#FBF8F1"]}
         style={[styles.header, { paddingTop: topPad + 12 }]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
       >
+        {!isDark && <View style={styles.headerGoldLine} />}
+
+        <Pressable
+          onPress={goBack}
+          style={({ pressed }) => [
+            styles.backBtn,
+            {
+              backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(10,28,58,0.05)",
+              borderColor: isDark ? "transparent" : LIGHT_BORDER,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+          hitSlop={8}
+        >
+          <Feather name="chevron-left" size={20} color={isDark ? "#fff" : NAVY} />
+        </Pressable>
+
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Mon Portefeuille</Text>
-          <Text style={styles.headerSub}>Gérez votre solde</Text>
+          <Text style={[styles.headerTitle, { color: isDark ? "#FFFFFF" : NAVY }]}>
+            Mon Portefeuille
+          </Text>
+          <Text style={[styles.headerSub, { color: isDark ? "rgba(255,255,255,0.7)" : LIGHT_TEXT_2 }]}>
+            Gérez votre solde en toute sécurité
+          </Text>
         </View>
-        <Pressable onPress={toggleTheme} style={styles.themeBtn}>
-          <Feather name={isDark ? "sun" : "moon"} size={18} color="#fff" />
+
+        <Pressable
+          onPress={() => { Haptics.selectionAsync(); toggleTheme(); }}
+          style={({ pressed }) => [
+            styles.headerBtn,
+            {
+              backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(10,28,58,0.05)",
+              borderColor: isDark ? "transparent" : LIGHT_BORDER,
+              borderWidth: isDark ? 0 : 1,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Feather name={isDark ? "sun" : "moon"} size={17} color={isDark ? GOLD : NAVY} />
         </Pressable>
       </LinearGradient>
 
@@ -643,450 +764,492 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Balance Cards Row - 3 cards */}
-        <View style={styles.balanceRow}>
-          <View style={[styles.balanceCard, { backgroundColor: colors.card, borderColor: "#11998e40" }]}>
-            <View style={styles.balanceCardIcon}>
-              <Feather name="credit-card" size={18} color="#11998e" />
-            </View>
-            <Text style={[styles.balanceCardLabel, { color: colors.textMuted }]}>Principal</Text>
-            <Text style={[styles.balanceCardValue, { color: colors.text }]}>
-              {userCountry && userCountry.xafRate !== 1
-                ? Math.round(balance * userCountry.xafRate).toLocaleString("fr-FR")
-                : balance.toLocaleString("fr-FR")}
-            </Text>
-            <Text style={[styles.balanceCardCurrency, { color: "#11998e" }]}>
-              {userCountry?.currencySymbol ?? "FCFA"}
-            </Text>
-          </View>
-          <View style={[styles.balanceCard, { backgroundColor: colors.card, borderColor: "#FFD70040" }]}>
-            <View style={[styles.balanceCardIcon, { backgroundColor: "rgba(255,215,0,0.12)" }]}>
-              <Feather name="gift" size={18} color="#FFD700" />
-            </View>
-            <Text style={[styles.balanceCardLabel, { color: colors.textMuted }]}>Parrainage</Text>
-            <Text style={[styles.balanceCardValue, { color: colors.text }]}>
-              {userCountry && userCountry.xafRate !== 1
-                ? Math.round(referral * userCountry.xafRate).toLocaleString("fr-FR")
-                : referral.toLocaleString("fr-FR")}
-            </Text>
-            <Text style={[styles.balanceCardCurrency, { color: "#FFD700" }]}>
-              {userCountry?.currencySymbol ?? "FCFA"}
-            </Text>
-            <Pressable
-              style={[{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4, backgroundColor: "#FFD70015", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }]}
-              onPress={() => { setTransferTarget(null); setShowTransferModal(true); }}
+        {/* ═══ BALANCE CARDS ═══ */}
+        <Animated.View
+          style={{
+            opacity: entry0,
+            transform: [{ translateY: entry0.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+            gap: 12,
+          }}
+        >
+          {/* Main balance - large card */}
+          <View
+            style={[
+              styles.mainBalanceCard,
+              {
+                borderColor: isDark ? GOLD + "30" : "rgba(212,175,55,0.22)",
+                shadowColor: isDark ? "#000" : NAVY,
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={isDark ? ["#132C57", "#0A1C3A", "#071229"] : ["#FFFFFF", "#FBF8F1"]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={styles.mainBalanceGrad}
             >
-              <Feather name="arrow-right-circle" size={11} color="#FFD700" />
-              <Text style={[{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#FFD700" }]}>Transférer</Text>
-            </Pressable>
-          </View>
-          <View style={[styles.balanceCard, { backgroundColor: colors.card, borderColor: "#9C27B040" }]}>
-            <View style={[styles.balanceCardIcon, { backgroundColor: "rgba(156,39,176,0.12)" }]}>
-              <Feather name="download-cloud" size={18} color="#9C27B0" />
-            </View>
-            <Text style={[styles.balanceCardLabel, { color: colors.textMuted }]}>Retrait</Text>
-            <Text style={[styles.balanceCardValue, { color: colors.text }]}>
-              {userCountry && userCountry.xafRate !== 1
-                ? Math.round(withdrawal * userCountry.xafRate).toLocaleString("fr-FR")
-                : withdrawal.toLocaleString("fr-FR")}
-            </Text>
-            <Text style={[styles.balanceCardCurrency, { color: "#9C27B0" }]}>
-              {userCountry?.currencySymbol ?? "FCFA"}
-            </Text>
-            <Pressable
-              style={[{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4, backgroundColor: "#9C27B015", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }]}
-              onPress={() => { setWdAmount(""); setWdPhone(""); setShowWithdrawModal(true); }}
-            >
-              <Feather name="send" size={11} color="#9C27B0" />
-              <Text style={[{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#9C27B0" }]}>Retirer</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Mode tabs */}
-        <View style={[styles.modeTabs, { backgroundColor: colors.card, borderColor: colors.cardBorder, flexDirection: "row" }]}>
-          <Pressable
-            style={[styles.modeTab, payMode === "cameroun" && { backgroundColor: "#11998e20", borderColor: "#11998e" }]}
-            onPress={() => setPayMode("cameroun")}
-          >
-            <Text style={styles.modeTabFlag}>🇨🇲</Text>
-            <View>
-              <Text style={[styles.modeTabTitle, { color: payMode === "cameroun" ? "#11998e" : colors.text }]}>Cameroun</Text>
-              <Text style={[styles.modeTabSub, { color: colors.textMuted }]}>MTN · Orange</Text>
-            </View>
-          </Pressable>
-
-          <View style={[styles.modeTabDivider, { backgroundColor: colors.separator }]} />
-
-          <Pressable
-            style={[styles.modeTab, payMode === "international" && { backgroundColor: colors.accent + "18", borderColor: colors.accent }]}
-            onPress={() => setPayMode("international")}
-          >
-            <Text style={styles.modeTabFlag}>🌍</Text>
-            <View>
-              <Text style={[styles.modeTabTitle, { color: payMode === "international" ? colors.accent : colors.text }]}>
-                International
-              </Text>
-              <Text style={[styles.modeTabSub, { color: colors.textMuted }]}>Mobile Money</Text>
-            </View>
-          </Pressable>
-
-          <View style={[styles.modeTabDivider, { backgroundColor: colors.separator }]} />
-
-          <Pressable
-            style={[styles.modeTab, payMode === "historique" && { backgroundColor: "#9C27B018", borderColor: "#9C27B0" }]}
-            onPress={() => setPayMode("historique")}
-          >
-            <Text style={styles.modeTabFlag}>📋</Text>
-            <View>
-              <Text style={[styles.modeTabTitle, { color: payMode === "historique" ? "#9C27B0" : colors.text }]}>Historique</Text>
-              <Text style={[styles.modeTabSub, { color: colors.textMuted }]}>Transactions</Text>
-            </View>
-          </Pressable>
-        </View>
-
-        {/* Fapshi Form */}
-        {payMode === "cameroun" && (
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={[styles.formSection, { backgroundColor: colors.card, borderColor: "#11998e30" }]}>
-              <View style={[styles.formHeader, { backgroundColor: "#11998e18", borderColor: "#11998e30" }]}>
-                <View style={styles.formHeaderIcon}>
-                  <Text style={{ fontSize: 22 }}>📱</Text>
+              {!isDark && <View style={styles.goldTopLine} />}
+              <View style={styles.mainBalanceTop}>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.mainBalanceLabelRow}>
+                    <View style={[styles.mainBalanceIconBox, { backgroundColor: isDark ? "rgba(212,175,55,0.15)" : "rgba(10,28,58,0.06)" }]}>
+                      <Feather name="credit-card" size={13} color={isDark ? GOLD : NAVY} />
+                    </View>
+                    <Text style={[styles.mainBalanceLabel, { color: isDark ? "rgba(255,255,255,0.65)" : LIGHT_TEXT_2 }]}>
+                      Solde principal
+                    </Text>
+                  </View>
+                  <Text style={[styles.mainBalanceValue, { color: isDark ? "#FFFFFF" : NAVY }]}>
+                    {userCountry && userCountry.xafRate !== 1
+                      ? formatCurrency(balance, userCountry)
+                      : `${balance.toLocaleString("fr-FR")} FCFA`}
+                  </Text>
                 </View>
-                <View>
-                  <Text style={[styles.formTitle, { color: colors.text }]}>Dépôt Mobile Money</Text>
-                  <Text style={[styles.formSub, { color: colors.textMuted }]}>MTN MoMo · Orange Money</Text>
+                <View
+                  style={[
+                    styles.mainBalanceIconLarge,
+                    {
+                      backgroundColor: isDark ? "rgba(212,175,55,0.15)" : "rgba(212,175,55,0.18)",
+                      borderColor: isDark ? GOLD + "40" : "rgba(212,175,55,0.35)",
+                    },
+                  ]}
+                >
+                  <Feather name="wallet" size={26} color={isDark ? GOLD : GOLD_SOFT} />
                 </View>
               </View>
 
-              <View style={styles.amountSection}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Montant (FCFA)</Text>
+              <View style={[styles.mainBalanceDivider, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(10,28,58,0.08)" }]} />
+
+              <View style={styles.mainBalanceBottom}>
+                <Text style={[styles.mainBalanceHint, { color: isDark ? "rgba(255,255,255,0.55)" : LIGHT_TEXT_2 }]}>
+                  Utilisez ce solde pour passer vos commandes
+                </Text>
+                <View style={[styles.secureChip, { backgroundColor: isDark ? "rgba(16,185,129,0.12)" : "rgba(16,185,129,0.10)" }]}>
+                  <Feather name="shield" size={10} color={SUCCESS} />
+                  <Text style={[styles.secureChipText, { color: SUCCESS }]}>Sécurisé</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </View>
+
+          {/* Secondary balances */}
+          <View style={styles.balanceRow}>
+            <BalanceCard
+              icon="gift"
+              label="Parrainage"
+              value={userCountry && userCountry.xafRate !== 1
+                ? Math.round(referral * userCountry.xafRate).toLocaleString("fr-FR")
+                : referral.toLocaleString("fr-FR")}
+              currency={userCountry?.currencySymbol ?? "FCFA"}
+              color={GOLD}
+              C={C}
+              isDark={isDark}
+              action="Transférer"
+              onAction={() => { setTransferTarget(null); setShowTransferModal(true); Haptics.selectionAsync(); }}
+            />
+            <BalanceCard
+              icon="download-cloud"
+              label="Retrait"
+              value={userCountry && userCountry.xafRate !== 1
+                ? Math.round(withdrawal * userCountry.xafRate).toLocaleString("fr-FR")
+                : withdrawal.toLocaleString("fr-FR")}
+              currency={userCountry?.currencySymbol ?? "FCFA"}
+              color={PURPLE}
+              C={C}
+              isDark={isDark}
+              action="Retirer"
+              onAction={() => { setWdAmount(""); setWdPhone(""); setShowWithdrawModal(true); Haptics.selectionAsync(); }}
+            />
+          </View>
+        </Animated.View>
+
+        {/* ═══ SEGMENTED TABS ═══ */}
+        <Animated.View
+          style={{
+            opacity: entry1,
+            transform: [{ translateY: entry1.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+          }}
+        >
+          <ModeSegmented payMode={payMode} setPayMode={setPayMode} C={C} isDark={isDark} />
+        </Animated.View>
+
+        {/* ═══ CAMEROUN FORM ═══ */}
+        {payMode === "cameroun" && (
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <Animated.View
+              style={[
+                styles.formSection,
+                {
+                  backgroundColor: C.surface,
+                  borderColor: "#11998e" + "35",
+                  opacity: entry2,
+                  transform: [{ translateY: entry2.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+                },
+              ]}
+            >
+              <View style={[styles.formHeader, { backgroundColor: "#11998e" + "14", borderColor: "#11998e" + "25" }]}>
+                <View style={[styles.formHeaderIcon, { backgroundColor: "#11998e" + "20" }]}>
+                  <Feather name="smartphone" size={20} color="#11998e" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formTitle, { color: C.text }]}>Dépôt Mobile Money</Text>
+                  <Text style={[styles.formSub, { color: C.textMuted }]}>MTN MoMo · Orange Money</Text>
+                </View>
+              </View>
+
+              <View style={styles.formBody}>
+                <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Choisissez un montant</Text>
                 <View style={styles.presetsWrap}>
                   {AMOUNTS_FCFA.map((a) => {
                     const isActive = fapshiAmount === String(a);
                     return (
                       <Pressable
                         key={a}
-                        style={[
+                        style={({ pressed }) => [
                           styles.presetChip,
-                          { backgroundColor: isActive ? "#11998e" : colors.inputBg, borderColor: isActive ? "#11998e" : colors.inputBorder },
+                          {
+                            backgroundColor: isActive ? "#11998e" : C.inputBg,
+                            borderColor: isActive ? "#11998e" : C.inputBorder,
+                          },
+                          pressed && { opacity: 0.85 },
                         ]}
                         onPress={() => { setFapshiAmount(String(a)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                       >
-                        <Text style={[styles.presetChipText, { color: isActive ? "#fff" : colors.text }]}>
+                        <Text style={[styles.presetChipText, { color: isActive ? "#fff" : C.text }]}>
                           {a.toLocaleString()}
                         </Text>
-                        <Text style={[styles.presetChipSub, { color: isActive ? "rgba(255,255,255,0.75)" : colors.textMuted }]}>
+                        <Text style={[styles.presetChipSub, { color: isActive ? "rgba(255,255,255,0.75)" : C.textMuted }]}>
                           FCFA
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
-                <View style={[styles.customInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                  <Feather name="edit-3" size={16} color={colors.textMuted} />
+
+                <View style={[styles.inputRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                  <Feather name="edit-3" size={16} color={C.textMuted} />
                   <TextInput
-                    style={[styles.customInputText, { color: colors.text }]}
+                    style={[styles.input, { color: C.text }]}
                     placeholder="Montant personnalisé..."
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={C.textMuted}
                     keyboardType="numeric"
                     value={fapshiAmount}
                     onChangeText={setFapshiAmount}
                   />
-                  <Text style={[styles.customInputSuffix, { color: colors.textMuted }]}>FCFA</Text>
+                  <Text style={[styles.inputSuffix, { color: C.textMuted }]}>FCFA</Text>
+                </View>
+
+                <View style={[styles.infoBanner, { backgroundColor: "rgba(16,185,129,0.08)", borderColor: "rgba(16,185,129,0.20)" }]}>
+                  <Feather name="shield" size={14} color={SUCCESS} />
+                  <Text style={[styles.infoBannerText, { color: SUCCESS }]}>
+                    Paiement sécurisé · Crédit instantané après confirmation opérateur
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.9 }, submitting && { opacity: 0.6 }]}
+                  onPress={handleFapshiPay}
+                  disabled={submitting}
+                >
+                  <LinearGradient colors={["#11998e", "#38ef7d"]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="smartphone" size={18} color="#fff" />}
+                    <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Payer maintenant"}</Text>
+                    {!submitting && <Feather name="arrow-right" size={18} color="#fff" />}
+                  </LinearGradient>
+                </Pressable>
+
+                <View style={styles.methodsRow}>
+                  {["MTN MoMo", "Orange Money"].map((op, idx) => (
+                    <View key={op} style={[styles.methodChip, { backgroundColor: C.inputBg, borderColor: C.border }]}>
+                      <View style={[styles.methodDot, { backgroundColor: idx === 0 ? "#FFCC00" : "#FF6600" }]} />
+                      <Text style={[styles.methodChipText, { color: C.text }]}>{op}</Text>
+                    </View>
+                  ))}
                 </View>
               </View>
-
-              <View style={[styles.secureRow, { backgroundColor: "rgba(76,175,80,0.08)", borderColor: "rgba(76,175,80,0.2)" }]}>
-                <Feather name="shield" size={16} color="#4CAF50" />
-                <Text style={[styles.secureText, { color: "#4CAF50" }]}>
-                  Paiement sécurisé · Crédit instantané après confirmation opérateur
-                </Text>
-              </View>
-
-              <Pressable
-                style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.85 }, submitting && { opacity: 0.65 }]}
-                onPress={handleFapshiPay}
-                disabled={submitting}
-              >
-                <LinearGradient colors={["#11998e", "#38ef7d"]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Feather name="smartphone" size={20} color="#fff" />
-                  )}
-                  <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Payer maintenant"}</Text>
-                </LinearGradient>
-              </Pressable>
-
-              <View style={styles.methodsRow}>
-                {intlCountry.operators.map((op, idx) => (
-                  <View key={op} style={[styles.methodChip, { backgroundColor: colors.inputBg, borderColor: colors.accent + "40" }]}>
-                    <Feather name="smartphone" size={12} color={colors.accent} />
-                    <Text style={[styles.methodChipName, { color: colors.text, fontSize: 12 }]}>{op}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
+            </Animated.View>
           </KeyboardAvoidingView>
         )}
 
-        {/* International Form */}
+        {/* ═══ INTERNATIONAL FORM ═══ */}
         {payMode === "international" && (
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={[styles.formSection, { backgroundColor: colors.card, borderColor: colors.accent + "30" }]}>
-              <View style={[styles.formHeader, { backgroundColor: colors.accent + "12", borderColor: colors.accent + "25" }]}>
-                <View style={[styles.formHeaderIcon, { backgroundColor: colors.accent + "20" }]}>
-                  <Text style={{ fontSize: 22 }}>🌍</Text>
+            <Animated.View
+              style={[
+                styles.formSection,
+                {
+                  backgroundColor: C.surface,
+                  borderColor: INFO + "35",
+                  opacity: entry2,
+                  transform: [{ translateY: entry2.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+                },
+              ]}
+            >
+              <View style={[styles.formHeader, { backgroundColor: INFO + "12", borderColor: INFO + "25" }]}>
+                <View style={[styles.formHeaderIcon, { backgroundColor: INFO + "20" }]}>
+                  <Feather name="globe" size={20} color={INFO} />
                 </View>
-                <View>
-                  <Text style={[styles.formTitle, { color: colors.text }]}>Dépôt International</Text>
-                  <Text style={[styles.formSub, { color: colors.textMuted }]}>Mobile Money · {INTL_COUNTRIES.length} pays</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formTitle, { color: C.text }]}>Dépôt International</Text>
+                  <Text style={[styles.formSub, { color: C.textMuted }]}>{INTL_COUNTRIES.length} pays disponibles</Text>
                 </View>
               </View>
 
-              {/* Country selector */}
-              <View>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Pays</Text>
-                <Pressable
-                  style={[styles.countrySelectorBtn, { backgroundColor: colors.inputBg, borderColor: colors.accent }]}
-                  onPress={() => { setShowCountryModal(true); setCountrySearch(""); }}
-                >
-                  <Text style={styles.countryFlag}>{intlCountry.flag}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.countryName, { color: colors.text }]}>{intlCountry.name}</Text>
-                    <Text style={[styles.countryCurrency, { color: colors.textMuted }]}>
-                      {intlCountry.operators.join(" · ")}
-                    </Text>
+              <View style={styles.formBody}>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Pays</Text>
+                  <Pressable
+                    style={[styles.countryBtn, { backgroundColor: C.inputBg, borderColor: INFO + "40" }]}
+                    onPress={() => { setShowCountryModal(true); setCountrySearch(""); }}
+                  >
+                    <Text style={styles.countryFlag}>{intlCountry.flag}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.countryName, { color: C.text }]} numberOfLines={1}>{intlCountry.name}</Text>
+                      <Text style={[styles.countrySub, { color: C.textMuted }]} numberOfLines={1}>
+                        {intlCountry.phoneCode} · {intlCountry.operators.join(" · ")}
+                      </Text>
+                    </View>
+                    <Feather name="chevron-down" size={16} color={INFO} />
+                  </Pressable>
+                </View>
+
+                <View>
+                  <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Numéro Mobile Money</Text>
+                  <View style={[styles.phoneRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                    <View style={[styles.phoneCodeBox, { backgroundColor: INFO + "14" }]}>
+                      <Text style={[styles.phoneCodeText, { color: INFO }]}>{intlCountry.phoneCode}</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.phoneInput, { color: C.text }]}
+                      placeholder="6XX XXX XXX"
+                      placeholderTextColor={C.textMuted}
+                      keyboardType="phone-pad"
+                      value={intlPhone}
+                      onChangeText={setIntlPhone}
+                    />
                   </View>
-                  <Feather name="chevron-down" size={18} color={colors.accent} />
+                </View>
+
+                <View>
+                  <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>
+                    Montant ({intlCountry.currencySymbol})
+                  </Text>
+                  <View style={styles.presetsWrap}>
+                    {amountPresets.map((p) => {
+                      const isActive = intlAmount === String(p.local);
+                      return (
+                        <Pressable
+                          key={p.xaf}
+                          style={({ pressed }) => [
+                            styles.presetChip,
+                            {
+                              backgroundColor: isActive ? INFO : C.inputBg,
+                              borderColor: isActive ? INFO : C.inputBorder,
+                            },
+                            pressed && { opacity: 0.85 },
+                          ]}
+                          onPress={() => { setIntlAmount(String(p.local)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                        >
+                          <Text style={[styles.presetChipText, { color: isActive ? "#fff" : C.text }]}>
+                            {p.local.toLocaleString()}
+                          </Text>
+                          <Text style={[styles.presetChipSub, { color: isActive ? "rgba(255,255,255,0.75)" : C.textMuted }]}>
+                            {intlCountry.currencySymbol}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <View style={[styles.inputRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                    <Feather name="edit-3" size={16} color={C.textMuted} />
+                    <TextInput
+                      style={[styles.input, { color: C.text }]}
+                      placeholder={`Montant en ${intlCountry.currencySymbol}`}
+                      placeholderTextColor={C.textMuted}
+                      keyboardType="numeric"
+                      value={intlAmount}
+                      onChangeText={setIntlAmount}
+                    />
+                    <Text style={[styles.inputSuffix, { color: C.textMuted }]}>{intlCountry.currencySymbol}</Text>
+                  </View>
+
+                  {intlAmount && (
+                    <View style={[styles.conversionRow, { backgroundColor: INFO + "10", borderColor: INFO + "30" }]}>
+                      <Feather name="refresh-cw" size={12} color={INFO} />
+                      <Text style={[styles.conversionText, { color: INFO }]}>
+                        ≈ {getEquivalentXAF(parseInt(intlAmount) || 0, intlCountry).toLocaleString("fr-FR")} FCFA
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={[styles.infoBanner, { backgroundColor: INFO + "0D", borderColor: INFO + "25" }]}>
+                  <Feather name="shield" size={14} color={INFO} />
+                  <Text style={[styles.infoBannerText, { color: INFO }]}>
+                    Paiement sécurisé · Solde crédité automatiquement après confirmation
+                  </Text>
+                </View>
+                <View style={[styles.infoBanner, { backgroundColor: WARNING + "10", borderColor: WARNING + "25" }]}>
+                  <Feather name="clock" size={14} color={WARNING} />
+                  <Text style={[styles.infoBannerText, { color: WARNING }]}>
+                    Délai de crédit : 5 à 30 minutes selon l'opérateur choisi
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.9 }, submitting && { opacity: 0.6 }]}
+                  onPress={handleIntlPay}
+                  disabled={submitting}
+                >
+                  <LinearGradient colors={isDark ? [NAVY_LIGHT, NAVY] : [INFO, "#2563EB"]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="credit-card" size={18} color="#fff" />}
+                    <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Procéder au paiement"}</Text>
+                    {!submitting && <Feather name="arrow-right" size={18} color={isDark ? GOLD : "#fff"} />}
+                  </LinearGradient>
                 </Pressable>
               </View>
-
-              {/* Phone */}
-              <View>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Numéro Mobile Money</Text>
-                <View style={[styles.phoneInputRow, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                  <View style={[styles.phoneCode, { backgroundColor: colors.accent + "18" }]}>
-                    <Text style={[styles.phoneCodeText, { color: colors.accent }]}>{intlCountry.phoneCode}</Text>
-                  </View>
-                  <TextInput
-                    style={[styles.phoneInputText, { color: colors.text }]}
-                    placeholder="6XX XXX XXX"
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="phone-pad"
-                    value={intlPhone}
-                    onChangeText={setIntlPhone}
-                  />
-                </View>
-              </View>
-
-              {/* Amount */}
-              <View>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                  Montant ({intlCountry.currencySymbol})
-                </Text>
-                <View style={styles.presetsWrap}>
-                  {amountPresets.map((p) => {
-                    const isActive = intlAmount === String(p.local);
-                    return (
-                      <Pressable
-                        key={p.xaf}
-                        style={[
-                          styles.presetChip,
-                          { backgroundColor: isActive ? colors.accent : colors.inputBg, borderColor: isActive ? colors.accent : colors.inputBorder },
-                        ]}
-                        onPress={() => { setIntlAmount(String(p.local)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                      >
-                        <Text style={[styles.presetChipText, { color: isActive ? "#fff" : colors.text }]}>
-                          {p.local.toLocaleString()}
-                        </Text>
-                        <Text style={[styles.presetChipSub, { color: isActive ? "rgba(255,255,255,0.75)" : colors.textMuted }]}>
-                          {intlCountry.currencySymbol}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <View style={[styles.customInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                  <Feather name="edit-3" size={16} color={colors.textMuted} />
-                  <TextInput
-                    style={[styles.customInputText, { color: colors.text }]}
-                    placeholder={`Montant en ${intlCountry.currencySymbol}`}
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="numeric"
-                    value={intlAmount}
-                    onChangeText={setIntlAmount}
-                  />
-                  <Text style={[styles.customInputSuffix, { color: colors.textMuted }]}>{intlCountry.currencySymbol}</Text>
-                </View>
-
-                {intlAmount && (
-                  <View style={[styles.conversionRow, { backgroundColor: colors.inputBg, borderColor: colors.cardBorder }]}>
-                    <Feather name="refresh-cw" size={12} color={colors.accent} />
-                    <Text style={[styles.conversionText, { color: colors.accent }]}>
-                      ≈ {getEquivalentXAF(parseInt(intlAmount) || 0, intlCountry).toLocaleString("fr-FR")} FCFA
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={[styles.secureRow, { backgroundColor: "rgba(30,144,255,0.08)", borderColor: "rgba(30,144,255,0.2)" }]}>
-                <Feather name="shield" size={16} color={colors.accent} />
-                <Text style={[styles.secureText, { color: colors.accent }]}>
-                  Paiement sécurisé · Solde crédité automatiquement après confirmation
-                </Text>
-              </View>
-              <View style={[styles.secureRow, { backgroundColor: "rgba(255,152,0,0.08)", borderColor: "rgba(255,152,0,0.2)" }]}>
-                <Feather name="clock" size={15} color="#FF9800" />
-                <Text style={[styles.secureText, { color: "#FF9800" }]}>
-                  Délai de crédit : 5 à 30 minutes selon l'opérateur choisi
-                </Text>
-              </View>
-
-              <Pressable
-                style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.85 }, submitting && { opacity: 0.65 }]}
-                onPress={handleIntlPay}
-                disabled={submitting}
-              >
-                <LinearGradient colors={[colors.gradientStart, colors.accent]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Feather name="credit-card" size={20} color="#fff" />
-                  )}
-                  <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Procéder au paiement"}</Text>
-                </LinearGradient>
-              </Pressable>
-            </View>
+            </Animated.View>
           </KeyboardAvoidingView>
         )}
 
-        {/* Historique complet des activités */}
+        {/* ═══ HISTORIQUE ═══ */}
         {payMode === "historique" && (
           <View style={{ gap: 10 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text style={[styles.historyTitle, { color: colors.text }]}>Toutes les activités</Text>
-              <Pressable onPress={loadActivities} style={{ padding: 6 }}>
-                <Feather name="refresh-cw" size={16} color="#9C27B0" />
+            <View style={styles.histHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={[styles.accentBar, { backgroundColor: PURPLE }]} />
+                <Text style={[styles.histTitle, { color: C.text }]}>Toutes les activités</Text>
+              </View>
+              <Pressable
+                onPress={() => { Haptics.selectionAsync(); loadActivities(); }}
+                style={({ pressed }) => [
+                  styles.histRefresh,
+                  { backgroundColor: C.iconBg, borderColor: C.iconBorder },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Feather name="refresh-cw" size={14} color={C.accentIcon} />
               </Pressable>
             </View>
 
             {loadingActivities ? (
-              <ActivityIndicator size="small" color="#9C27B0" style={{ marginVertical: 20 }} />
+              <ActivityIndicator size="small" color={PURPLE} style={{ marginVertical: 20 }} />
             ) : activities.length === 0 ? (
-              <View style={[styles.emptyHistory, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-                <Feather name="inbox" size={36} color={colors.textMuted} />
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>Aucune activité récente</Text>
-                <Text style={[{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.textMuted, textAlign: "center", marginTop: 6 }]}>
+              <View style={[styles.emptyHistory, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={[styles.emptyIconBox, { backgroundColor: C.iconBg, borderColor: C.iconBorder }]}>
+                  <Feather name="inbox" size={32} color={C.accentIcon} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: C.text }]}>Aucune activité récente</Text>
+                <Text style={[styles.emptyText, { color: C.textMuted }]}>
                   Vos dépôts, commandes et remboursements apparaîtront ici
                 </Text>
               </View>
             ) : (
               activities.map((a, idx) => (
-                <ActivityItem key={a.id ?? idx} item={a} colors={colors} userCountry={userCountry} />
+                <ActivityItem key={a.id ?? idx} item={a} C={C} userCountry={userCountry} />
               ))
             )}
           </View>
         )}
 
-        {/* Recharges récentes (Cameroun / International mode) */}
+        {/* ═══ RECHARGES RÉCENTES ═══ */}
         {payMode !== "historique" && (
           <View style={{ gap: 10 }}>
-            <Text style={[styles.historyTitle, { color: colors.text }]}>Rechargements récents</Text>
+            <View style={styles.histHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={[styles.accentBar, { backgroundColor: GOLD }]} />
+                <Text style={[styles.histTitle, { color: C.text }]}>Rechargements récents</Text>
+              </View>
+            </View>
             {isLoading ? (
-              <ActivityIndicator size="small" color={colors.accent} style={{ marginVertical: 20 }} />
+              <ActivityIndicator size="small" color={C.accentIcon} style={{ marginVertical: 20 }} />
             ) : recharges.length === 0 ? (
-              <View style={[styles.emptyHistory, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-                <Feather name="inbox" size={36} color={colors.textMuted} />
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>Aucun rechargement récent</Text>
+              <View style={[styles.emptyHistory, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={[styles.emptyIconBox, { backgroundColor: C.iconBg, borderColor: C.iconBorder }]}>
+                  <Feather name="inbox" size={28} color={C.accentIcon} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: C.text }]}>Aucun rechargement récent</Text>
               </View>
             ) : (
-              recharges.slice(0, 8).map((r) => <RechargeItem key={r.id} item={r} colors={colors} userCountry={userCountry} />)
+              recharges.slice(0, 8).map((r) => <RechargeItem key={r.id} item={r} C={C} userCountry={userCountry} />)
             )}
           </View>
         )}
       </ScrollView>
 
-      {/* Transfer Modal: Parrainage → Principal ou Retrait */}
+      {/* ═══ TRANSFER MODAL ═══ */}
       <Modal visible={showTransferModal} animationType="slide" transparent onRequestClose={() => { setShowTransferModal(false); setTransferTarget(null); }}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Transférer vos fonds</Text>
-              <Pressable onPress={() => { setShowTransferModal(false); setTransferTarget(null); }} style={[styles.modalCloseBtn, { backgroundColor: colors.inputBg }]}>
-                <Feather name="x" size={20} color={colors.text} />
+          <View style={[styles.modalSheet, { backgroundColor: C.surface }]}>
+            <View style={styles.modalGrabber} />
+            <View style={[styles.modalHeader, { borderBottomColor: C.separator }]}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Transférer vos fonds</Text>
+              <Pressable onPress={() => { setShowTransferModal(false); setTransferTarget(null); }} style={[styles.modalClose, { backgroundColor: C.inputBg }]}>
+                <Feather name="x" size={18} color={C.text} />
               </Pressable>
             </View>
             <View style={{ padding: 20, gap: 14 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFD70012", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#FFD70030" }}>
-                <Feather name="gift" size={18} color="#FFD700" />
-                <Text style={[{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text }]}>
-                  Solde parrainage disponible :{" "}
-                  <Text style={{ fontFamily: "Inter_700Bold", color: "#FFD700" }}>
+              <View style={[styles.transferInfoBox, { backgroundColor: GOLD + "12", borderColor: GOLD + "30" }]}>
+                <View style={[styles.transferInfoIcon, { backgroundColor: GOLD + "22" }]}>
+                  <Feather name="gift" size={16} color={GOLD} />
+                </View>
+                <Text style={[styles.transferInfoText, { color: C.text }]}>
+                  Solde parrainage :{" "}
+                  <Text style={{ fontFamily: "Inter_700Bold", color: isDark ? GOLD : NAVY }}>
                     {userCountry && userCountry.xafRate !== 1 ? formatCurrency(referral, userCountry) : `${referral.toLocaleString("fr-FR")} FCFA`}
                   </Text>
                 </Text>
               </View>
 
-              <Text style={[{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }]}>
-                Choisissez la destination
-              </Text>
+              <Text style={[styles.transferLabel, { color: C.text }]}>Choisissez la destination</Text>
 
-              {/* Option 1 : Solde Principal */}
-              <Pressable
-                style={[{
-                  flexDirection: "row", alignItems: "center", gap: 14, padding: 16, borderRadius: 14, borderWidth: 2,
-                  backgroundColor: transferTarget === "main" ? "#1E90FF18" : colors.card,
-                  borderColor: transferTarget === "main" ? "#1E90FF" : colors.cardBorder,
-                }]}
-                onPress={() => setTransferTarget("main")}
-              >
-                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "#1E90FF22", alignItems: "center", justifyContent: "center" }}>
-                  <Feather name="credit-card" size={22} color="#1E90FF" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }]}>Solde Principal</Text>
-                  <Text style={[{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted }]}>Utilisez vos fonds pour passer des commandes</Text>
-                </View>
-                {transferTarget === "main" && <Feather name="check-circle" size={20} color="#1E90FF" />}
-              </Pressable>
+              {[
+                { key: "main", label: "Solde Principal", sub: "Utilisez vos fonds pour passer des commandes", icon: "credit-card" as const, color: INFO },
+                { key: "withdrawal", label: "Solde de Retrait", sub: "Retirez vos gains en espèces", icon: "download-cloud" as const, color: PURPLE },
+              ].map((opt) => {
+                const active = transferTarget === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => { setTransferTarget(opt.key as any); Haptics.selectionAsync(); }}
+                    style={({ pressed }) => [
+                      styles.transferOption,
+                      {
+                        backgroundColor: active ? opt.color + "14" : C.inputBg,
+                        borderColor: active ? opt.color : C.border,
+                      },
+                      pressed && { opacity: 0.9 },
+                    ]}
+                  >
+                    <View style={[styles.transferOptionIcon, { backgroundColor: opt.color + "20" }]}>
+                      <Feather name={opt.icon} size={20} color={opt.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.transferOptionLabel, { color: C.text }]}>{opt.label}</Text>
+                      <Text style={[styles.transferOptionSub, { color: C.textMuted }]}>{opt.sub}</Text>
+                    </View>
+                    {active && <Feather name="check-circle" size={20} color={opt.color} />}
+                  </Pressable>
+                );
+              })}
 
-              {/* Option 2 : Solde de Retrait */}
               <Pressable
-                style={[{
-                  flexDirection: "row", alignItems: "center", gap: 14, padding: 16, borderRadius: 14, borderWidth: 2,
-                  backgroundColor: transferTarget === "withdrawal" ? "#FF9800" + "18" : colors.card,
-                  borderColor: transferTarget === "withdrawal" ? "#FF9800" : colors.cardBorder,
-                }]}
-                onPress={() => setTransferTarget("withdrawal")}
-              >
-                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "#FF980022", alignItems: "center", justifyContent: "center" }}>
-                  <Feather name="download-cloud" size={22} color="#FF9800" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }]}>Solde de Retrait</Text>
-                  <Text style={[{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted }]}>Retirez vos gains en espèces</Text>
-                </View>
-                {transferTarget === "withdrawal" && <Feather name="check-circle" size={20} color="#FF9800" />}
-              </Pressable>
-
-              {/* Confirm button */}
-              <Pressable
-                style={[{
-                  flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14, borderRadius: 12,
-                  backgroundColor: transferTarget ? "#FFD700" : colors.inputBg,
-                  opacity: (!transferTarget || transferring) ? 0.6 : 1,
-                }]}
+                style={({ pressed }) => [
+                  styles.transferConfirmBtn,
+                  {
+                    backgroundColor: transferTarget ? (isDark ? GOLD : NAVY) : C.inputBg,
+                    opacity: (!transferTarget || transferring) ? 0.6 : 1,
+                  },
+                  pressed && { opacity: 0.9 },
+                ]}
                 onPress={handleTransfer}
                 disabled={!transferTarget || transferring}
               >
                 {transferring ? (
-                  <ActivityIndicator size="small" color="#000" />
+                  <ActivityIndicator size="small" color={isDark ? "#000" : "#fff"} />
                 ) : (
-                  <Feather name="arrow-right-circle" size={16} color={transferTarget ? "#000" : colors.textMuted} />
+                  <Feather name="arrow-right-circle" size={16} color={transferTarget ? (isDark ? "#000" : "#fff") : C.textMuted} />
                 )}
-                <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 14, color: transferTarget ? "#000" : colors.textMuted }]}>
+                <Text style={[styles.transferConfirmText, { color: transferTarget ? (isDark ? "#000" : "#fff") : C.textMuted }]}>
                   {transferring ? "Transfert en cours..." : "Confirmer le transfert"}
                 </Text>
               </Pressable>
@@ -1095,78 +1258,85 @@ export default function WalletScreen() {
         </View>
       </Modal>
 
-      {/* Withdrawal Modal */}
+      {/* ═══ WITHDRAW MODAL ═══ */}
       <Modal visible={showWithdrawModal} animationType="slide" transparent onRequestClose={() => setShowWithdrawModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Retrait Mobile Money</Text>
-              <Pressable onPress={() => setShowWithdrawModal(false)} style={[styles.modalCloseBtn, { backgroundColor: colors.inputBg }]}>
-                <Feather name="x" size={20} color={colors.text} />
+          <View style={[styles.modalSheet, { backgroundColor: C.surface, maxHeight: "90%" }]}>
+            <View style={styles.modalGrabber} />
+            <View style={[styles.modalHeader, { borderBottomColor: C.separator }]}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Retrait Mobile Money</Text>
+              <Pressable onPress={() => setShowWithdrawModal(false)} style={[styles.modalClose, { backgroundColor: C.inputBg }]}>
+                <Feather name="x" size={18} color={C.text} />
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#9C27B012", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#9C27B030" }}>
-                <Feather name="download-cloud" size={18} color="#9C27B0" />
-                <Text style={[{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text }]}>
-                  Solde retrait : <Text style={{ fontFamily: "Inter_700Bold", color: "#9C27B0" }}>
-                    {userCountry && userCountry.xafRate !== 1 ? formatCurrency(withdrawal, userCountry) : `${withdrawal.toLocaleString("fr-FR")} FCFA`}
+              <View style={[styles.withdrawInfo, { backgroundColor: PURPLE + "12", borderColor: PURPLE + "30" }]}>
+                <View style={[styles.withdrawIcon, { backgroundColor: PURPLE + "22" }]}>
+                  <Feather name="download-cloud" size={18} color={PURPLE} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.withdrawInfoText, { color: C.text }]}>
+                    Solde retrait : <Text style={{ fontFamily: "Inter_700Bold", color: PURPLE }}>
+                      {userCountry && userCountry.xafRate !== 1 ? formatCurrency(withdrawal, userCountry) : `${withdrawal.toLocaleString("fr-FR")} FCFA`}
+                    </Text>
                   </Text>
-                  {"\n"}
-                  <Text style={{ fontSize: 12, color: colors.textMuted }}>Minimum : 1 500 FCFA</Text>
-                </Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                    Minimum : 1 500 FCFA
+                  </Text>
+                </View>
               </View>
 
-              {/* Country picker */}
               <View>
-                <Text style={[{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.textSecondary, marginBottom: 6 }]}>Pays de réception</Text>
+                <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Pays de réception</Text>
                 <Pressable
-                  style={[{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 10, borderWidth: 1, padding: 12, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+                  style={[styles.countryBtn, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}
                   onPress={() => { setWdCountrySearch(""); setShowWdCountryModal(true); }}
                 >
-                  <Text style={{ fontSize: 22 }}>{wdCountry.flag}</Text>
+                  <Text style={styles.countryFlag}>{wdCountry.flag}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }]}>{wdCountry.name}</Text>
-                    <Text style={[{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textMuted }]}>
+                    <Text style={[styles.countryName, { color: C.text }]} numberOfLines={1}>{wdCountry.name}</Text>
+                    <Text style={[styles.countrySub, { color: C.textMuted }]} numberOfLines={1}>
                       {wdCountry.phoneCode} · {wdCountry.operators.join(" • ")}
                     </Text>
                   </View>
-                  <Feather name="chevron-down" size={16} color={colors.textMuted} />
+                  <Feather name="chevron-down" size={16} color={C.textMuted} />
                 </Pressable>
               </View>
 
-              {/* Method selector (based on country operators) */}
               <View>
-                <Text style={[{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.textSecondary, marginBottom: 8 }]}>Opérateur Mobile Money</Text>
+                <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Opérateur Mobile Money</Text>
                 <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
                   {wdCountry.operators.map((op) => (
                     <Pressable
                       key={op}
-                      style={[{
-                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1,
-                        backgroundColor: wdMethod === op ? "#9C27B018" : colors.inputBg,
-                        borderColor: wdMethod === op ? "#9C27B0" : colors.inputBorder,
-                      }]}
-                      onPress={() => setWdMethod(op)}
+                      style={({ pressed }) => [
+                        styles.methodBtn,
+                        {
+                          backgroundColor: wdMethod === op ? PURPLE + "15" : C.inputBg,
+                          borderColor: wdMethod === op ? PURPLE : C.border,
+                        },
+                        pressed && { opacity: 0.9 },
+                      ]}
+                      onPress={() => { setWdMethod(op); Haptics.selectionAsync(); }}
                     >
-                      <Text style={[{ fontFamily: "Inter_500Medium", fontSize: 13, color: wdMethod === op ? "#9C27B0" : colors.text }]}>{op}</Text>
+                      <Text style={[styles.methodBtnText, { color: wdMethod === op ? PURPLE : C.text }]}>{op}</Text>
                     </Pressable>
                   ))}
                 </View>
               </View>
 
-              {/* Phone number */}
               <View>
-                <Text style={[{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.textSecondary, marginBottom: 6 }]}>
+                <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>
                   Numéro Mobile Money ({wdCountry.phoneCode})
                 </Text>
-                <View style={[{ flexDirection: "row", alignItems: "center", borderRadius: 10, borderWidth: 1, padding: 12, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, gap: 8 }]}>
-                  <Text style={[{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#9C27B0" }]}>{wdCountry.phoneCode}</Text>
-                  <View style={{ width: 1, height: 20, backgroundColor: colors.separator }} />
+                <View style={[styles.phoneRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                  <View style={[styles.phoneCodeBox, { backgroundColor: PURPLE + "14" }]}>
+                    <Text style={[styles.phoneCodeText, { color: PURPLE }]}>{wdCountry.phoneCode}</Text>
+                  </View>
                   <TextInput
-                    style={[{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text }]}
+                    style={[styles.phoneInput, { color: C.text }]}
                     placeholder="6XX XXX XXX"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={C.textMuted}
                     keyboardType="phone-pad"
                     value={wdPhone}
                     onChangeText={setWdPhone}
@@ -1174,38 +1344,36 @@ export default function WalletScreen() {
                 </View>
               </View>
 
-              {/* Amount */}
               <View>
-                <Text style={[{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.textSecondary, marginBottom: 6 }]}>Montant à retirer (FCFA)</Text>
-                <View style={[{ flexDirection: "row", alignItems: "center", borderRadius: 10, borderWidth: 1, padding: 12, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Montant à retirer (FCFA)</Text>
+                <View style={[styles.inputRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
                   <TextInput
-                    style={[{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text }]}
+                    style={[styles.input, { color: C.text }]}
                     placeholder="Minimum 1 500 FCFA"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={C.textMuted}
                     keyboardType="numeric"
                     value={wdAmount}
                     onChangeText={setWdAmount}
                   />
-                  <Text style={[{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.textMuted }]}>FCFA</Text>
+                  <Text style={[styles.inputSuffix, { color: C.textMuted }]}>FCFA</Text>
                 </View>
               </View>
 
-              {/* Fee banner */}
               {(() => {
                 const parsedAmt = parseInt(wdAmount, 10);
                 if (!parsedAmt || parsedAmt <= 0) return null;
                 if (parsedAmt >= WITHDRAWAL_FEE_THRESHOLD) return (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#4CAF5018", borderRadius: 10, padding: 10 }}>
-                    <Feather name="check-circle" size={15} color="#4CAF50" />
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#4CAF50", flex: 1 }}>
+                  <View style={[styles.infoBanner, { backgroundColor: SUCCESS + "12", borderColor: SUCCESS + "30" }]}>
+                    <Feather name="check-circle" size={14} color={SUCCESS} />
+                    <Text style={[styles.infoBannerText, { color: SUCCESS }]}>
                       Aucun frais — retraits ≥ 10 000 FCFA sont gratuits.
                     </Text>
                   </View>
                 );
                 return (
-                  <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#FF980018", borderRadius: 10, padding: 10 }}>
-                    <Feather name="alert-circle" size={15} color="#FF9800" style={{ marginTop: 1 }} />
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#FF9800", flex: 1 }}>
+                  <View style={[styles.infoBanner, { backgroundColor: WARNING + "12", borderColor: WARNING + "30", alignItems: "flex-start" }]}>
+                    <Feather name="alert-circle" size={14} color={WARNING} style={{ marginTop: 1 }} />
+                    <Text style={[styles.infoBannerText, { color: WARNING }]}>
                       <Text style={{ fontFamily: "Inter_700Bold" }}>Frais de 455 FCFA</Text> s'appliquent aux retraits inférieurs à 10 000 FCFA. Vous choisirez le solde à débiter lors de la confirmation.
                     </Text>
                   </View>
@@ -1213,20 +1381,21 @@ export default function WalletScreen() {
               })()}
 
               <Pressable
-                style={[{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14, borderRadius: 12, backgroundColor: "#9C27B0", opacity: wdSubmitting ? 0.65 : 1 }]}
+                style={({ pressed }) => [
+                  styles.withdrawSubmit,
+                  { backgroundColor: PURPLE, opacity: wdSubmitting ? 0.6 : 1 },
+                  pressed && { opacity: 0.9 },
+                ]}
                 onPress={handleWithdraw}
                 disabled={wdSubmitting}
               >
-                {wdSubmitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Feather name="send" size={16} color="#fff" />
-                )}
-                <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 14, color: "#fff" }]}>
+                {wdSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="send" size={16} color="#fff" />}
+                <Text style={styles.withdrawSubmitText}>
                   {wdSubmitting ? "Traitement..." : "Soumettre le retrait"}
                 </Text>
               </Pressable>
-              <Text style={[{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textMuted, textAlign: "center" }]}>
+
+              <Text style={[styles.withdrawHint, { color: C.textMuted }]}>
                 Traitement sous 24h ouvrables. L'administrateur sera notifié automatiquement.
               </Text>
             </ScrollView>
@@ -1234,22 +1403,23 @@ export default function WalletScreen() {
         </View>
       </Modal>
 
-      {/* Withdrawal Country Picker Modal */}
+      {/* ═══ WD COUNTRY MODAL ═══ */}
       <Modal visible={showWdCountryModal} animationType="slide" transparent onRequestClose={() => setShowWdCountryModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Pays de retrait</Text>
-              <Pressable onPress={() => setShowWdCountryModal(false)} style={[styles.modalCloseBtn, { backgroundColor: colors.inputBg }]}>
-                <Feather name="x" size={20} color={colors.text} />
+          <View style={[styles.modalSheet, { backgroundColor: C.surface, maxHeight: "90%" }]}>
+            <View style={styles.modalGrabber} />
+            <View style={[styles.modalHeader, { borderBottomColor: C.separator }]}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Pays de retrait</Text>
+              <Pressable onPress={() => setShowWdCountryModal(false)} style={[styles.modalClose, { backgroundColor: C.inputBg }]}>
+                <Feather name="x" size={18} color={C.text} />
               </Pressable>
             </View>
-            <View style={[styles.searchBar, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-              <Feather name="search" size={16} color={colors.textMuted} />
+            <View style={[styles.searchBar, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+              <Feather name="search" size={16} color={C.textMuted} />
               <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
+                style={[styles.searchInput, { color: C.text }]}
                 placeholder="Rechercher un pays..."
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor={C.textMuted}
                 value={wdCountrySearch}
                 onChangeText={setWdCountrySearch}
               />
@@ -1262,7 +1432,14 @@ export default function WalletScreen() {
                 const isSelected = wdCountry.code === item.code;
                 return (
                   <Pressable
-                    style={[styles.countryOption, { backgroundColor: isSelected ? "#9C27B018" : colors.card, borderColor: isSelected ? "#9C27B0" : colors.cardBorder }]}
+                    style={({ pressed }) => [
+                      styles.countryOption,
+                      {
+                        backgroundColor: isSelected ? PURPLE + "15" : C.inputBg,
+                        borderColor: isSelected ? PURPLE : C.border,
+                      },
+                      pressed && { opacity: 0.9 },
+                    ]}
                     onPress={() => {
                       setWdCountry(item);
                       setWdMethod(item.operators[0] ?? "Mobile Money");
@@ -1273,12 +1450,12 @@ export default function WalletScreen() {
                   >
                     <Text style={styles.countryOptionFlag}>{item.flag}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.countryOptionName, { color: colors.text }]}>{item.name}</Text>
-                      <Text style={[styles.countryOptionCurrency, { color: colors.textMuted }]}>
+                      <Text style={[styles.countryOptionName, { color: C.text }]}>{item.name}</Text>
+                      <Text style={[styles.countryOptionSub, { color: C.textMuted }]} numberOfLines={1}>
                         {item.phoneCode} · {item.operators.join(" • ")}
                       </Text>
                     </View>
-                    {isSelected && <Feather name="check-circle" size={18} color="#9C27B0" />}
+                    {isSelected && <Feather name="check-circle" size={18} color={PURPLE} />}
                   </Pressable>
                 );
               }}
@@ -1288,33 +1465,27 @@ export default function WalletScreen() {
         </View>
       </Modal>
 
-      {/* Country Picker Modal */}
-      <Modal
-        visible={showCountryModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowCountryModal(false)}
-      >
+      {/* ═══ COUNTRY PICKER (International) ═══ */}
+      <Modal visible={showCountryModal} animationType="slide" transparent onRequestClose={() => setShowCountryModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Choisir un pays</Text>
-              <Pressable onPress={() => setShowCountryModal(false)} style={[styles.modalCloseBtn, { backgroundColor: colors.inputBg }]}>
-                <Feather name="x" size={20} color={colors.text} />
+          <View style={[styles.modalSheet, { backgroundColor: C.surface, maxHeight: "90%" }]}>
+            <View style={styles.modalGrabber} />
+            <View style={[styles.modalHeader, { borderBottomColor: C.separator }]}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Choisir un pays</Text>
+              <Pressable onPress={() => setShowCountryModal(false)} style={[styles.modalClose, { backgroundColor: C.inputBg }]}>
+                <Feather name="x" size={18} color={C.text} />
               </Pressable>
             </View>
-
-            <View style={[styles.searchBar, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-              <Feather name="search" size={16} color={colors.textMuted} />
+            <View style={[styles.searchBar, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+              <Feather name="search" size={16} color={C.textMuted} />
               <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
+                style={[styles.searchInput, { color: C.text }]}
                 placeholder="Rechercher un pays..."
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor={C.textMuted}
                 value={countrySearch}
                 onChangeText={setCountrySearch}
               />
             </View>
-
             <FlatList
               data={filteredCountries}
               keyExtractor={(c) => c.code}
@@ -1323,12 +1494,13 @@ export default function WalletScreen() {
                 const isSelected = intlCountry.code === item.code;
                 return (
                   <Pressable
-                    style={[
+                    style={({ pressed }) => [
                       styles.countryOption,
                       {
-                        backgroundColor: isSelected ? colors.accent + "18" : colors.card,
-                        borderColor: isSelected ? colors.accent : colors.cardBorder,
+                        backgroundColor: isSelected ? INFO + "15" : C.inputBg,
+                        borderColor: isSelected ? INFO : C.border,
                       },
+                      pressed && { opacity: 0.9 },
                     ]}
                     onPress={() => {
                       setIntlCountry(item);
@@ -1339,12 +1511,12 @@ export default function WalletScreen() {
                   >
                     <Text style={styles.countryOptionFlag}>{item.flag}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.countryOptionName, { color: colors.text }]}>{item.name}</Text>
-                        <Text style={[styles.countryOptionCurrency, { color: colors.textMuted }]}>
+                      <Text style={[styles.countryOptionName, { color: C.text }]}>{item.name}</Text>
+                      <Text style={[styles.countryOptionSub, { color: C.textMuted }]} numberOfLines={1}>
                         {item.phoneCode} · {item.operators.join(" • ")}
                       </Text>
                     </View>
-                    {isSelected && <Feather name="check-circle" size={18} color={colors.accent} />}
+                    {isSelected && <Feather name="check-circle" size={18} color={INFO} />}
                   </Pressable>
                 );
               }}
@@ -1357,199 +1529,321 @@ export default function WalletScreen() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  STYLES
+// ═══════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingBottom: 16, flexDirection: "row", alignItems: "flex-end" },
-  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 22, color: "#fff" },
-  headerSub: { fontFamily: "Inter_400Regular", fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 2 },
-  themeBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: "rgba(255,255,255,0.15)",
+
+  /* Header */
+  header: {
+    paddingHorizontal: 16, paddingBottom: 14,
+    flexDirection: "row", alignItems: "center", gap: 12,
+    position: "relative",
+  },
+  headerGoldLine: {
+    position: "absolute", top: 0, left: 20, right: 20, height: 2,
+    backgroundColor: GOLD, opacity: 0.35,
+    borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
+  },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 13,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
+  },
+  headerBtn: {
+    width: 40, height: 40, borderRadius: 13,
     alignItems: "center", justifyContent: "center",
   },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 20, letterSpacing: -0.3 },
+  headerSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 3 },
+
   content: { padding: 14, gap: 16 },
-  balanceRow: { flexDirection: "row", gap: 12 },
-  balanceCard: {
-    flex: 1, borderRadius: 16, borderWidth: 1.5,
-    padding: 16, gap: 4, alignItems: "flex-start",
+
+  /* Main balance */
+  mainBalanceCard: {
+    borderRadius: 22, overflow: "hidden",
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14, shadowOpacity: 0.10, elevation: 5,
   },
-  balanceCardIcon: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(17,153,142,0.15)",
+  mainBalanceGrad: { padding: 20, position: "relative" },
+  goldTopLine: {
+    position: "absolute", top: 0, left: 22, right: 22, height: 2,
+    backgroundColor: GOLD, opacity: 0.55,
+    borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
+  },
+  mainBalanceTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  mainBalanceLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  mainBalanceIconBox: {
+    width: 24, height: 24, borderRadius: 8,
     alignItems: "center", justifyContent: "center",
-    marginBottom: 6,
   },
-  balanceCardLabel: { fontFamily: "Inter_400Regular", fontSize: 12 },
-  balanceCardValue: { fontFamily: "Inter_700Bold", fontSize: 22 },
-  balanceCardCurrency: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
-  modeTabs: {
-    flexDirection: "row", borderRadius: 16, borderWidth: 1,
-    padding: 6, gap: 0,
+  mainBalanceLabel: { fontFamily: "Inter_500Medium", fontSize: 11.5, letterSpacing: 0.4, textTransform: "uppercase" },
+  mainBalanceValue: { fontFamily: "Inter_700Bold", fontSize: 30, marginTop: 10, letterSpacing: -0.6 },
+  mainBalanceIconLarge: {
+    width: 54, height: 54, borderRadius: 16,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1,
   },
-  modeTab: {
-    flex: 1, flexDirection: "row", alignItems: "center", gap: 10,
-    padding: 12, borderRadius: 12, borderWidth: 1.5, borderColor: "transparent",
+  mainBalanceDivider: { height: 1, marginVertical: 16 },
+  mainBalanceBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  mainBalanceHint: { fontFamily: "Inter_400Regular", fontSize: 12, flex: 1 },
+  secureChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
   },
-  modeTabDivider: { width: 1, marginVertical: 6, marginHorizontal: 3 },
-  modeTabFlag: { fontSize: 24 },
-  modeTabTitle: { fontFamily: "Inter_700Bold", fontSize: 14 },
-  modeTabSub: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 1 },
-  formSection: { borderRadius: 18, borderWidth: 1.5, overflow: "hidden", gap: 0 },
+  secureChipText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.3 },
+
+  /* Secondary balance cards */
+  balanceRow: { flexDirection: "row", gap: 10 },
+  balanceCard: {
+    flex: 1, borderRadius: 18, borderWidth: 1.5, padding: 14, gap: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 1,
+  },
+  balanceIconBox: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
+    marginBottom: 4,
+  },
+  balanceLabel: { fontFamily: "Inter_500Medium", fontSize: 11, letterSpacing: 0.3, textTransform: "uppercase" },
+  balanceValue: { fontFamily: "Inter_700Bold", fontSize: 18, letterSpacing: -0.3, marginTop: 2 },
+  balanceCurrency: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  balanceAction: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    alignSelf: "flex-start",
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1, marginTop: 6,
+  },
+  balanceActionText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.2 },
+
+  /* Segmented control */
+  segment: {
+    flexDirection: "row", borderRadius: 16, borderWidth: 1, padding: 4,
+  },
+  segmentBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+    padding: 10, borderRadius: 12,
+  },
+  segmentDivider: { width: 1, marginVertical: 8, marginHorizontal: 2 },
+  segmentIconBox: {
+    width: 30, height: 30, borderRadius: 9,
+    alignItems: "center", justifyContent: "center",
+  },
+  segmentLabel: { fontFamily: "Inter_700Bold", fontSize: 12.5, letterSpacing: -0.1 },
+  segmentSub: { fontFamily: "Inter_400Regular", fontSize: 10.5, marginTop: 1 },
+
+  /* Form */
+  formSection: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
   formHeader: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    padding: 16, borderBottomWidth: 1,
+    padding: 14, borderBottomWidth: 1,
   },
   formHeaderIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: "rgba(17,153,142,0.15)",
+    width: 44, height: 44, borderRadius: 14,
     alignItems: "center", justifyContent: "center",
   },
-  formTitle: { fontFamily: "Inter_700Bold", fontSize: 16 },
+  formTitle: { fontFamily: "Inter_700Bold", fontSize: 15.5, letterSpacing: -0.2 },
   formSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
-  amountSection: { padding: 16, gap: 10 },
-  fieldLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13, marginBottom: 4, paddingHorizontal: 16 },
-  presetsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 16 },
+  formBody: { padding: 16, gap: 14 },
+
+  fieldLabel: { fontFamily: "Inter_600SemiBold", fontSize: 12.5, letterSpacing: 0.1, marginBottom: 6 },
+
+  presetsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
   presetChip: {
     alignItems: "center", gap: 1,
     paddingHorizontal: 14, paddingVertical: 10,
     borderRadius: 12, borderWidth: 1.5,
-    minWidth: 72,
+    minWidth: 76, flexGrow: 1, flexBasis: "30%",
   },
-  presetChipText: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  presetChipText: { fontFamily: "Inter_700Bold", fontSize: 13.5 },
   presetChipSub: { fontFamily: "Inter_400Regular", fontSize: 10 },
-  customInput: {
+
+  inputRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    borderWidth: 1.5, borderRadius: 12,
+    borderWidth: 1, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 13,
-    marginHorizontal: 16,
   },
-  customInputText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15 },
-  customInputSuffix: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
-  countrySelectorBtn: {
+  input: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 14.5 },
+  inputSuffix: { fontFamily: "Inter_700Bold", fontSize: 12.5 },
+
+  countryBtn: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    borderWidth: 1.5, borderRadius: 12,
+    borderWidth: 1, borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 12,
-    marginHorizontal: 16,
   },
   countryFlag: { fontSize: 26 },
-  countryName: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
-  countryCurrency: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
-  phoneInputRow: {
+  countryName: { fontFamily: "Inter_700Bold", fontSize: 14, letterSpacing: -0.1 },
+  countrySub: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 2 },
+
+  phoneRow: {
     flexDirection: "row", alignItems: "center",
-    borderWidth: 1.5, borderRadius: 12,
-    overflow: "hidden", marginHorizontal: 16,
+    borderWidth: 1, borderRadius: 12, overflow: "hidden",
   },
-  phoneCode: { paddingHorizontal: 14, paddingVertical: 14 },
-  phoneCodeText: { fontFamily: "Inter_700Bold", fontSize: 15 },
-  phoneInputText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15, paddingHorizontal: 12, paddingVertical: 14 },
+  phoneCodeBox: { paddingHorizontal: 14, paddingVertical: 13 },
+  phoneCodeText: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  phoneInput: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 14.5, paddingHorizontal: 12, paddingVertical: 13 },
+
   conversionRow: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 8, padding: 8, marginHorizontal: 16, borderWidth: 1,
+    borderRadius: 10, padding: 10, marginTop: 8, borderWidth: 1,
+    alignSelf: "flex-start",
   },
-  conversionText: { fontFamily: "Inter_500Medium", fontSize: 13 },
-  secureRow: {
+  conversionText: { fontFamily: "Inter_600SemiBold", fontSize: 12.5 },
+
+  infoBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 10, borderWidth: 1,
-    padding: 10, marginHorizontal: 16,
+    borderRadius: 12, borderWidth: 1, padding: 10,
   },
-  secureText: { fontFamily: "Inter_400Regular", fontSize: 12, flex: 1, lineHeight: 18 },
-  payBtn: { overflow: "hidden", borderRadius: 12, marginHorizontal: 16, marginVertical: 16 },
-  payBtnGradient: { height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  payBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff" },
-  methodsRow: { flexDirection: "row", gap: 8, justifyContent: "center", paddingBottom: 16 },
+  infoBannerText: { fontFamily: "Inter_500Medium", fontSize: 11.5, flex: 1, lineHeight: 16 },
+
+  payBtn: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
+  payBtnGradient: {
+    height: 54, flexDirection: "row", alignItems: "center",
+    justifyContent: "center", gap: 10, paddingHorizontal: 20,
+  },
+  payBtnText: { fontFamily: "Inter_700Bold", fontSize: 15.5, color: "#fff", letterSpacing: 0.1 },
+
+  methodsRow: { flexDirection: "row", gap: 8, justifyContent: "center", flexWrap: "wrap" },
   methodChip: {
-    flexDirection: "row", alignItems: "center", gap: 5,
+    flexDirection: "row", alignItems: "center", gap: 6,
     borderWidth: 1, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
   },
-  methodChipName: { fontFamily: "Inter_700Bold", fontSize: 14 },
-  methodChipSub: { fontFamily: "Inter_400Regular", fontSize: 11 },
-  historyTitle: { fontFamily: "Inter_700Bold", fontSize: 16 },
-  rechargeItem: {
+  methodDot: { width: 8, height: 8, borderRadius: 4 },
+  methodChipText: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
+
+  /* History */
+  histHeader: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between",
+  },
+  accentBar: { width: 3, height: 18, borderRadius: 2 },
+  histTitle: { fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: -0.2 },
+  histRefresh: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
+  },
+  histItem: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: 12, borderWidth: 1, padding: 12,
+    borderRadius: 14, borderWidth: 1, padding: 12,
   },
-  rechargeIconBox: {
-    width: 42, height: 42, borderRadius: 21,
+  histIcon: {
+    width: 42, height: 42, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
-  rechargeMethod: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  rechargeMeta: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
-  rechargeAmount: { fontFamily: "Inter_700Bold", fontSize: 14, color: "#4CAF50" },
-  rechargeBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
-  rechargeBadgeText: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
-  emptyHistory: { borderRadius: 12, borderWidth: 1, padding: 28, alignItems: "center", gap: 8 },
-  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14 },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
-  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "85%" },
+  histTitle_: { fontFamily: "Inter_600SemiBold", fontSize: 13.5 },
+  histMeta: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 2 },
+  histAmount: { fontFamily: "Inter_700Bold", fontSize: 13.5 },
+  histBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  histBadgeText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.2 },
+
+  /* Empty */
+  emptyHistory: {
+    borderRadius: 16, borderWidth: 1, padding: 28,
+    alignItems: "center", gap: 12,
+  },
+  emptyIconBox: {
+    width: 68, height: 68, borderRadius: 34,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
+  },
+  emptyTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14.5, textAlign: "center" },
+  emptyText: { fontFamily: "Inter_400Regular", fontSize: 12.5, textAlign: "center", lineHeight: 18 },
+
+  /* Modal */
+  modalOverlay: { flex: 1, backgroundColor: "rgba(10,28,58,0.55)", justifyContent: "flex-end" },
+  modalSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: "88%", paddingTop: 8 },
+  modalGrabber: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(128,128,128,0.3)", marginBottom: 6 },
   modalHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     padding: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)",
+    borderBottomWidth: 1,
   },
-  modalTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
-  modalCloseBtn: {
-    width: 36, height: 36, borderRadius: 18,
+  modalTitle: { fontFamily: "Inter_700Bold", fontSize: 17, letterSpacing: -0.2 },
+  modalClose: {
+    width: 34, height: 34, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
+
+  /* Transfer */
+  transferInfoBox: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    borderRadius: 12, padding: 12, borderWidth: 1,
+  },
+  transferInfoIcon: {
+    width: 34, height: 34, borderRadius: 11,
+    alignItems: "center", justifyContent: "center",
+  },
+  transferInfoText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 13 },
+  transferLabel: { fontFamily: "Inter_700Bold", fontSize: 14, marginTop: 4 },
+  transferOption: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    padding: 14, borderRadius: 14, borderWidth: 2,
+  },
+  transferOptionIcon: {
+    width: 44, height: 44, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
+  },
+  transferOptionLabel: { fontFamily: "Inter_700Bold", fontSize: 14.5, letterSpacing: -0.1 },
+  transferOptionSub: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 3 },
+  transferConfirmBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, padding: 15, borderRadius: 13, marginTop: 6,
+  },
+  transferConfirmText: { fontFamily: "Inter_700Bold", fontSize: 14.5, letterSpacing: 0.1 },
+
+  /* Withdraw */
+  withdrawInfo: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderRadius: 14, padding: 14, borderWidth: 1,
+  },
+  withdrawIcon: {
+    width: 42, height: 42, borderRadius: 13,
+    alignItems: "center", justifyContent: "center",
+  },
+  withdrawInfoText: { fontFamily: "Inter_500Medium", fontSize: 13 },
+  methodBtn: {
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 20, borderWidth: 1,
+  },
+  methodBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 12.5 },
+  withdrawSubmit: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, padding: 15, borderRadius: 13,
+  },
+  withdrawSubmitText: { fontFamily: "Inter_700Bold", fontSize: 14.5, color: "#fff", letterSpacing: 0.1 },
+  withdrawHint: { fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center", lineHeight: 16 },
+
+  /* Search + Country options */
   searchBar: {
     flexDirection: "row", alignItems: "center", gap: 10,
     borderWidth: 1, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 10,
+    paddingHorizontal: 14, paddingVertical: 11,
     margin: 16, marginTop: 12,
   },
-  searchInput: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15 },
+  searchInput: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 14.5 },
   countryOption: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: 12, borderWidth: 1, padding: 12,
+    borderRadius: 14, borderWidth: 1, padding: 12,
   },
   countryOptionFlag: { fontSize: 26 },
-  countryOptionName: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
-  countryOptionCurrency: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
-  // Polling overlay
+  countryOptionName: { fontFamily: "Inter_600SemiBold", fontSize: 14.5 },
+  countryOptionSub: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 2 },
+
+  /* Polling */
   pollingOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 30,
+    flex: 1, backgroundColor: "rgba(10,28,58,0.65)",
+    alignItems: "center", justifyContent: "center", padding: 30,
   },
   pollingCard: {
-    width: "100%",
-    borderRadius: 20,
-    padding: 28,
-    alignItems: "center",
-    gap: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+    width: "100%", borderRadius: 22, padding: 28,
+    alignItems: "center", gap: 12,
+    borderWidth: 1,
+    shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
   },
-  pollingTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 18,
-    textAlign: "center",
-    marginTop: 4,
-  },
-  pollingDesc: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  pollingProgress: {
-    width: "100%",
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-    marginTop: 8,
-  },
-  pollingBar: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  pollingAttemptText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-  },
+  pollingTitle: { fontFamily: "Inter_700Bold", fontSize: 17, textAlign: "center", marginTop: 6, letterSpacing: -0.2 },
+  pollingDesc: { fontFamily: "Inter_400Regular", fontSize: 13.5, textAlign: "center", lineHeight: 20 },
+  pollingProgress: { width: "100%", height: 6, borderRadius: 3, overflow: "hidden", marginTop: 10 },
+  pollingBar: { height: "100%", borderRadius: 3 },
+  pollingAttemptText: { fontFamily: "Inter_500Medium", fontSize: 12 },
 });
