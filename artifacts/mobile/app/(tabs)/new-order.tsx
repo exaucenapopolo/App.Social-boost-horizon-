@@ -2106,7 +2106,7 @@ function ResellerSpaceModal({
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: lvl.color }}>-{lvl.discount}%</Text>
                   </View>
                   {isActive && <Feather name="check-circle" size={16} color={lvl.color} />}
-                </Pressable>
+                </View>
               );
             })}
 
