@@ -1,6 +1,7 @@
-﻿import { getApps, initializeApp } from "firebase/app";
+import { getApps, initializeApp } from "firebase/app";
 import {
   getAuth,
+  // @ts-expect-error Firebase 12 : export React Native absent des déclarations TypeScript partagées.
   getReactNativePersistence,
   initializeAuth,
 } from "firebase/auth";
