@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { AuthBackground } from "@/components/AuthBackground";
 import StarBackground from "@/components/StarBackground";
 import OtherServicesSection from "@/components/OtherServicesSection";
 import { useAuth } from "@/context/AuthContext";
@@ -27,31 +28,34 @@ import { apiClient } from "@/services/api";
 
 const NOTIF_READ_KEY = "@sbh_notif_read";
 
-// ─── Palette alignée sur l'identité du logo (login + register) ───
+// ─── Palette identique à login.tsx ───
 const NAVY        = "#0F2A5C";
 const NAVY_LIGHT  = "#1E3F7A";
-const NAVY_DK     = "#0A1F44";
 const GOLD        = "#C9A961";
 const GOLD_DK     = "#B08D4A";
+const GOLD_SOFT   = "#F7F1E1";
+const BG          = "#FAF9F6";
+const SURFACE     = "#FFFFFF";
+const TEXT        = "#0F172A";
+const TEXT_MUTED  = "#64748B";
+const TEXT_SOFT   = "#94A3B8";
+const BORDER      = "#E8E4DA";
+const SUCCESS     = "#10B981";
+const WARNING     = "#F59E0B";
+const INFO        = "#1E90FF";
+const DANGER      = "#EF4444";
 
-const LIGHT_BG    = "#FAF9F6";
-const LIGHT_SURF  = "#FFFFFF";
-const LIGHT_BORD  = "#E8E4DA";
-const LIGHT_TEXT  = "#0F172A";
-const LIGHT_MUTED = "#64748B";
-const LIGHT_SOFT  = "#94A3B8";
+// Palette nuit (fond inchangé, seulement les surfaces s'adaptent)
+const D_BG         = "#0A162B";
+const D_SURFACE    = "#0F2A5C";
+const D_BORDER     = "rgba(201,169,97,0.14)";
+const D_TEXT       = "#F1F5F9";
+const D_TEXT_MUTED = "#94A3B8";
+const D_TEXT_SOFT  = "#64748B";
 
-const DARK_BG     = "#0A162B";
-const DARK_SURF   = "#0F2A5C";
-const DARK_BORD   = "rgba(255,255,255,0.08)";
-const DARK_TEXT   = "#F1F5F9";
-const DARK_MUTED  = "#94A3B8";
-const DARK_SOFT   = "#64748B";
-
-// ─── Salutation contextuelle (heure + jour) ───
 function getGreeting(): string {
   const now = new Date();
-  const day = now.getDay(); // 0 = dimanche, 1 = lundi, …, 5 = vendredi, 6 = samedi
+  const day = now.getDay();
   const hour = now.getHours();
 
   if (day === 1) return "Bonne semaine";
@@ -63,13 +67,13 @@ function getGreeting(): string {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  "En attente": { label: "En attente", color: "#F59E0B", bg: "rgba(245,158,11,0.12)" },
-  "en cours":   { label: "En cours",   color: "#1E90FF", bg: "rgba(30,144,255,0.12)" },
-  "succès":     { label: "Terminé",    color: "#10B981", bg: "rgba(16,185,129,0.12)" },
-  "annulée":    { label: "Annulé",     color: "#EF4444", bg: "rgba(239,68,68,0.12)" },
-  "pending":    { label: "En attente", color: "#F59E0B", bg: "rgba(245,158,11,0.12)" },
-  "processing": { label: "En cours",   color: "#1E90FF", bg: "rgba(30,144,255,0.12)" },
-  "completed":  { label: "Terminé",    color: "#10B981", bg: "rgba(16,185,129,0.12)" },
+  "En attente": { label: "En attente", color: WARNING, bg: "rgba(245,158,11,0.10)" },
+  "en cours":   { label: "En cours",   color: INFO,    bg: "rgba(30,144,255,0.10)" },
+  "succès":     { label: "Terminé",    color: SUCCESS, bg: "rgba(16,185,129,0.10)" },
+  "annulée":    { label: "Annulé",     color: DANGER,  bg: "rgba(239,68,68,0.10)" },
+  "pending":    { label: "En attente", color: WARNING, bg: "rgba(245,158,11,0.10)" },
+  "processing": { label: "En cours",   color: INFO,    bg: "rgba(30,144,255,0.10)" },
+  "completed":  { label: "Terminé",    color: SUCCESS, bg: "rgba(16,185,129,0.10)" },
 };
 
 export default function HomeScreen() {
@@ -78,20 +82,19 @@ export default function HomeScreen() {
   const { orders, refreshOrders } = useOrders();
   const { isDark, toggleTheme } = useTheme();
 
-  // Palette locale (garantit un vrai clair / sombre propre)
-  const C = useMemo(
-    () => ({
-      bg:        isDark ? DARK_BG   : LIGHT_BG,
-      surface:   isDark ? DARK_SURF : LIGHT_SURF,
-      border:    isDark ? DARK_BORD : LIGHT_BORD,
-      text:      isDark ? DARK_TEXT : LIGHT_TEXT,
-      textMuted: isDark ? DARK_MUTED : LIGHT_MUTED,
-      textSoft:  isDark ? DARK_SOFT : LIGHT_SOFT,
-      iconBg:    isDark ? "rgba(201,169,97,0.12)" : "rgba(15,42,92,0.06)",
-      iconColor: isDark ? GOLD : NAVY,
-    }),
-    [isDark]
-  );
+  // Palette locale : clair par défaut (identique login), nuit adapté
+  const C = useMemo(() => ({
+    bg:        isDark ? D_BG         : BG,
+    surface:   isDark ? D_SURFACE    : SURFACE,
+    border:    isDark ? D_BORDER     : BORDER,
+    text:      isDark ? D_TEXT       : TEXT,
+    textMuted: isDark ? D_TEXT_MUTED : TEXT_MUTED,
+    textSoft:  isDark ? D_TEXT_SOFT  : TEXT_SOFT,
+    accent:    isDark ? GOLD         : NAVY,
+    accent2:   GOLD,
+    chipBg:    isDark ? "rgba(201,169,97,0.10)" : GOLD_SOFT,
+    chipBorder:isDark ? "rgba(201,169,97,0.22)" : "#EDE6D5",
+  }), [isDark]);
 
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
   const recentOrders = orders.slice(0, 3);
@@ -148,8 +151,9 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: C.bg }]}>
-      {isDark && <StarBackground />}
+    <View style={[styles.root, { backgroundColor: isDark ? D_BG : BG }]}>
+      {/* Fond exactement identique à la page de connexion en mode clair */}
+      {isDark ? <StarBackground /> : <AuthBackground />}
 
       <ScrollView
         style={{ flex: 1 }}
@@ -165,12 +169,12 @@ export default function HomeScreen() {
         {/* ─── Header ─── */}
         <View style={styles.header}>
           <Pressable style={styles.userRow} onPress={() => go("/(tabs)/profile")}>
-            <View style={[styles.avatarBox, { borderColor: C.border }]}>
+            <View style={[styles.avatarBox, { borderColor: C.border, backgroundColor: C.surface }]}>
               {user?.photoURL ? (
                 <Image source={{ uri: user.photoURL }} style={styles.avatarImg} contentFit="cover" />
               ) : (
-                <View style={[styles.avatarFallback, { backgroundColor: NAVY }]}>
-                  <Text style={styles.avatarLetter}>
+                <View style={[styles.avatarFallback, { backgroundColor: isDark ? "rgba(201,169,97,0.12)" : GOLD_SOFT }]}>
+                  <Text style={[styles.avatarLetter, { color: isDark ? GOLD : NAVY }]}>
                     {(user?.name ?? "U").charAt(0).toUpperCase()}
                   </Text>
                 </View>
@@ -179,10 +183,7 @@ export default function HomeScreen() {
 
             <View style={{ flex: 1 }}>
               <Text style={[styles.greetSmall, { color: C.textMuted }]}>{greeting}</Text>
-              <Text
-                style={[styles.greetName, { color: C.text }]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.greetName, { color: C.text }]} numberOfLines={1}>
                 {user?.name?.split(" ")[0] ?? "Utilisateur"}
               </Text>
             </View>
@@ -190,10 +191,7 @@ export default function HomeScreen() {
 
           <View style={styles.headerActions}>
             <Pressable
-              onPress={() => {
-                Haptics.selectionAsync();
-                toggleTheme();
-              }}
+              onPress={() => { Haptics.selectionAsync(); toggleTheme(); }}
               style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.border }]}
             >
               <Feather name={isDark ? "sun" : "moon"} size={17} color={isDark ? GOLD : NAVY} />
@@ -243,19 +241,14 @@ export default function HomeScreen() {
               <Pressable
                 style={styles.referralRow}
                 hitSlop={8}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  router.push("/parrainage" as any);
-                }}
+                onPress={() => { Haptics.selectionAsync(); router.push("/parrainage" as any); }}
               >
                 <Feather name="gift" size={14} color={GOLD} />
                 <Text style={styles.referralLabel}>Parrainage</Text>
                 <Text style={styles.referralValue}>{referralFormatted}</Text>
               </Pressable>
 
-              <View style={styles.chevronBox}>
-                <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.55)" />
-              </View>
+              <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.55)" />
             </View>
           </LinearGradient>
         </Pressable>
@@ -263,26 +256,23 @@ export default function HomeScreen() {
         {/* ─── CTA principal : Commander ─── */}
         <Pressable
           onPress={() => go("/(tabs)/new-order")}
+          onPressIn={() => Haptics.selectionAsync()}
           style={({ pressed }) => [
             styles.ctaCard,
+            { backgroundColor: C.surface, borderColor: C.border },
             pressed && { opacity: 0.94, transform: [{ scale: 0.985 }] },
           ]}
         >
-          <LinearGradient
-            colors={[NAVY, NAVY_DK]}
-            style={styles.ctaGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.ctaIconBox}>
-              <Feather name="zap" size={22} color={GOLD} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.ctaTitle}>Commander</Text>
-              <Text style={styles.ctaSub}>Booster vos réseaux sociaux</Text>
-            </View>
-            <Feather name="arrow-right" size={20} color={GOLD} />
-          </LinearGradient>
+          <View style={[styles.ctaIconBox, { backgroundColor: isDark ? "rgba(201,169,97,0.10)" : GOLD_SOFT, borderColor: C.chipBorder }]}>
+            <Feather name="shopping-cart" size={20} color={isDark ? GOLD : NAVY} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.ctaTitle, { color: C.text }]}>Commander</Text>
+            <Text style={[styles.ctaSub, { color: C.textMuted }]}>
+              Booster vos réseaux sociaux
+            </Text>
+          </View>
+          <Feather name="arrow-right" size={20} color={isDark ? GOLD : NAVY} />
         </Pressable>
 
         {/* ─── Autres services ─── */}
@@ -291,11 +281,7 @@ export default function HomeScreen() {
         {/* ─── Statistiques ─── */}
         <View style={styles.statsRow}>
           {[
-            {
-              label: "Commandes",
-              value: user?.totalOrders ?? 0,
-              icon: "shopping-bag" as const,
-            },
+            { label: "Commandes", value: user?.totalOrders ?? 0, icon: "shopping-bag" as const },
             {
               label: "Terminées",
               value: orders.filter(
@@ -315,8 +301,13 @@ export default function HomeScreen() {
               key={i}
               style={[styles.statCard, { backgroundColor: C.surface, borderColor: C.border }]}
             >
-              <View style={[styles.statIcon, { backgroundColor: C.iconBg }]}>
-                <Feather name={s.icon} size={16} color={C.iconColor} />
+              <View
+                style={[
+                  styles.statIcon,
+                  { backgroundColor: isDark ? "rgba(201,169,97,0.10)" : GOLD_SOFT },
+                ]}
+              >
+                <Feather name={s.icon} size={16} color={isDark ? GOLD : NAVY} />
               </View>
               <Text style={[styles.statValue, { color: C.text }]}>{s.value}</Text>
               <Text style={[styles.statLabel, { color: C.textMuted }]}>{s.label}</Text>
@@ -352,10 +343,7 @@ export default function HomeScreen() {
                     <Feather name="trending-up" size={15} color={cfg.color} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.orderName, { color: C.text }]}
-                      numberOfLines={1}
-                    >
+                    <Text style={[styles.orderName, { color: C.text }]} numberOfLines={1}>
                       {order.serviceName}
                     </Text>
                     <Text style={[styles.orderMeta, { color: C.textMuted }]}>
@@ -364,12 +352,7 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
-                    <Text
-                      style={[
-                        styles.orderPrice,
-                        { color: isDark ? GOLD : GOLD_DK },
-                      ]}
-                    >
+                    <Text style={[styles.orderPrice, { color: isDark ? GOLD : GOLD_DK }]}>
                       {userCountry && userCountry.xafRate !== 1
                         ? formatCurrency(order.price, userCountry)
                         : `${order.price.toLocaleString("fr-FR")} FCFA`}
@@ -394,7 +377,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { paddingHorizontal: 18, gap: 16 },
 
-  /* Header */
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -410,7 +392,7 @@ const styles = StyleSheet.create({
   },
   avatarImg: { width: "100%", height: "100%" },
   avatarFallback: { flex: 1, alignItems: "center", justifyContent: "center" },
-  avatarLetter: { fontFamily: "Inter_700Bold", fontSize: 18, color: GOLD },
+  avatarLetter: { fontFamily: "Inter_700Bold", fontSize: 18 },
   greetSmall: { fontFamily: "Inter_400Regular", fontSize: 12.5 },
   greetName: { fontFamily: "Inter_700Bold", fontSize: 17.5, letterSpacing: 0.1 },
 
@@ -430,16 +412,15 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#EF4444",
+    backgroundColor: DANGER,
   },
 
-  /* Balance Card */
   balanceCard: {
     borderRadius: 20,
     overflow: "hidden",
     shadowColor: NAVY,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.22,
     shadowRadius: 18,
     elevation: 8,
   },
@@ -506,49 +487,40 @@ const styles = StyleSheet.create({
     color: GOLD,
     marginLeft: 2,
   },
-  chevronBox: { opacity: 0.8 },
 
-  /* CTA Commander */
   ctaCard: {
-    borderRadius: 18,
-    overflow: "hidden",
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    elevation: 6,
-  },
-  ctaGradient: {
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   ctaIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "rgba(201,169,97,0.14)",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(201,169,97,0.28)",
   },
   ctaTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 16.5,
-    color: "#FFFFFF",
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   ctaSub: {
     fontFamily: "Inter_400Regular",
     fontSize: 12.5,
-    color: "rgba(255,255,255,0.68)",
     marginTop: 2,
   },
 
-  /* Stats */
   statsRow: { flexDirection: "row", gap: 10 },
   statCard: {
     flex: 1,
@@ -567,13 +539,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   statValue: { fontFamily: "Inter_700Bold", fontSize: 19, letterSpacing: 0.2 },
-  statLabel: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    textAlign: "center",
-  },
+  statLabel: { fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center" },
 
-  /* Recent Orders */
   sectionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -598,16 +565,7 @@ const styles = StyleSheet.create({
   },
   orderName: { fontFamily: "Inter_600SemiBold", fontSize: 13.5 },
   orderMeta: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 2 },
-  orderPrice: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 13,
-    textAlign: "right",
-  },
-  badge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginTop: 4,
-  },
+  orderPrice: { fontFamily: "Inter_700Bold", fontSize: 13, textAlign: "right" },
+  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 },
   badgeText: { fontFamily: "Inter_600SemiBold", fontSize: 10 },
 });

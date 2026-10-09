@@ -25,27 +25,26 @@ import { COUNTRIES, formatCurrency } from "@/lib/countries";
 import { BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 
-// ─── Palette charte ───
-const NAVY       = "#0F2A5C";
-const NAVY_LIGHT = "#1E3F7A";
-const NAVY_DK    = "#0A1F44";
-const GOLD       = "#C9A961";
-const GOLD_DK    = "#B08D4A";
-const GOLD_SOFT  = "#F7F1E1";
+// ─── Palette identique à login.tsx ───
+const NAVY        = "#0F2A5C";
+const NAVY_LIGHT  = "#1E3F7A";
+const GOLD        = "#C9A961";
+const GOLD_DK     = "#B08D4A";
+const GOLD_SOFT   = "#F7F1E1";
+const BG          = "#FAF9F6";
+const SURFACE     = "#FFFFFF";
+const TEXT        = "#0F172A";
+const TEXT_MUTED  = "#64748B";
+const TEXT_SOFT   = "#94A3B8";
+const BORDER      = "#E8E4DA";
+const SUCCESS     = "#10B981";
+const GOLD_BORDER = "#EDE6D5";
 
-const LIGHT_BG    = "#FAF9F6";
-const LIGHT_SURF  = "#FFFFFF";
-const LIGHT_BORD  = "#E8E4DA";
-const LIGHT_TEXT  = "#0F172A";
-const LIGHT_MUTED = "#64748B";
-const LIGHT_SOFT  = "#94A3B8";
-
-const DARK_BG     = "#0A162B";
-const DARK_SURF   = "#0F2A5C";
-const DARK_BORD   = "rgba(255,255,255,0.08)";
-const DARK_TEXT   = "#F1F5F9";
-const DARK_MUTED  = "#94A3B8";
-const DARK_SOFT   = "#64748B";
+const D_SURFACE    = "#0F2A5C";
+const D_BORDER     = "rgba(201,169,97,0.14)";
+const D_TEXT       = "#F1F5F9";
+const D_TEXT_MUTED = "#94A3B8";
+const D_TEXT_SOFT  = "#64748B";
 
 // ─── Données ───
 const PORTFOLIO_SITES = [
@@ -110,7 +109,7 @@ const TIKTOK_COUNTRIES = [
 
 const BADGE_PLATFORMS = ["Facebook", "Instagram", "TikTok", "YouTube", "Twitter/X"];
 
-// ─── Services externes (nouveaux) ───
+// ─── Services externes mis en avant ───
 const FEATURED_EXTERNAL = [
   {
     id: "foreign-number",
@@ -125,7 +124,7 @@ const FEATURED_EXTERNAL = [
         "Via notre partenaire Texerra SMS, commandez un numéro de téléphone virtuel dans plus de 205 pays, pour WhatsApp, TikTok, Instagram, Facebook, YouTube et bien plus.",
       bullets: [
         "WhatsApp, TikTok, Instagram, Facebook, YouTube et +5000 services",
-        "Disponible dans +205 pays — aucun pays exclu",
+        "Disponible dans +205 pays, aucun pays exclu",
         "Rechargez votre compte et commandez sans restriction",
         "Utile pour le business, la vérification de comptes ou un usage personnel",
       ],
@@ -155,9 +154,9 @@ const FEATURED_EXTERNAL = [
 ];
 
 const MODAL_SERVICES = [
-  { id: "website",  icon: "globe"      as const, label: "Site web",       sub: "Vitrine · E-commerce" },
-  { id: "app",      icon: "smartphone" as const, label: "Application",    sub: "Android · iOS" },
-  { id: "ads",      icon: "radio"      as const, label: "Campagnes pubs", sub: "Facebook · Instagram" },
+  { id: "website",  icon: "globe"      as const, label: "Site web",        sub: "Vitrine · E-commerce" },
+  { id: "app",      icon: "smartphone" as const, label: "Application",     sub: "Android · iOS" },
+  { id: "ads",      icon: "radio"      as const, label: "Campagnes pubs",  sub: "Facebook · Instagram" },
   { id: "accounts", icon: "award"      as const, label: "Comptes premium", sub: "Canva · PayPal · TikTok" },
 ];
 
@@ -172,10 +171,7 @@ async function postServiceRequest(
     if (!token) return { success: false, error: "Non authentifié. Reconnectez-vous." };
     const res = await fetch(`${BASE_URL}api/support/service-request`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         serviceType,
         fields,
@@ -191,7 +187,6 @@ async function postServiceRequest(
   }
 }
 
-// ─── Types partagés ───
 type ModalBaseProps = {
   visible: boolean;
   onClose: () => void;
@@ -199,7 +194,7 @@ type ModalBaseProps = {
   priceFmt: (fcfa: number) => string;
 };
 
-// ─── Champs réutilisables ───
+// ─── Champs ───
 function FieldInput({
   label, value, onChange, placeholder, multiline, keyboardType, theme, secureTextEntry,
 }: {
@@ -274,9 +269,9 @@ function TagRow({
 }
 
 function ModalShell({
-  visible, onClose, title, children, theme,
+  visible, onClose, title, icon, children, theme,
 }: {
-  visible: boolean; onClose: () => void; title: string; children: React.ReactNode; theme: any;
+  visible: boolean; onClose: () => void; title: string; icon: any; children: React.ReactNode; theme: any;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -293,12 +288,24 @@ function ModalShell({
             ]}
           >
             <View style={[ms.sheetHeader, { borderBottomColor: theme.separator }]}>
-              <Text style={[ms.sheetTitle, { color: theme.text }]}>{title}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                <View
+                  style={[
+                    ms.sheetIconBox,
+                    { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
+                  ]}
+                >
+                  <Feather name={icon} size={16} color={theme.accent} />
+                </View>
+                <Text style={[ms.sheetTitle, { color: theme.text }]} numberOfLines={1}>
+                  {title}
+                </Text>
+              </View>
               <Pressable
                 onPress={onClose}
                 style={[ms.closeBtn, { backgroundColor: theme.inputBg }]}
               >
-                <Feather name="x" size={20} color={theme.text} />
+                <Feather name="x" size={18} color={theme.text} />
               </Pressable>
             </View>
             <ScrollView
@@ -318,16 +325,23 @@ function ModalShell({
 function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) {
   return (
     <View style={{ alignItems: "center", gap: 16, paddingVertical: 30 }}>
-      <Text style={{ fontSize: 56, textAlign: "center" }}>✅</Text>
+      <View
+        style={[
+          ms.successIcon,
+          { backgroundColor: "rgba(16,185,129,0.10)", borderColor: "rgba(16,185,129,0.25)" },
+        ]}
+      >
+        <Feather name="check" size={32} color={SUCCESS} />
+      </View>
       <Text
         style={{
           fontFamily: "Inter_700Bold",
           fontSize: 20,
-          color: theme.success,
+          color: theme.text,
           textAlign: "center",
         }}
       >
-        Demande envoyée !
+        Demande envoyée
       </Text>
       <Text
         style={{
@@ -347,7 +361,7 @@ function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) 
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
         >
-          <Text style={ms.submitText}>Parfait, merci !</Text>
+          <Text style={ms.submitText}>Fermer</Text>
         </LinearGradient>
       </Pressable>
     </View>
@@ -369,7 +383,13 @@ function WaField({
         <TextInput
           style={[
             ms.input,
-            { width: 72, color: theme.text, backgroundColor: theme.inputBg, borderColor: theme.inputBorder },
+            {
+              width: 72,
+              color: theme.text,
+              backgroundColor: theme.inputBg,
+              borderColor: theme.inputBorder,
+              textAlign: "center",
+            },
           ]}
           value={waCode}
           onChangeText={setWaCode}
@@ -380,7 +400,12 @@ function WaField({
         <TextInput
           style={[
             ms.input,
-            { flex: 1, color: theme.text, backgroundColor: theme.inputBg, borderColor: theme.inputBorder },
+            {
+              flex: 1,
+              color: theme.text,
+              backgroundColor: theme.inputBg,
+              borderColor: theme.inputBorder,
+            },
           ]}
           value={waPhone}
           onChangeText={setWaPhone}
@@ -400,7 +425,7 @@ function SubmitButton({
 }) {
   return (
     <Pressable
-      style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.85 }]}
+      style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9 }]}
       onPress={onPress}
       disabled={loading}
     >
@@ -414,8 +439,8 @@ function SubmitButton({
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Feather name="send" size={16} color={GOLD} />
             <Text style={ms.submitText}>Envoyer la demande</Text>
+            <Feather name="arrow-right" size={16} color={GOLD} />
           </>
         )}
       </LinearGradient>
@@ -423,12 +448,9 @@ function SubmitButton({
   );
 }
 
-// ─── Modal explicatif (nouveaux services) ───
+// ─── Modal explicatif ───
 function ServiceInfoModal({
-  visible,
-  onClose,
-  service,
-  theme,
+  visible, onClose, service, theme,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -445,7 +467,7 @@ function ServiceInfoModal({
             <View
               style={[
                 ms.infoIconBox,
-                { backgroundColor: theme.accent + "15", borderColor: theme.accent + "30" },
+                { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
               ]}
             >
               <Feather name={service.icon} size={20} color={theme.accent} />
@@ -453,7 +475,7 @@ function ServiceInfoModal({
             <Text style={[ms.infoTitle, { color: theme.text }]} numberOfLines={2}>
               {service.info.title}
             </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable onPress={onClose} hitSlop={10} style={{ padding: 4 }}>
               <Feather name="x" size={20} color={theme.textMuted} />
             </Pressable>
           </View>
@@ -465,12 +487,14 @@ function ServiceInfoModal({
           <View style={{ gap: 10 }}>
             {service.info.bullets.map((b, i) => (
               <View key={i} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
-                <Feather
-                  name="check"
-                  size={14}
-                  color={theme.accent}
-                  style={{ marginTop: 3 }}
-                />
+                <View
+                  style={[
+                    ms.bulletDot,
+                    { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
+                  ]}
+                >
+                  <Feather name="check" size={10} color={theme.accent} />
+                </View>
                 <Text
                   style={{
                     flex: 1,
@@ -478,6 +502,7 @@ function ServiceInfoModal({
                     fontSize: 13,
                     color: theme.textSecondary,
                     lineHeight: 19,
+                    marginTop: 2,
                   }}
                 >
                   {b}
@@ -487,7 +512,7 @@ function ServiceInfoModal({
           </View>
 
           <Pressable
-            style={({ pressed }) => [ms.infoCta, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9 }]}
             onPress={() => {
               onClose();
               Linking.openURL(service.url);
@@ -495,11 +520,11 @@ function ServiceInfoModal({
           >
             <LinearGradient
               colors={[NAVY_LIGHT, NAVY]}
-              style={ms.infoCtaGradient}
+              style={ms.submitGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              <Text style={ms.infoCtaText}>{service.info.cta}</Text>
+              <Text style={ms.submitText}>{service.info.cta}</Text>
               <Feather name="arrow-right" size={16} color={GOLD} />
             </LinearGradient>
           </Pressable>
@@ -509,7 +534,7 @@ function ServiceInfoModal({
   );
 }
 
-// ─── Modaux services existants ───
+// ─── Modal Site Web ───
 const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
   const [siteName, setSiteName] = useState("");
   const [company, setCompany] = useState("");
@@ -564,18 +589,18 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="🌐 Site web sur mesure" theme={theme}>
+    <ModalShell visible={visible} onClose={handleClose} title="Site web sur mesure" icon="globe" theme={theme}>
       {success ? (
         <SuccessScreen onClose={handleClose} theme={theme} />
       ) : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
-            Nous créons votre site web professionnel depuis 2021. +50 sites réalisés dans 15 pays.
+            Nous créons votre site web professionnel depuis 2021. Plus de 50 sites réalisés dans 15 pays.
           </Text>
 
           <Pressable
             onPress={() => setShowPortfolio(!showPortfolio)}
-            style={[ms.portfolioBtn, { borderColor: theme.accent + "60", backgroundColor: theme.accent + "10" }]}
+            style={[ms.portfolioBtn, { borderColor: theme.iconBorder, backgroundColor: theme.iconBg }]}
           >
             <Feather name={showPortfolio ? "eye-off" : "eye"} size={15} color={theme.accent} />
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accent }}>
@@ -594,9 +619,9 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
                 <TouchableOpacity
                   key={site.url}
                   onPress={() => Linking.openURL(site.url)}
-                  style={[ms.portfolioCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}
+                  style={[ms.portfolioCard, { backgroundColor: theme.surface, borderColor: theme.inputBorder }]}
                 >
-                  <View style={[ms.portfolioBadge, { backgroundColor: theme.accent + "20" }]}>
+                  <View style={[ms.portfolioBadge, { backgroundColor: theme.iconBg }]}>
                     <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: theme.accent }}>
                       {site.badge}
                     </Text>
@@ -618,7 +643,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
             </ScrollView>
           )}
 
-          <View style={[ms.priceBox, { backgroundColor: theme.accent + "10", borderColor: theme.accent + "30" }]}>
+          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
             <Feather name="tag" size={14} color={theme.accent} />
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: theme.accent }}>
               {siteType.label} — {priceFmt(siteType.fcfa)}
@@ -639,7 +664,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
                 style={[
                   ms.radioRow,
                   {
-                    backgroundColor: siteType.label === t.label ? theme.accent + "18" : theme.inputBg,
+                    backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
                     borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
                   },
                 ]}
@@ -649,7 +674,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
                     {t.label}
                   </Text>
                 </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>
                   {priceFmt(t.fcfa)}
                 </Text>
                 {siteType.label === t.label && (
@@ -673,6 +698,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
   );
 });
 
+// ─── Modal Application ───
 const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
   const [appName, setAppName] = useState("");
   const [objective, setObjective] = useState("");
@@ -723,16 +749,16 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="📱 Application mobile" theme={theme}>
+    <ModalShell visible={visible} onClose={handleClose} title="Application mobile" icon="smartphone" theme={theme}>
       {success ? (
         <SuccessScreen onClose={handleClose} theme={theme} />
       ) : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
-            Développons votre application mobile Android/iOS avec support 3 mois inclus.
+            Développons votre application mobile Android / iOS avec support 3 mois inclus.
           </Text>
 
-          <View style={[ms.priceBox, { backgroundColor: theme.accent + "15", borderColor: theme.accent + "30" }]}>
+          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
             <Feather name="tag" size={14} color={theme.accent} />
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: theme.accent }}>
               {pkg.label} — {priceFmt(pkg.fcfa)}
@@ -757,7 +783,7 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                 style={[
                   ms.radioRow,
                   {
-                    backgroundColor: pkg.label === p.label ? theme.accent + "18" : theme.inputBg,
+                    backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
                     borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
                   },
                 ]}
@@ -767,7 +793,7 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                     {p.label}
                   </Text>
                 </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>
                   {priceFmt(p.fcfa)}
                 </Text>
                 {pkg.label === p.label && (
@@ -786,6 +812,7 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
   );
 });
 
+// ─── Modal Pubs ───
 const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
   const [adPlatform, setAdPlatform] = useState<"Facebook" | "Instagram">("Facebook");
   const [duration, setDuration] = useState(AD_DURATIONS[1]);
@@ -830,13 +857,13 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="📣 Campagne publicitaire" theme={theme}>
+    <ModalShell visible={visible} onClose={handleClose} title="Campagne publicitaire" icon="radio" theme={theme}>
       {success ? (
         <SuccessScreen onClose={handleClose} theme={theme} />
       ) : (
         <>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
-            Boostez votre visibilité avec nos campagnes Facebook & Instagram ciblées.
+            Boostez votre visibilité avec nos campagnes Facebook et Instagram ciblées.
           </Text>
 
           <TagRow
@@ -859,7 +886,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                   style={[
                     ms.durationTag,
                     {
-                      backgroundColor: duration.label === d.label ? theme.accent + "20" : theme.inputBg,
+                      backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
                       borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
                     },
                   ]}
@@ -881,7 +908,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
             </View>
           </View>
 
-          <View style={[ms.priceBox, { backgroundColor: theme.accent + "12", borderColor: theme.accent + "30" }]}>
+          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
             <Feather name="tag" size={14} color={theme.accent} />
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: theme.accent }}>
               Total : {priceFmt(duration.fcfa)}
@@ -899,6 +926,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
   );
 });
 
+// ─── Modal Comptes ───
 const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
   const [service, setService] = useState(ACCOUNT_SERVICES[0]);
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -925,7 +953,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
   const submit = async () => {
     if (!waPhone.trim()) { Alert.alert("WhatsApp requis", "Entrez votre numéro WhatsApp."); return; }
     const allFields: Record<string, string> = {
-      "Service": `${service.label} (${priceFmt(service.fcfa)})`,
+      Service: `${service.label} (${priceFmt(service.fcfa)})`,
       ...fields,
     };
     if (service.label === "Compte TikTok monétisable") allFields["Pays de création"] = tiktokCountry;
@@ -951,14 +979,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
 
     if (n === "Canva Pro") {
       return (
-        <FieldInput
-          label="Votre adresse email *"
-          value={fields.email ?? ""}
-          onChange={(v) => setField("email", v)}
-          placeholder="exemple@email.com"
-          theme={theme}
-          keyboardType="email-address"
-        />
+        <FieldInput label="Votre adresse email *" value={fields.email ?? ""} onChange={(v) => setField("email", v)} placeholder="exemple@email.com" theme={theme} keyboardType="email-address" />
       );
     }
 
@@ -1020,13 +1041,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                       },
                     ]}
                   >
-                    <Text
-                      style={{
-                        fontFamily: "Inter_500Medium",
-                        fontSize: 12,
-                        color: tiktokCountry === c ? "#fff" : theme.textSecondary,
-                      }}
-                    >
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: tiktokCountry === c ? "#fff" : theme.textSecondary }}>
                       {c}
                     </Text>
                   </Pressable>
@@ -1078,18 +1093,12 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                   style={[
                     ms.tag,
                     {
-                      backgroundColor: badgePlatform === p ? GOLD : theme.inputBg,
-                      borderColor: badgePlatform === p ? GOLD : theme.inputBorder,
+                      backgroundColor: badgePlatform === p ? theme.accent : theme.inputBg,
+                      borderColor: badgePlatform === p ? theme.accent : theme.inputBorder,
                     },
                   ]}
                 >
-                  <Text
-                    style={{
-                      fontFamily: "Inter_500Medium",
-                      fontSize: 12,
-                      color: badgePlatform === p ? "#0F2A5C" : theme.textSecondary,
-                    }}
-                  >
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: badgePlatform === p ? "#fff" : theme.textSecondary }}>
                     {p}
                   </Text>
                 </Pressable>
@@ -1105,7 +1114,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="💰 Comptes & Monétisation" theme={theme}>
+    <ModalShell visible={visible} onClose={handleClose} title="Comptes et monétisation" icon="award" theme={theme}>
       {success ? (
         <SuccessScreen onClose={handleClose} theme={theme} />
       ) : (
@@ -1125,7 +1134,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                 style={[
                   ms.radioRow,
                   {
-                    backgroundColor: service.label === svc.label ? theme.accent + "18" : theme.inputBg,
+                    backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
                     borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
                   },
                 ]}
@@ -1133,7 +1142,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                 <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>
                   {svc.label}
                 </Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>
                   {priceFmt(svc.fcfa)}
                 </Text>
                 {service.label === svc.label && (
@@ -1143,9 +1152,9 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
             ))}
           </View>
 
-          <View style={[ms.priceBox, { backgroundColor: GOLD + "10", borderColor: GOLD + "30" }]}>
-            <Feather name="tag" size={14} color={GOLD_DK} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: theme.text }}>
+          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+            <Feather name="tag" size={14} color={theme.accent} />
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: theme.accent }}>
               {service.label} — {priceFmt(service.fcfa)}
             </Text>
           </View>
@@ -1165,24 +1174,19 @@ export default function OtherServicesSection() {
   const { user } = useAuth();
   const { isDark } = useTheme();
 
-  // Palette locale (clair / sombre propre)
-  const theme = useMemo(
-    () => ({
-      text:           isDark ? DARK_TEXT : LIGHT_TEXT,
-      textSecondary:  isDark ? DARK_MUTED : LIGHT_MUTED,
-      textMuted:      isDark ? DARK_SOFT : LIGHT_SOFT,
-      inputBg:        isDark ? "rgba(255,255,255,0.04)" : GOLD_SOFT,
-      inputBorder:    isDark ? DARK_BORD : LIGHT_BORD,
-      accent:         isDark ? GOLD : NAVY,
-      accentLight:    isDark ? GOLD : NAVY_LIGHT,
-      surface:        isDark ? DARK_SURF : LIGHT_SURF,
-      card:           isDark ? DARK_SURF : LIGHT_SURF,
-      cardBorder:     isDark ? DARK_BORD : LIGHT_BORD,
-      separator:      isDark ? DARK_BORD : LIGHT_BORD,
-      success:        "#10B981",
-    }),
-    [isDark]
-  );
+  const theme = useMemo(() => ({
+    text:          isDark ? D_TEXT        : TEXT,
+    textSecondary: isDark ? D_TEXT_MUTED  : TEXT_MUTED,
+    textMuted:     isDark ? D_TEXT_SOFT   : TEXT_SOFT,
+    inputBg:       isDark ? "rgba(255,255,255,0.04)" : GOLD_SOFT,
+    inputBorder:   isDark ? D_BORDER      : "#EDE6D5",
+    accent:        isDark ? GOLD          : NAVY,
+    accentLight:   isDark ? GOLD          : NAVY_LIGHT,
+    surface:       isDark ? D_SURFACE     : SURFACE,
+    iconBg:        isDark ? "rgba(201,169,97,0.10)" : GOLD_SOFT,
+    iconBorder:    isDark ? "rgba(201,169,97,0.22)" : "#EDE6D5",
+    separator:     isDark ? D_BORDER      : BORDER,
+  }), [isDark]);
 
   const userCountry = user?.country
     ? COUNTRIES.find((co) => co.code === user.country?.toLowerCase())
@@ -1211,18 +1215,9 @@ export default function OtherServicesSection() {
     setInfoService(svc);
   };
 
-  // Style commun des cartes services
   const cardStyle = [
     ms.serviceCard,
-    { backgroundColor: theme.card, borderColor: theme.cardBorder },
-  ];
-
-  const iconBoxStyle = [
-    ms.serviceIconBox,
-    {
-      backgroundColor: isDark ? "rgba(201,169,97,0.10)" : "rgba(15,42,92,0.05)",
-      borderColor: isDark ? "rgba(201,169,97,0.20)" : "rgba(15,42,92,0.10)",
-    },
+    { backgroundColor: theme.surface, borderColor: theme.inputBorder },
   ];
 
   return (
@@ -1234,33 +1229,38 @@ export default function OtherServicesSection() {
         </Text>
       </View>
 
-      {/* Grille : 2 services externes + 4 services internes */}
       <View style={ms.grid}>
         {FEATURED_EXTERNAL.map((svc) => (
           <Pressable
             key={svc.id}
-            style={({ pressed }) => [...cardStyle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+            style={({ pressed }) => [
+              ...cardStyle,
+              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+            ]}
             onPress={() => handleExternalTap(svc)}
           >
-            {/* Badge Nouveau / Partenariat */}
-            <View style={ms.featuredBadge}>
+            <View style={[ms.featuredBadge, { backgroundColor: GOLD }]}>
               <Text style={ms.featuredBadgeText}>{svc.badge}</Text>
             </View>
 
-            {/* Info "?" */}
             <Pressable
               style={ms.infoBtn}
-              hitSlop={10}
+              hitSlop={12}
               onPress={(e) => {
                 e.stopPropagation?.();
                 handleInfoTap(svc);
               }}
             >
-              <Feather name="help-circle" size={15} color={theme.textMuted} />
+              <Feather name="help-circle" size={16} color={theme.textMuted} />
             </Pressable>
 
-            <View style={iconBoxStyle}>
-              <Feather name={svc.icon} size={20} color={isDark ? GOLD : NAVY} />
+            <View
+              style={[
+                ms.serviceIconBox,
+                { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
+              ]}
+            >
+              <Feather name={svc.icon} size={20} color={theme.accent} />
             </View>
 
             <Text style={[ms.serviceLabel, { color: theme.text }]} numberOfLines={2}>
@@ -1275,14 +1275,22 @@ export default function OtherServicesSection() {
         {MODAL_SERVICES.map((svc) => (
           <Pressable
             key={svc.id}
-            style={({ pressed }) => [...cardStyle, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+            style={({ pressed }) => [
+              ...cardStyle,
+              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+            ]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setOpenModal(svc.id);
             }}
           >
-            <View style={iconBoxStyle}>
-              <Feather name={svc.icon} size={20} color={isDark ? GOLD : NAVY} />
+            <View
+              style={[
+                ms.serviceIconBox,
+                { backgroundColor: theme.iconBg, borderColor: theme.iconBorder },
+              ]}
+            >
+              <Feather name={svc.icon} size={20} color={theme.accent} />
             </View>
             <Text style={[ms.serviceLabel, { color: theme.text }]} numberOfLines={2}>
               {svc.label}
@@ -1294,13 +1302,11 @@ export default function OtherServicesSection() {
         ))}
       </View>
 
-      {/* Modaux services existants */}
       <WebsiteModal visible={openModal === "website"} onClose={close} theme={theme} priceFmt={priceFmt} />
       <AppModal visible={openModal === "app"} onClose={close} theme={theme} priceFmt={priceFmt} />
       <AdsModal visible={openModal === "ads"} onClose={close} theme={theme} priceFmt={priceFmt} />
       <AccountsModal visible={openModal === "accounts"} onClose={close} theme={theme} priceFmt={priceFmt} />
 
-      {/* Modal explicatif nouveaux services */}
       <ServiceInfoModal
         visible={infoService !== null}
         onClose={() => setInfoService(null)}
@@ -1313,22 +1319,10 @@ export default function OtherServicesSection() {
 
 const ms = StyleSheet.create({
   sectionHeader: { gap: 3 },
-  sectionTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
-    letterSpacing: 0.1,
-  },
-  sectionSub: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12.5,
-  },
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: 0.1 },
+  sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12.5 },
 
-  /* Grille services */
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceCard: {
     width: "47.8%",
     borderRadius: 16,
@@ -1337,6 +1331,11 @@ const ms = StyleSheet.create({
     gap: 8,
     minHeight: 132,
     position: "relative",
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   serviceIconBox: {
     width: 42,
@@ -1352,16 +1351,11 @@ const ms = StyleSheet.create({
     lineHeight: 18,
     letterSpacing: 0.1,
   },
-  serviceSub: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    lineHeight: 15,
-  },
+  serviceSub: { fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 15 },
   featuredBadge: {
     position: "absolute",
     top: 10,
     left: 10,
-    backgroundColor: GOLD,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1373,18 +1367,11 @@ const ms = StyleSheet.create({
     color: NAVY,
     letterSpacing: 0.3,
   },
-  infoBtn: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    zIndex: 2,
-    padding: 2,
-  },
+  infoBtn: { position: "absolute", top: 10, right: 10, zIndex: 2, padding: 2 },
 
-  /* Modal explicatif */
   infoOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(15,42,92,0.35)",
     justifyContent: "center",
     padding: 22,
   },
@@ -1392,17 +1379,13 @@ const ms = StyleSheet.create({
     borderRadius: 20,
     padding: 22,
     gap: 16,
-    shadowColor: "#000",
+    shadowColor: NAVY,
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.22,
     shadowRadius: 24,
     elevation: 12,
   },
-  infoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
+  infoHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   infoIconBox: {
     width: 44,
     height: 44,
@@ -1411,42 +1394,19 @@ const ms = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
-  infoTitle: {
-    flex: 1,
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
-    letterSpacing: 0.1,
-  },
-  infoDesc: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13.5,
-    lineHeight: 20,
-  },
-  infoCta: {
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: 4,
-  },
-  infoCtaGradient: {
-    height: 50,
-    flexDirection: "row",
+  infoTitle: { flex: 1, fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: 0.1 },
+  infoDesc: { fontFamily: "Inter_400Regular", fontSize: 13.5, lineHeight: 20 },
+  bulletDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-  },
-  infoCtaText: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
-    color: "#FFFFFF",
-    letterSpacing: 0.2,
+    borderWidth: 1,
+    marginTop: 2,
   },
 
-  /* Modaux internes */
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "flex-end",
-  },
+  overlay: { flex: 1, backgroundColor: "rgba(15,42,92,0.35)", justifyContent: "flex-end" },
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -1456,17 +1416,22 @@ const ms = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 18,
+    padding: 16,
     borderBottomWidth: 1,
   },
-  sheetTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 18,
+  sheetIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
+  sheetTitle: { fontFamily: "Inter_700Bold", fontSize: 16, flex: 1 },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1509,10 +1474,7 @@ const ms = StyleSheet.create({
     padding: 12,
     flexWrap: "wrap",
   },
-  submitBtn: {
-    borderRadius: 12,
-    overflow: "hidden",
-  },
+  submitBtn: { borderRadius: 12, overflow: "hidden" },
   submitGradient: {
     height: 52,
     flexDirection: "row",
@@ -1520,11 +1482,7 @@ const ms = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
   },
-  submitText: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
-    color: "#fff",
-  },
+  submitText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" },
   portfolioBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1546,5 +1504,13 @@ const ms = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginBottom: 4,
+  },
+  successIcon: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
 });

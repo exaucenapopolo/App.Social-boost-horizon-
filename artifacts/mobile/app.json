@@ -44,10 +44,11 @@
       "fallbackToCacheTimeout": 0
     },
 
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": false
-    },
+   "experiments": {
+  "typedRoutes": true,
+  "reactCompiler": false,
+  "autolinkingModuleResolution": true
+   }
 
     "extra": {
       "router": {
