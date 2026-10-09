@@ -25,26 +25,31 @@ import { COUNTRIES, formatCurrency } from "@/lib/countries";
 import { BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 
-// ─── Palette identique dashboard ───
-const NAVY        = "#0F2A5C";
-const NAVY_LIGHT  = "#1E3F7A";
-const GOLD        = "#C9A961";
-const GOLD_DK     = "#B08D4A";
-const GOLD_SOFT   = "#F7F1E1";
-const GOLD_BORDER = "#E8DFC7";
-const SURFACE     = "#FFFFFF";
-const TEXT        = "#0F172A";
-const TEXT_MUTED  = "#64748B";
-const TEXT_SOFT   = "#94A3B8";
-const BORDER      = "#E8E4DA";
-const SUCCESS     = "#10B981";
+// ═══════════════════════════════════════════════════════════════
+//  CHARTE GRAPHIQUE (identique au dashboard)
+// ═══════════════════════════════════════════════════════════════
+const NAVY        = "#0A1C3A";
+const NAVY_LIGHT  = "#152E54";
+const GOLD        = "#D4AF37";
+const GOLD_SOFT   = "#C6A15B";
+const GOLD_BG     = "rgba(212,175,55,0.10)";
+const GOLD_BORDER = "rgba(212,175,55,0.32)";
 
-const D_SURFACE    = "#152C57";
-const D_BORDER     = "rgba(201,169,97,0.20)";
-const D_BORDER_2   = "rgba(201,169,97,0.32)";
-const D_TEXT       = "#F1F5F9";
-const D_TEXT_MUTED = "#A5B4CB";
-const D_TEXT_SOFT  = "#64748B";
+const LIGHT_SURFACE   = "#FFFFFF";
+const LIGHT_TEXT      = "#1A202C";
+const LIGHT_TEXT_2    = "#718096";
+const LIGHT_BORDER    = "#EAECEF";
+const LIGHT_INPUT_BG  = "#F5F6F8";
+
+const DARK_SURFACE    = "#1C2541";
+const DARK_TEXT       = "#F8F9FA";
+const DARK_TEXT_2     = "#A0AEC0";
+const DARK_BORDER     = "rgba(255,255,255,0.08)";
+const DARK_INPUT_BG   = "rgba(255,255,255,0.04)";
+const DARK_ICON_BG    = "rgba(212,175,55,0.12)";
+const DARK_ICON_BORD  = "rgba(212,175,55,0.26)";
+
+const SUCCESS = "#10B981";
 
 // ─── Données ───
 const PORTFOLIO_SITES = [
@@ -115,7 +120,7 @@ const FEATURED_EXTERNAL = [
     icon: "phone-call" as const,
     label: "Numéro étranger",
     sub: "WhatsApp · TikTok · +5000 services",
-    badge: "PARTENARIAT",
+    badge: "Partenariat",
     url: "https://www.texerra.site/",
     info: {
       title: "Acheter un numéro étranger",
@@ -135,7 +140,7 @@ const FEATURED_EXTERNAL = [
     icon: "trending-up" as const,
     label: "Gagner de l'argent",
     sub: "Affiliation · Formations offertes",
-    badge: "NOUVEAU",
+    badge: "Nouveau",
     url: "https://www.trixhub.store/?ref=EXA0001HJB",
     info: {
       title: "Gagner de l'argent en ligne",
@@ -199,7 +204,7 @@ function FieldInput({
   multiline?: boolean; keyboardType?: any; theme: any; secureTextEntry?: boolean;
 }) {
   return (
-    <View style={{ gap: 5 }}>
+    <View style={{ gap: 6 }}>
       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
         {label}
       </Text>
@@ -210,7 +215,7 @@ function FieldInput({
             color: theme.text,
             backgroundColor: theme.inputBg,
             borderColor: theme.inputBorder,
-            ...(multiline ? { height: 80, textAlignVertical: "top", paddingTop: 10 } : {}),
+            ...(multiline ? { height: 88, textAlignVertical: "top", paddingTop: 12 } : {}),
           },
         ]}
         value={value}
@@ -232,7 +237,7 @@ function TagRow({
   label: string; value: string; options: string[]; onSelect: (v: string) => void; theme: any;
 }) {
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 8 }}>
       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
         {label}
       </Text>
@@ -241,18 +246,19 @@ function TagRow({
           <Pressable
             key={opt}
             onPress={() => onSelect(opt)}
-            style={[
+            style={({ pressed }) => [
               ms.tag,
               {
                 backgroundColor: value === opt ? theme.accent : theme.inputBg,
                 borderColor: value === opt ? theme.accent : theme.inputBorder,
               },
+              pressed && { transform: [{ scale: 0.96 }] },
             ]}
           >
             <Text
               style={{
                 fontFamily: "Inter_500Medium",
-                fontSize: 12,
+                fontSize: 12.5,
                 color: value === opt ? "#fff" : theme.textSecondary,
               }}
             >
@@ -285,11 +291,11 @@ function ModalShell({
             ]}
           >
             <View style={[ms.sheetHeader, { borderBottomColor: theme.separator }]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
                 <View
                   style={[ms.sheetIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
                 >
-                  <Feather name={icon} size={16} color={theme.accent} />
+                  <Feather name={icon} size={18} color={theme.accentIcon} />
                 </View>
                 <Text style={[ms.sheetTitle, { color: theme.text }]} numberOfLines={1}>
                   {title}
@@ -303,7 +309,7 @@ function ModalShell({
               </Pressable>
             </View>
             <ScrollView
-              contentContainerStyle={{ padding: 18, gap: 14, paddingBottom: 30 }}
+              contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 32 }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
@@ -322,13 +328,16 @@ function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) 
       <View style={[ms.successIcon, { backgroundColor: "rgba(16,185,129,0.10)", borderColor: "rgba(16,185,129,0.25)" }]}>
         <Feather name="check" size={32} color={SUCCESS} />
       </View>
-      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: theme.text, textAlign: "center" }}>
+      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 20, color: theme.text, textAlign: "center", letterSpacing: -0.2 }}>
         Demande envoyée
       </Text>
       <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: theme.textMuted, textAlign: "center", lineHeight: 21 }}>
         Notre équipe vous contactera sur WhatsApp très prochainement pour finaliser votre commande.
       </Text>
-      <Pressable style={[ms.submitBtn, { marginTop: 6 }]} onPress={onClose}>
+      <Pressable
+        style={({ pressed }) => [ms.submitBtn, { marginTop: 6 }, pressed && { transform: [{ scale: 0.97 }] }]}
+        onPress={onClose}
+      >
         <LinearGradient colors={[NAVY_LIGHT, NAVY]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
           <Text style={ms.submitText}>Fermer</Text>
         </LinearGradient>
@@ -344,13 +353,13 @@ function WaField({
   waPhone: string; setWaPhone: (v: string) => void; theme: any;
 }) {
   return (
-    <View style={{ gap: 5 }}>
+    <View style={{ gap: 6 }}>
       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
         Votre numéro WhatsApp *
       </Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <TextInput
-          style={[ms.input, { width: 72, color: theme.text, backgroundColor: theme.inputBg, borderColor: theme.inputBorder, textAlign: "center" }]}
+          style={[ms.input, { width: 78, color: theme.text, backgroundColor: theme.inputBg, borderColor: theme.inputBorder, textAlign: "center" }]}
           value={waCode} onChangeText={setWaCode} keyboardType="phone-pad"
           placeholder="+237" placeholderTextColor={theme.textMuted}
         />
@@ -367,7 +376,7 @@ function WaField({
 function SubmitButton({ onPress, loading, theme }: { onPress: () => void; loading: boolean; theme: any }) {
   return (
     <Pressable
-      style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9 }]}
+      style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
       onPress={onPress}
       disabled={loading}
     >
@@ -377,7 +386,7 @@ function SubmitButton({ onPress, loading, theme }: { onPress: () => void; loadin
         ) : (
           <>
             <Text style={ms.submitText}>Envoyer la demande</Text>
-            <Feather name="arrow-right" size={16} color={GOLD} />
+            <Feather name="chevron-right" size={18} color={GOLD} />
           </>
         )}
       </LinearGradient>
@@ -400,7 +409,7 @@ function ServiceInfoModal({
         <View style={[ms.infoCard, { backgroundColor: theme.surface }]}>
           <View style={ms.infoHeader}>
             <View style={[ms.infoIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-              <Feather name={service.icon} size={20} color={theme.accent} />
+              <Feather name={service.icon} size={22} color={theme.accentIcon} />
             </View>
             <Text style={[ms.infoTitle, { color: theme.text }]} numberOfLines={2}>
               {service.info.title}
@@ -414,13 +423,13 @@ function ServiceInfoModal({
             {service.info.description}
           </Text>
 
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 12 }}>
             {service.info.bullets.map((b, i) => (
-              <View key={i} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+              <View key={i} style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                 <View style={[ms.bulletDot, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-                  <Feather name="check" size={10} color={theme.accent} />
+                  <Feather name="check" size={11} color={theme.accentIcon} />
                 </View>
-                <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textSecondary, lineHeight: 19, marginTop: 2 }}>
+                <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textSecondary, lineHeight: 20, marginTop: 2 }}>
                   {b}
                 </Text>
               </View>
@@ -428,12 +437,12 @@ function ServiceInfoModal({
           </View>
 
           <Pressable
-            style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
             onPress={() => { onClose(); Linking.openURL(service.url); }}
           >
             <LinearGradient colors={[NAVY_LIGHT, NAVY]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               <Text style={ms.submitText}>{service.info.cta}</Text>
-              <Feather name="arrow-right" size={16} color={GOLD} />
+              <Feather name="chevron-right" size={18} color={GOLD} />
             </LinearGradient>
           </Pressable>
         </View>
@@ -495,7 +504,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
     <ModalShell visible={visible} onClose={handleClose} title="Site web sur mesure" icon="globe" theme={theme}>
       {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
             Nous créons votre site web professionnel depuis 2021. Plus de 50 sites réalisés dans 15 pays.
           </Text>
 
@@ -503,14 +512,14 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
             onPress={() => setShowPortfolio(!showPortfolio)}
             style={[ms.portfolioBtn, { borderColor: theme.iconBorder, backgroundColor: theme.iconBg }]}
           >
-            <Feather name={showPortfolio ? "eye-off" : "eye"} size={15} color={theme.accent} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accent }}>
+            <Feather name={showPortfolio ? "eye-off" : "eye"} size={15} color={theme.accentIcon} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon }}>
               {showPortfolio ? "Masquer nos réalisations" : "Voir nos réalisations (13 sites)"}
             </Text>
           </Pressable>
 
           {showPortfolio && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -18 }} contentContainerStyle={{ paddingHorizontal: 18, gap: 10 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
               {PORTFOLIO_SITES.map((site) => (
                 <TouchableOpacity
                   key={site.url}
@@ -518,19 +527,19 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
                   style={[ms.portfolioCard, { backgroundColor: theme.surface, borderColor: theme.inputBorder }]}
                 >
                   <View style={[ms.portfolioBadge, { backgroundColor: theme.iconBg }]}>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: theme.accent }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: theme.accentIcon, letterSpacing: 0.2 }}>
                       {site.badge}
                     </Text>
                   </View>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: theme.text }} numberOfLines={2}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: theme.text, letterSpacing: -0.1 }} numberOfLines={2}>
                     {site.name}
                   </Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: theme.textMuted }}>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.textMuted }}>
                     {site.country}
                   </Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-                    <Feather name="external-link" size={10} color={theme.accent} />
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: theme.accent }}>
+                    <Feather name="external-link" size={11} color={theme.accentIcon} />
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.accentIcon }}>
                       Voir le site
                     </Text>
                   </View>
@@ -540,8 +549,8 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
           )}
 
           <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accent} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: theme.accent }}>
+            <Feather name="tag" size={14} color={theme.accentIcon} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon, letterSpacing: 0.1 }}>
               {siteType.label} — {priceFmt(siteType.fcfa)}
             </Text>
           </View>
@@ -549,7 +558,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
           <FieldInput label="Nom du site" value={siteName} onChange={setSiteName} placeholder="Ex: MonSiteWeb" theme={theme} />
           <FieldInput label="Nom entreprise / organisation" value={company} onChange={setCompany} placeholder="Ex: Social Boost Horizon" theme={theme} />
 
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 8 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
               Type de site *
             </Text>
@@ -557,17 +566,21 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
               <Pressable
                 key={t.label}
                 onPress={() => setSiteType(t)}
-                style={[ms.radioRow, {
-                  backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
-                  borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
-                }]}
+                style={({ pressed }) => [
+                  ms.radioRow,
+                  {
+                    backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
+                    borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
+                  },
+                  pressed && { transform: [{ scale: 0.98 }] },
+                ]}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>{t.label}</Text>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>{t.label}</Text>
                 </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>{priceFmt(t.fcfa)}</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(t.fcfa)}</Text>
                 {siteType.label === t.label && (
-                  <Feather name="check-circle" size={16} color={theme.accent} style={{ marginLeft: 6 }} />
+                  <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
                 )}
               </Pressable>
             ))}
@@ -636,13 +649,13 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
     <ModalShell visible={visible} onClose={handleClose} title="Application mobile" icon="smartphone" theme={theme}>
       {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
             Développons votre application mobile Android / iOS avec support 3 mois inclus.
           </Text>
 
           <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accent} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: theme.accent }}>
+            <Feather name="tag" size={14} color={theme.accentIcon} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon, letterSpacing: 0.1 }}>
               {pkg.label} — {priceFmt(pkg.fcfa)}
             </Text>
           </View>
@@ -654,7 +667,7 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
           <FieldInput label="Fonctionnalités nécessaires" value={features} onChange={setFeatures} placeholder="Ex: authentification, paiement..." theme={theme} multiline />
           <FieldInput label="Écrans / pages souhaitées" value={screens} onChange={setScreens} placeholder="Ex: accueil, profil, boutique..." theme={theme} />
 
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 8 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
               Package *
             </Text>
@@ -662,17 +675,21 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
               <Pressable
                 key={p.label}
                 onPress={() => setPkg(p)}
-                style={[ms.radioRow, {
-                  backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
-                  borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
-                }]}
+                style={({ pressed }) => [
+                  ms.radioRow,
+                  {
+                    backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
+                    borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
+                  },
+                  pressed && { transform: [{ scale: 0.98 }] },
+                ]}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>{p.label}</Text>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>{p.label}</Text>
                 </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>{priceFmt(p.fcfa)}</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(p.fcfa)}</Text>
                 {pkg.label === p.label && (
-                  <Feather name="check-circle" size={16} color={theme.accent} style={{ marginLeft: 6 }} />
+                  <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
                 )}
               </Pressable>
             ))}
@@ -730,13 +747,13 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
     <ModalShell visible={visible} onClose={handleClose} title="Campagne publicitaire" icon="radio" theme={theme}>
       {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
             Boostez votre visibilité avec nos campagnes Facebook et Instagram ciblées.
           </Text>
 
           <TagRow label="Réseau *" value={adPlatform} options={["Facebook", "Instagram"]} onSelect={(v) => setAdPlatform(v as any)} theme={theme} />
 
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 8 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
               Durée de la campagne *
             </Text>
@@ -745,15 +762,19 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
                 <Pressable
                   key={d.label}
                   onPress={() => setDuration(d)}
-                  style={[ms.durationTag, {
-                    backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
-                    borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
-                  }]}
+                  style={({ pressed }) => [
+                    ms.durationTag,
+                    {
+                      backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
+                      borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
+                    },
+                    pressed && { transform: [{ scale: 0.97 }] },
+                  ]}
                 >
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: duration.label === d.label ? theme.accent : theme.text }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: duration.label === d.label ? theme.accentIcon : theme.text }}>
                     {d.label}
                   </Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: theme.textMuted }}>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.textMuted }}>
                     {priceFmt(d.fcfa)}
                   </Text>
                 </Pressable>
@@ -762,8 +783,8 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
           </View>
 
           <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accent} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: theme.accent }}>
+            <Feather name="tag" size={14} color={theme.accentIcon} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: theme.accentIcon, letterSpacing: 0.1 }}>
               Total : {priceFmt(duration.fcfa)}
             </Text>
           </View>
@@ -868,7 +889,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
           <FieldInput label="Mot de passe souhaité *" value={fields.mdp ?? ""} onChange={(v) => setField("mdp", v)} placeholder="Min. 8 caractères" theme={theme} />
           <FieldInput label="Numéro de téléphone *" value={fields.tel ?? ""} onChange={(v) => setField("tel", v)} placeholder="+237 6XX XXX XXX" theme={theme} keyboardType="phone-pad" />
           <FieldInput label="Date de naissance *" value={fields.dob ?? ""} onChange={(v) => setField("dob", v)} placeholder="JJ/MM/AAAA (18+)" theme={theme} />
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 8 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
               Pays de création (éligibles monétisation) *
             </Text>
@@ -878,12 +899,16 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                   <Pressable
                     key={c}
                     onPress={() => setTiktokCountry(c)}
-                    style={[ms.tag, {
-                      backgroundColor: tiktokCountry === c ? theme.accent : theme.inputBg,
-                      borderColor: tiktokCountry === c ? theme.accent : theme.inputBorder,
-                    }]}
+                    style={({ pressed }) => [
+                      ms.tag,
+                      {
+                        backgroundColor: tiktokCountry === c ? theme.accent : theme.inputBg,
+                        borderColor: tiktokCountry === c ? theme.accent : theme.inputBorder,
+                      },
+                      pressed && { transform: [{ scale: 0.96 }] },
+                    ]}
                   >
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: tiktokCountry === c ? "#fff" : theme.textSecondary }}>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: tiktokCountry === c ? "#fff" : theme.textSecondary }}>
                       {c}
                     </Text>
                   </Pressable>
@@ -923,7 +948,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
     if (n === "Badge vérifié") {
       return (
         <>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 8 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
               Plateforme *
             </Text>
@@ -932,12 +957,16 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
                 <Pressable
                   key={p}
                   onPress={() => setBadgePlatform(p)}
-                  style={[ms.tag, {
-                    backgroundColor: badgePlatform === p ? theme.accent : theme.inputBg,
-                    borderColor: badgePlatform === p ? theme.accent : theme.inputBorder,
-                  }]}
+                  style={({ pressed }) => [
+                    ms.tag,
+                    {
+                      backgroundColor: badgePlatform === p ? theme.accent : theme.inputBg,
+                      borderColor: badgePlatform === p ? theme.accent : theme.inputBorder,
+                    },
+                    pressed && { transform: [{ scale: 0.96 }] },
+                  ]}
                 >
-                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: badgePlatform === p ? "#fff" : theme.textSecondary }}>
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: badgePlatform === p ? "#fff" : theme.textSecondary }}>
                     {p}
                   </Text>
                 </Pressable>
@@ -956,11 +985,11 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
     <ModalShell visible={visible} onClose={handleClose} title="Comptes et monétisation" icon="award" theme={theme}>
       {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
         <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
             Choisissez le service et remplissez les informations requises.
           </Text>
 
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 8 }}>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>
               Service souhaité *
             </Text>
@@ -968,25 +997,29 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
               <Pressable
                 key={svc.label}
                 onPress={() => handleServiceChange(svc)}
-                style={[ms.radioRow, {
-                  backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
-                  borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
-                }]}
+                style={({ pressed }) => [
+                  ms.radioRow,
+                  {
+                    backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
+                    borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
+                  },
+                  pressed && { transform: [{ scale: 0.98 }] },
+                ]}
               >
-                <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.text }}>
+                <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>
                   {svc.label}
                 </Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: GOLD_DK }}>{priceFmt(svc.fcfa)}</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(svc.fcfa)}</Text>
                 {service.label === svc.label && (
-                  <Feather name="check-circle" size={16} color={theme.accent} style={{ marginLeft: 6 }} />
+                  <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
                 )}
               </Pressable>
             ))}
           </View>
 
           <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accent} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: theme.accent }}>
+            <Feather name="tag" size={14} color={theme.accentIcon} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: theme.accentIcon, letterSpacing: 0.1 }}>
               {service.label} — {priceFmt(service.fcfa)}
             </Text>
           </View>
@@ -1008,17 +1041,17 @@ export default function OtherServicesSection() {
   const isDark = ctxIsDark === true;
 
   const theme = useMemo(() => ({
-    text:          isDark ? D_TEXT        : TEXT,
-    textSecondary: isDark ? D_TEXT_MUTED  : TEXT_MUTED,
-    textMuted:     isDark ? D_TEXT_SOFT   : TEXT_SOFT,
-    inputBg:       isDark ? "rgba(255,255,255,0.05)" : GOLD_SOFT,
-    inputBorder:   isDark ? "rgba(201,169,97,0.20)" : "#EDE6D5",
+    text:          isDark ? DARK_TEXT     : LIGHT_TEXT,
+    textSecondary: isDark ? DARK_TEXT_2   : LIGHT_TEXT_2,
+    textMuted:     isDark ? DARK_TEXT_2   : LIGHT_TEXT_2,
+    inputBg:       isDark ? DARK_INPUT_BG : LIGHT_INPUT_BG,
+    inputBorder:   isDark ? DARK_BORDER   : LIGHT_BORDER,
     accent:        isDark ? GOLD          : NAVY,
-    accentLight:   isDark ? GOLD          : NAVY_LIGHT,
-    surface:       isDark ? D_SURFACE     : SURFACE,
-    iconBg:        isDark ? "rgba(201,169,97,0.12)" : GOLD_SOFT,
-    iconBorder:    isDark ? "rgba(201,169,97,0.28)" : "#EDE6D5",
-    separator:     isDark ? D_BORDER      : BORDER,
+    accentIcon:    isDark ? GOLD          : NAVY,
+    surface:       isDark ? DARK_SURFACE  : LIGHT_SURFACE,
+    iconBg:        isDark ? DARK_ICON_BG  : "rgba(10,28,58,0.06)",
+    iconBorder:    isDark ? DARK_ICON_BORD: "rgba(10,28,58,0.10)",
+    separator:     isDark ? DARK_BORDER   : LIGHT_BORDER,
   }), [isDark]);
 
   const userCountry = user?.country
@@ -1049,7 +1082,8 @@ export default function OtherServicesSection() {
   };
 
   return (
-    <View style={{ gap: 16 }}>
+    <View style={{ gap: 18 }}>
+      {/* En-tête section */}
       <View style={ms.sectionHeader}>
         <View style={ms.accentBar} />
         <View style={{ flex: 1 }}>
@@ -1060,8 +1094,8 @@ export default function OtherServicesSection() {
         </View>
       </View>
 
-      {/* Cartes externes */}
-      <View style={{ gap: 10 }}>
+      {/* Services externes (empilés, mêmes dimensions) */}
+      <View style={{ gap: 12 }}>
         {FEATURED_EXTERNAL.map((svc) => (
           <Pressable
             key={svc.id}
@@ -1071,34 +1105,39 @@ export default function OtherServicesSection() {
               ms.featuredCard,
               {
                 backgroundColor: theme.surface,
-                borderColor: isDark ? D_BORDER_2 : GOLD_BORDER,
+                borderColor: isDark ? DARK_BORDER : LIGHT_BORDER,
+                shadowColor: isDark ? "#000" : NAVY,
+                shadowOpacity: isDark ? 0.30 : 0.06,
               },
-              pressed && { opacity: 0.94, transform: [{ scale: 0.985 }] },
+              pressed && { transform: [{ scale: 0.97 }], opacity: 0.96 },
             ]}
           >
-            <View style={ms.featuredAccent} />
-
-            <View style={ms.featuredLeft}>
-              <View style={[ms.featuredIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-                <Feather name={svc.icon} size={20} color={theme.accent} />
-              </View>
+            <View style={[ms.featuredIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+              <Feather name={svc.icon} size={22} color={theme.accentIcon} />
             </View>
 
             <View style={ms.featuredRight}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Text style={[ms.featuredTitle, { color: theme.text }]} numberOfLines={1}>
                   {svc.label}
                 </Text>
-                <View style={ms.featuredBadge}>
-                  <Text style={ms.featuredBadgeText}>{svc.badge}</Text>
+                <View
+                  style={[
+                    ms.featuredBadge,
+                    { borderColor: theme.iconBorder, backgroundColor: "transparent" },
+                  ]}
+                >
+                  <Text style={[ms.featuredBadgeText, { color: theme.accentIcon }]}>
+                    {svc.badge}
+                  </Text>
                 </View>
               </View>
               <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
                 {svc.sub}
               </Text>
               <View style={ms.featuredCtaRow}>
-                <Text style={[ms.featuredCta, { color: theme.accent }]}>Découvrir</Text>
-                <Feather name="arrow-right" size={13} color={theme.accent} />
+                <Text style={[ms.featuredCta, { color: theme.accentIcon }]}>Découvrir</Text>
+                <Feather name="chevron-right" size={16} color={theme.accentIcon} />
               </View>
             </View>
 
@@ -1107,15 +1146,15 @@ export default function OtherServicesSection() {
               hitSlop={12}
               onPress={(e) => { e.stopPropagation?.(); handleInfoTap(svc); }}
             >
-              <Feather name="help-circle" size={17} color={theme.textMuted} />
+              <Feather name="help-circle" size={18} color={theme.textMuted} />
             </Pressable>
           </Pressable>
         ))}
       </View>
 
-      {/* Grille services internes */}
+      {/* Grille services internes (sans numéros) */}
       <View style={ms.grid}>
-        {MODAL_SERVICES.map((svc, idx) => (
+        {MODAL_SERVICES.map((svc) => (
           <Pressable
             key={svc.id}
             onPress={() => {
@@ -1126,20 +1165,15 @@ export default function OtherServicesSection() {
               ms.serviceCard,
               {
                 backgroundColor: theme.surface,
-                borderColor: isDark ? D_BORDER : BORDER,
+                borderColor: isDark ? DARK_BORDER : LIGHT_BORDER,
+                shadowColor: isDark ? "#000" : NAVY,
+                shadowOpacity: isDark ? 0.25 : 0.05,
               },
-              pressed && { opacity: 0.92, transform: [{ scale: 0.975 }] },
+              pressed && { transform: [{ scale: 0.97 }] },
             ]}
           >
-            <View style={ms.cardHeader}>
-              <View
-                style={[ms.serviceIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}
-              >
-                <Feather name={svc.icon} size={18} color={theme.accent} />
-              </View>
-              <Text style={[ms.cardNumber, { color: theme.textMuted }]}>
-                {String(idx + 1).padStart(2, "0")}
-              </Text>
+            <View style={[ms.serviceIconBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+              <Feather name={svc.icon} size={22} color={theme.accentIcon} />
             </View>
 
             <Text style={[ms.serviceLabel, { color: theme.text }]} numberOfLines={2}>
@@ -1149,8 +1183,13 @@ export default function OtherServicesSection() {
               {svc.sub}
             </Text>
 
-            <View style={[ms.cardFooterArrow, { borderColor: theme.iconBorder, backgroundColor: theme.iconBg }]}>
-              <Feather name="arrow-up-right" size={12} color={theme.accent} />
+            <View
+              style={[
+                ms.cardFooterArrow,
+                { borderColor: theme.iconBorder, backgroundColor: theme.iconBg },
+              ]}
+            >
+              <Feather name="chevron-right" size={18} color={theme.accentIcon} />
             </View>
           </Pressable>
         ))}
@@ -1174,145 +1213,140 @@ export default function OtherServicesSection() {
 const ms = StyleSheet.create({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   accentBar: { width: 3, height: 32, borderRadius: 2, backgroundColor: GOLD },
-  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15.5, letterSpacing: 0.1 },
-  sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
+  sectionTitle: { fontFamily: "Inter_600SemiBold", fontSize: 16, letterSpacing: -0.1 },
+  sectionSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 3 },
 
-  /* Cartes externes vedettes */
+  /* Cartes externes */
   featuredCard: {
     flexDirection: "row", alignItems: "center",
     borderRadius: 16, borderWidth: 1,
-    padding: 14, paddingLeft: 18,
-    gap: 14, position: "relative", overflow: "hidden",
-    shadowColor: NAVY,
+    padding: 16,
+    gap: 14, position: "relative", minHeight: 96,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
+    shadowRadius: 10, elevation: 2,
   },
-  featuredAccent: {
-    position: "absolute", left: 0, top: 0, bottom: 0,
-    width: 3, backgroundColor: GOLD,
-  },
-  featuredLeft: { alignItems: "center", justifyContent: "center" },
   featuredIconBox: {
-    width: 46, height: 46, borderRadius: 13,
+    width: 50, height: 50, borderRadius: 12,
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
-  featuredRight: { flex: 1, gap: 4 },
-  featuredTitle: { fontFamily: "Inter_700Bold", fontSize: 14.5, letterSpacing: 0.1 },
-  featuredSub: { fontFamily: "Inter_400Regular", fontSize: 11.5 },
+  featuredRight: { flex: 1, gap: 5 },
+  featuredTitle: { fontFamily: "Inter_600SemiBold", fontSize: 15, letterSpacing: -0.1 },
+  featuredSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, letterSpacing: 0.05 },
   featuredCtaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  featuredCta: { fontFamily: "Inter_600SemiBold", fontSize: 11.5, letterSpacing: 0.2 },
+  featuredCta: { fontFamily: "Inter_600SemiBold", fontSize: 12.5, letterSpacing: 0.1 },
   featuredBadge: {
-    backgroundColor: GOLD, borderRadius: 5,
-    paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: 6, borderWidth: 1,
+    paddingHorizontal: 8, paddingVertical: 2,
   },
   featuredBadgeText: {
-    fontFamily: "Inter_700Bold", fontSize: 8.5,
-    color: NAVY, letterSpacing: 0.6,
+    fontFamily: "Inter_600SemiBold", fontSize: 9,
+    letterSpacing: 0.3,
   },
-  infoBtn: { padding: 4, alignSelf: "flex-start" },
+  infoBtn: { padding: 6, alignSelf: "flex-start" },
 
-  /* Grille services */
+  /* Grille services internes */
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceCard: {
     width: "47.8%", borderRadius: 16, borderWidth: 1,
-    padding: 14, minHeight: 148, gap: 8, position: "relative",
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
-  },
-  cardHeader: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
+    padding: 16, minHeight: 158, gap: 12, position: "relative",
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8, elevation: 1,
   },
   serviceIconBox: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 46, height: 46, borderRadius: 12,
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
-  cardNumber: {
-    fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 1.5, opacity: 0.55,
-  },
   serviceLabel: {
-    fontFamily: "Inter_700Bold", fontSize: 13.5,
-    lineHeight: 18, letterSpacing: 0.1, marginTop: 4,
+    fontFamily: "Inter_600SemiBold", fontSize: 15,
+    lineHeight: 20, letterSpacing: -0.1, marginTop: 2,
   },
-  serviceSub: { fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 15 },
+  serviceSub: {
+    fontFamily: "Inter_400Regular", fontSize: 12.5,
+    lineHeight: 17, letterSpacing: 0.05,
+  },
   cardFooterArrow: {
-    position: "absolute", bottom: 12, right: 12,
-    width: 24, height: 24, borderRadius: 8,
+    position: "absolute", bottom: 14, right: 14,
+    width: 32, height: 32, borderRadius: 10,
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
 
   /* Modales */
   infoOverlay: {
-    flex: 1, backgroundColor: "rgba(15,42,92,0.35)",
+    flex: 1, backgroundColor: "rgba(10,28,58,0.45)",
     justifyContent: "center", padding: 22,
   },
   infoCard: {
-    borderRadius: 20, padding: 22, gap: 16,
-    shadowColor: NAVY,
+    borderRadius: 20, padding: 24, gap: 18,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22, shadowRadius: 24, elevation: 12,
+    shadowOpacity: 0.25, shadowRadius: 24, elevation: 12,
   },
   infoHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   infoIconBox: {
-    width: 44, height: 44, borderRadius: 12,
+    width: 46, height: 46, borderRadius: 12,
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
-  infoTitle: { flex: 1, fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: 0.1 },
-  infoDesc: { fontFamily: "Inter_400Regular", fontSize: 13.5, lineHeight: 20 },
+  infoTitle: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 16, letterSpacing: -0.1 },
+  infoDesc: { fontFamily: "Inter_400Regular", fontSize: 13.5, lineHeight: 21 },
   bulletDot: {
-    width: 20, height: 20, borderRadius: 10,
+    width: 22, height: 22, borderRadius: 11,
     alignItems: "center", justifyContent: "center",
     borderWidth: 1, marginTop: 2,
   },
-  overlay: { flex: 1, backgroundColor: "rgba(15,42,92,0.35)", justifyContent: "flex-end" },
+  overlay: { flex: 1, backgroundColor: "rgba(10,28,58,0.45)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "94%" },
   sheetHeader: {
     flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between", padding: 16, borderBottomWidth: 1,
+    justifyContent: "space-between", padding: 20, borderBottomWidth: 1,
   },
   sheetIconBox: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 36, height: 36, borderRadius: 10,
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
-  sheetTitle: { fontFamily: "Inter_700Bold", fontSize: 16, flex: 1 },
+  sheetTitle: { fontFamily: "Inter_600SemiBold", fontSize: 16, flex: 1, letterSpacing: -0.1 },
   closeBtn: {
-    width: 34, height: 34, borderRadius: 17,
+    width: 36, height: 36, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
   input: {
     borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 14, paddingVertical: 12,
+    paddingHorizontal: 14, paddingVertical: 13,
     fontFamily: "Inter_400Regular", fontSize: 14,
   },
-  tag: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  tag: {
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 10, borderWidth: 1,
+  },
   radioRow: {
     flexDirection: "row", alignItems: "center",
-    borderRadius: 12, borderWidth: 1, padding: 12,
+    borderRadius: 12, borderWidth: 1, padding: 14,
   },
   durationTag: {
-    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
-    borderWidth: 1, alignItems: "center", minWidth: "47%", flex: 1,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+    borderWidth: 1, alignItems: "center", minWidth: "47%", flex: 1, gap: 3,
   },
   priceBox: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 10, borderWidth: 1, padding: 12, flexWrap: "wrap",
+    flexDirection: "row", alignItems: "center", gap: 10,
+    borderRadius: 12, borderWidth: 1, padding: 14, flexWrap: "wrap",
   },
-  submitBtn: { borderRadius: 12, overflow: "hidden" },
+  submitBtn: { borderRadius: 12, overflow: "hidden", marginTop: 4 },
   submitGradient: {
-    height: 52, flexDirection: "row",
-    alignItems: "center", justifyContent: "center", gap: 10,
+    height: 54, flexDirection: "row",
+    alignItems: "center", justifyContent: "center", gap: 8,
   },
-  submitText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" },
+  submitText: {
+    fontFamily: "Inter_600SemiBold", fontSize: 15,
+    color: "#fff", letterSpacing: 0.1,
+  },
   portfolioBtn: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 10, borderWidth: 1, padding: 10,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    borderRadius: 12, borderWidth: 1, padding: 12,
   },
   portfolioCard: {
-    width: 130, borderRadius: 12, borderWidth: 1, padding: 10, gap: 4,
+    width: 140, borderRadius: 12, borderWidth: 1, padding: 12, gap: 5,
   },
   portfolioBadge: {
-    alignSelf: "flex-start", borderRadius: 10,
+    alignSelf: "flex-start", borderRadius: 6,
     paddingHorizontal: 8, paddingVertical: 3, marginBottom: 4,
   },
   successIcon: {

@@ -29,34 +29,41 @@ import { apiClient } from "@/services/api";
 
 const NOTIF_READ_KEY = "@sbh_notif_read";
 
-// ─── Palette LIGHT ───
-const NAVY        = "#0F2A5C";
-const NAVY_LIGHT  = "#1E3F7A";
-const NAVY_DK     = "#0A1F44";
-const GOLD        = "#C9A961";
-const GOLD_DK     = "#B08D4A";
-const GOLD_SOFT   = "#F7F1E1";
-const GOLD_BORDER = "#E8DFC7";
-const BG          = "#FAF9F6";
-const SURFACE     = "#FFFFFF";
-const TEXT        = "#0F172A";
-const TEXT_MUTED  = "#64748B";
-const TEXT_SOFT   = "#94A3B8";
-const BORDER      = "#E8E4DA";
-const SUCCESS     = "#10B981";
-const WARNING     = "#F59E0B";
-const INFO        = "#1E90FF";
-const DANGER      = "#EF4444";
+// ═══════════════════════════════════════════════════════════════
+//  CHARTE GRAPHIQUE OFFICIELLE
+// ═══════════════════════════════════════════════════════════════
+const NAVY        = "#0A1C3A";     // Bleu nuit profond (primaire)
+const NAVY_LIGHT  = "#152E54";
+const GOLD        = "#D4AF37";     // Or (secondaire)
+const GOLD_SOFT   = "#C6A15B";
+const GOLD_BG     = "rgba(212,175,55,0.10)";
+const GOLD_BG_2   = "rgba(212,175,55,0.18)";
+const GOLD_BORDER = "rgba(212,175,55,0.32)";
 
-// ─── Palette DARK (surfaces plus claires pour vraie hiérarchie) ───
-const D_BG         = "#0A162B";         // fond très sombre
-const D_SURFACE    = "#152C57";         // surface nettement plus claire → contraste
-const D_SURFACE_2  = "#1B3768";         // surface élevée (commander)
-const D_BORDER     = "rgba(201,169,97,0.20)";  // bordure dorée bien visible
-const D_BORDER_2   = "rgba(201,169,97,0.32)";
-const D_TEXT       = "#F1F5F9";
-const D_TEXT_MUTED = "#A5B4CB";
-const D_TEXT_SOFT  = "#64748B";
+// Mode clair
+const LIGHT_BG        = "#F5F6F8";
+const LIGHT_SURFACE   = "#FFFFFF";
+const LIGHT_TEXT      = "#1A202C";
+const LIGHT_TEXT_2    = "#718096";
+const LIGHT_BORDER    = "#EAECEF";
+const LIGHT_ICON_BG   = "rgba(10,28,58,0.06)";
+const LIGHT_ICON_BORD = "rgba(10,28,58,0.10)";
+
+// Mode sombre
+const DARK_BG         = "#0B132B";
+const DARK_SURFACE    = "#1C2541";
+const DARK_SURFACE_2  = "#232F52";
+const DARK_TEXT       = "#F8F9FA";
+const DARK_TEXT_2     = "#A0AEC0";
+const DARK_BORDER     = "rgba(255,255,255,0.08)";
+const DARK_ICON_BG    = "rgba(212,175,55,0.12)";
+const DARK_ICON_BORD  = "rgba(212,175,55,0.26)";
+
+// Status badges
+const SUCCESS = "#10B981";
+const WARNING = "#F59E0B";
+const INFO    = "#3B82F6";
+const DANGER  = "#EF4444";
 
 function getGreeting(): string {
   const now = new Date();
@@ -72,15 +79,16 @@ function getGreeting(): string {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   "En attente": { label: "En attente", color: WARNING, bg: "rgba(245,158,11,0.10)" },
-  "en cours":   { label: "En cours",   color: INFO,    bg: "rgba(30,144,255,0.10)" },
+  "en cours":   { label: "En cours",   color: INFO,    bg: "rgba(59,130,246,0.10)" },
   "succès":     { label: "Terminé",    color: SUCCESS, bg: "rgba(16,185,129,0.10)" },
   "annulée":    { label: "Annulé",     color: DANGER,  bg: "rgba(239,68,68,0.10)" },
   "pending":    { label: "En attente", color: WARNING, bg: "rgba(245,158,11,0.10)" },
-  "processing": { label: "En cours",   color: INFO,    bg: "rgba(30,144,255,0.10)" },
+  "processing": { label: "En cours",   color: INFO,    bg: "rgba(59,130,246,0.10)" },
   "completed":  { label: "Terminé",    color: SUCCESS, bg: "rgba(16,185,129,0.10)" },
 };
 
-function useStagger(count: number, step = 90, duration = 520) {
+// Animation d'entrée en cascade
+function useStagger(count: number, step = 80, duration = 480) {
   const anims = useRef(Array.from({ length: count }, () => new Animated.Value(0))).current;
   useEffect(() => {
     Animated.stagger(
@@ -102,17 +110,17 @@ export default function HomeScreen() {
   const { isDark: ctxIsDark, toggleTheme } = useTheme();
   const isDark = ctxIsDark === true;
 
+  // Palette theme-aware
   const C = useMemo(() => ({
-    bg:         isDark ? D_BG         : BG,
-    surface:    isDark ? D_SURFACE    : SURFACE,
-    surface2:   isDark ? D_SURFACE_2  : SURFACE,
-    border:     isDark ? D_BORDER     : BORDER,
-    border2:    isDark ? D_BORDER_2   : GOLD_BORDER,
-    text:       isDark ? D_TEXT       : TEXT,
-    textMuted:  isDark ? D_TEXT_MUTED : TEXT_MUTED,
-    textSoft:   isDark ? D_TEXT_SOFT  : TEXT_SOFT,
-    chipBg:     isDark ? "rgba(201,169,97,0.12)" : GOLD_SOFT,
-    chipBorder: isDark ? "rgba(201,169,97,0.28)" : GOLD_BORDER,
+    bg:           isDark ? DARK_BG        : LIGHT_BG,
+    surface:      isDark ? DARK_SURFACE   : LIGHT_SURFACE,
+    surface2:     isDark ? DARK_SURFACE_2 : LIGHT_SURFACE,
+    border:       isDark ? DARK_BORDER    : LIGHT_BORDER,
+    text:         isDark ? DARK_TEXT      : LIGHT_TEXT,
+    textMuted:    isDark ? DARK_TEXT_2    : LIGHT_TEXT_2,
+    iconBg:       isDark ? DARK_ICON_BG   : LIGHT_ICON_BG,
+    iconBorder:   isDark ? DARK_ICON_BORD : LIGHT_ICON_BORD,
+    accentIcon:   isDark ? GOLD           : NAVY,
   }), [isDark]);
 
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
@@ -123,7 +131,7 @@ export default function HomeScreen() {
 
   const anims = useStagger(5);
   const translateY = (v: Animated.Value) =>
-    v.interpolate({ inputRange: [0, 1], outputRange: [22, 0] });
+    v.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
 
   useFocusEffect(
     useCallback(() => {
@@ -181,32 +189,53 @@ export default function HomeScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: topPad + 12, paddingBottom: insets.bottom + 110 },
+          { paddingTop: topPad + 14, paddingBottom: insets.bottom + 110 },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={false} onRefresh={handleRefresh} tintColor={GOLD} />
         }
       >
-        {/* ═══ 1. HEADER ═══ */}
+        {/* ═══ 1. HEADER (épuré : logo + nom | icônes) ═══ */}
         <Animated.View style={{ opacity: anims[0], transform: [{ translateY: translateY(anims[0]) }] }}>
           <View style={styles.header}>
-            <Pressable style={styles.userRow} onPress={() => go("/(tabs)/profile")}>
-              <View style={[styles.avatarBox, { borderColor: C.border, backgroundColor: C.surface }]}>
+            <Pressable
+              style={styles.userRow}
+              onPress={() => go("/(tabs)/profile")}
+              hitSlop={6}
+            >
+              <View
+                style={[
+                  styles.avatarBox,
+                  { borderColor: C.border, backgroundColor: C.surface },
+                ]}
+              >
                 {user?.photoURL ? (
-                  <Image source={{ uri: user.photoURL }} style={styles.avatarImg} contentFit="cover" />
+                  <Image
+                    source={{ uri: user.photoURL }}
+                    style={styles.avatarImg}
+                    contentFit="cover"
+                  />
                 ) : (
-                  <View style={[styles.avatarFallback, { backgroundColor: C.chipBg }]}>
-                    <Text style={[styles.avatarLetter, { color: isDark ? GOLD : NAVY }]}>
-                      {(user?.name ?? "U").charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  <Image
+                    source={{ uri: LOGO_URL }}
+                    style={styles.avatarImg}
+                    contentFit="contain"
+                  />
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.greetSmall, { color: C.textMuted }]}>{greeting}</Text>
-                <Text style={[styles.greetName, { color: C.text }]} numberOfLines={1}>
+                <Text
+                  style={[styles.userName, { color: C.text }]}
+                  numberOfLines={1}
+                >
                   {user?.name?.split(" ")[0] ?? "Utilisateur"}
+                </Text>
+                <Text
+                  style={[styles.userGreet, { color: C.textMuted }]}
+                  numberOfLines={1}
+                >
+                  {greeting}
                 </Text>
               </View>
             </Pressable>
@@ -214,47 +243,53 @@ export default function HomeScreen() {
             <View style={styles.headerActions}>
               <Pressable
                 onPress={() => { Haptics.selectionAsync(); toggleTheme(); }}
-                style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.border }]}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                  pressed && { transform: [{ scale: 0.94 }] },
+                ]}
               >
-                <Feather name={isDark ? "sun" : "moon"} size={17} color={isDark ? GOLD : NAVY} />
+                <Feather name={isDark ? "sun" : "moon"} size={18} color={isDark ? GOLD : NAVY} />
               </Pressable>
               <Pressable
                 onPress={() => go("/(tabs)/notifications")}
-                style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.border }]}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                  pressed && { transform: [{ scale: 0.94 }] },
+                ]}
               >
-                <Feather name="bell" size={17} color={C.text} />
+                <Feather name="bell" size={18} color={C.text} />
                 {hasUnread && <View style={styles.dot} />}
               </Pressable>
             </View>
           </View>
         </Animated.View>
 
-        {/* ═══ 2. SOLDE HERO (navy premium, identique dans les 2 modes) ═══ */}
+        {/* ═══ 2. SOLDE (compact, épuré) ═══ */}
         <Animated.View style={{ opacity: anims[1], transform: [{ translateY: translateY(anims[1]) }] }}>
           <Pressable
             onPress={() => go("/(tabs)/wallet")}
             onPressIn={() => Haptics.selectionAsync()}
-            style={({ pressed }) => [styles.balanceWrap, pressed && { transform: [{ scale: 0.99 }] }]}
+            style={({ pressed }) => [
+              styles.balanceWrap,
+              {
+                shadowColor: isDark ? "#000" : NAVY,
+                shadowOpacity: isDark ? 0.40 : 0.10,
+              },
+              pressed && { transform: [{ scale: 0.97 }] },
+            ]}
           >
             <LinearGradient
-              colors={["#22478A", NAVY, NAVY_DK]}
+              colors={["#132C57", "#0A1C3A", "#071229"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.balanceGrad}
             >
-              <View style={styles.balanceAccent} />
-              <View style={styles.balanceDecor} pointerEvents="none" />
-              <View style={styles.balanceDecor2} pointerEvents="none" />
-
               <View style={styles.balanceTopRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.balanceKicker}>SOLDE DISPONIBLE</Text>
+                  <Text style={styles.balanceLabel}>Solde disponible</Text>
                   <Text style={styles.balanceAmount}>{balanceFormatted}</Text>
-                  {userCountry && userCountry.xafRate !== 1 && (
-                    <Text style={styles.balanceConvert}>
-                      ≈ {(user?.balance ?? 0).toLocaleString("fr-FR")} FCFA
-                    </Text>
-                  )}
                 </View>
                 <View style={styles.balanceLogoBox}>
                   <Image
@@ -282,16 +317,22 @@ export default function HomeScreen() {
                   </View>
                 </Pressable>
 
-                <View style={styles.balanceCta}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.balanceCta,
+                    pressed && { transform: [{ scale: 0.95 }] },
+                  ]}
+                  onPress={() => go("/(tabs)/wallet")}
+                >
                   <Text style={styles.balanceCtaText}>Gérer</Text>
-                  <Feather name="chevron-right" size={14} color={GOLD} />
-                </View>
+                  <Feather name="chevron-right" size={15} color={GOLD} />
+                </Pressable>
               </View>
             </LinearGradient>
           </Pressable>
         </Animated.View>
 
-        {/* ═══ 3. COMMANDER — HERO CTA (design "ticket" premium) ═══ */}
+        {/* ═══ 3. COMMANDER (carte d'action principale) ═══ */}
         <Animated.View style={{ opacity: anims[2], transform: [{ translateY: translateY(anims[2]) }] }}>
           <Pressable
             onPress={() => go("/(tabs)/new-order")}
@@ -299,78 +340,48 @@ export default function HomeScreen() {
             style={({ pressed }) => [
               styles.commanderWrap,
               {
-                backgroundColor: C.surface2,
-                borderColor: C.border2,
+                backgroundColor: C.surface,
+                borderColor: C.border,
+                shadowColor: isDark ? "#000" : NAVY,
+                shadowOpacity: isDark ? 0.30 : 0.08,
               },
-              pressed && { transform: [{ scale: 0.985 }] },
+              pressed && { transform: [{ scale: 0.97 }] },
             ]}
           >
-            {/* Bande dorée gauche signature */}
-            <View style={styles.commanderAccent} />
-
-            {/* Décor discret en haut à droite */}
             <View
               style={[
-                styles.commanderDecor,
-                { backgroundColor: isDark ? "rgba(201,169,97,0.08)" : GOLD_SOFT },
-              ]}
-              pointerEvents="none"
-            />
-
-            {/* Badge haut */}
-            <View
-              style={[
-                styles.commanderBadge,
-                {
-                  backgroundColor: isDark ? "rgba(201,169,97,0.14)" : GOLD_SOFT,
-                  borderColor: C.border2,
-                },
+                styles.commanderIconBox,
+                { backgroundColor: isDark ? GOLD_BG : NAVY },
               ]}
             >
-              <View style={styles.commanderBadgeDot} />
+              <Feather name="shopping-cart" size={22} color={isDark ? GOLD : "#FFFFFF"} />
+            </View>
+
+            <View style={{ flex: 1 }}>
               <Text
-                style={[
-                  styles.commanderBadgeText,
-                  { color: isDark ? GOLD : GOLD_DK },
-                ]}
+                style={[styles.commanderTitle, { color: isDark ? DARK_TEXT : NAVY }]}
               >
-                SERVICE PRINCIPAL
+                Commander un boost
+              </Text>
+              <Text style={[styles.commanderSub, { color: C.textMuted }]}>
+                Boostez vos réseaux en quelques secondes
               </Text>
             </View>
 
-            {/* Contenu principal */}
-            <View style={styles.commanderMain}>
-              <View
-                style={[
-                  styles.commanderIconBox,
-                  { backgroundColor: isDark ? "#0F2A5C" : NAVY },
-                ]}
-              >
-                <Feather name="shopping-cart" size={20} color={GOLD} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.commanderTitle, { color: isDark ? D_TEXT : NAVY }]}>
-                  Commander un boost
-                </Text>
-                <Text style={[styles.commanderSub, { color: C.textMuted }]}>
-                  Boostez vos réseaux en quelques secondes
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.commanderArrowBox,
-                  {
-                    backgroundColor: isDark ? "rgba(201,169,97,0.14)" : NAVY,
-                    borderColor: isDark ? "rgba(201,169,97,0.32)" : NAVY,
-                  },
-                ]}
-              >
-                <Feather
-                  name="arrow-up-right"
-                  size={18}
-                  color={isDark ? GOLD : "#FFFFFF"}
-                />
-              </View>
+            <View
+              style={[
+                styles.commanderArrowBox,
+                {
+                  backgroundColor: isDark ? GOLD_BG : LIGHT_ICON_BG,
+                  borderColor: isDark ? GOLD_BORDER : LIGHT_ICON_BORD,
+                },
+              ]}
+            >
+              <Feather
+                name="chevron-right"
+                size={20}
+                color={isDark ? GOLD : NAVY}
+              />
             </View>
           </Pressable>
         </Animated.View>
@@ -418,8 +429,8 @@ export default function HomeScreen() {
                   { backgroundColor: C.surface, borderColor: C.border },
                 ]}
               >
-                <View style={[styles.statIcon, { backgroundColor: C.chipBg }]}>
-                  <Feather name={s.icon} size={15} color={isDark ? GOLD : NAVY} />
+                <View style={[styles.statIcon, { backgroundColor: C.iconBg, borderColor: C.iconBorder }]}>
+                  <Feather name={s.icon} size={16} color={C.accentIcon} />
                 </View>
                 <Text style={[styles.statValue, { color: C.text }]}>{s.value}</Text>
                 <Text style={[styles.statLabel, { color: C.textMuted }]}>{s.label}</Text>
@@ -428,7 +439,7 @@ export default function HomeScreen() {
           </View>
 
           {recentOrders.length > 0 && (
-            <View style={{ gap: 10 }}>
+            <View style={{ gap: 12 }}>
               <View style={styles.sectionRow}>
                 <View style={styles.sectionHeaderRow}>
                   <View style={styles.accentBar} />
@@ -437,7 +448,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
                 <Pressable onPress={() => go("/(tabs)/orders")} hitSlop={6}>
-                  <Text style={[styles.seeAll, { color: isDark ? GOLD : GOLD_DK }]}>
+                  <Text style={[styles.seeAll, { color: isDark ? GOLD : NAVY }]}>
                     Voir tout
                   </Text>
                 </Pressable>
@@ -454,7 +465,7 @@ export default function HomeScreen() {
                     ]}
                   >
                     <View style={[styles.orderIcon, { backgroundColor: cfg.bg }]}>
-                      <Feather name="trending-up" size={15} color={cfg.color} />
+                      <Feather name="trending-up" size={16} color={cfg.color} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.orderName, { color: C.text }]} numberOfLines={1}>
@@ -466,7 +477,7 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={[styles.orderPrice, { color: isDark ? GOLD : GOLD_DK }]}>
+                      <Text style={[styles.orderPrice, { color: isDark ? GOLD : NAVY }]}>
                         {userCountry && userCountry.xafRate !== 1
                           ? formatCurrency(order.price, userCountry)
                           : `${order.price.toLocaleString("fr-FR")} FCFA`}
@@ -490,201 +501,177 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { paddingHorizontal: 18, gap: 16 },
+  scroll: { paddingHorizontal: 20, gap: 18 },
 
-  /* Header */
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  /* ═══ Header ═══ */
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   userRow: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   avatarBox: {
-    width: 46, height: 46, borderRadius: 14,
+    width: 44, height: 44, borderRadius: 12,
     overflow: "hidden", borderWidth: 1,
+    alignItems: "center", justifyContent: "center",
   },
   avatarImg: { width: "100%", height: "100%" },
-  avatarFallback: { flex: 1, alignItems: "center", justifyContent: "center" },
-  avatarLetter: { fontFamily: "Inter_700Bold", fontSize: 18 },
-  greetSmall: { fontFamily: "Inter_400Regular", fontSize: 12.5 },
-  greetName: { fontFamily: "Inter_700Bold", fontSize: 17.5, letterSpacing: 0.1 },
+  userName: {
+    fontFamily: "Inter_600SemiBold", fontSize: 18,
+    letterSpacing: -0.2,
+  },
+  userGreet: {
+    fontFamily: "Inter_400Regular", fontSize: 12.5,
+    marginTop: 2, letterSpacing: 0.1,
+  },
 
   headerActions: { flexDirection: "row", gap: 8 },
   iconBtn: {
-    width: 38, height: 38, borderRadius: 12,
+    width: 40, height: 40, borderRadius: 12,
     alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
   dot: {
-    position: "absolute", top: 8, right: 8,
+    position: "absolute", top: 9, right: 9,
     width: 8, height: 8, borderRadius: 4, backgroundColor: DANGER,
   },
 
-  /* ═══ SOLDE HERO ═══ */
+  /* ═══ Solde (compact) ═══ */
   balanceWrap: {
-    borderRadius: 22, overflow: "hidden",
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.28, shadowRadius: 26, elevation: 10,
+    borderRadius: 20, overflow: "hidden",
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12, elevation: 5,
   },
-  balanceGrad: { padding: 22, position: "relative", overflow: "hidden" },
-  balanceAccent: {
-    position: "absolute", top: 0, left: 22, right: 22, height: 2,
-    backgroundColor: GOLD, opacity: 0.9,
-    borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
-  },
-  balanceDecor: {
-    position: "absolute", top: -80, right: -70,
-    width: 220, height: 220, borderRadius: 110,
-    backgroundColor: GOLD, opacity: 0.07,
-  },
-  balanceDecor2: {
-    position: "absolute", bottom: -50, left: -40,
-    width: 140, height: 140, borderRadius: 70,
-    backgroundColor: "#FFFFFF", opacity: 0.03,
-  },
+  balanceGrad: { padding: 20 },
   balanceTopRow: {
     flexDirection: "row", alignItems: "flex-start",
     justifyContent: "space-between", gap: 12,
   },
-  balanceKicker: {
-    fontFamily: "Inter_600SemiBold", fontSize: 10.5,
-    color: "rgba(201,169,97,0.90)", letterSpacing: 1.5,
+  balanceLabel: {
+    fontFamily: "Inter_400Regular", fontSize: 13,
+    color: "rgba(255,255,255,0.65)", letterSpacing: 0.1,
   },
   balanceAmount: {
-    fontFamily: "Inter_700Bold", fontSize: 30,
-    color: "#FFFFFF", marginTop: 8, letterSpacing: -0.3,
-  },
-  balanceConvert: {
-    fontFamily: "Inter_400Regular", fontSize: 11.5,
-    color: "rgba(255,255,255,0.55)", marginTop: 4,
+    fontFamily: "Inter_700Bold", fontSize: 32,
+    color: "#FFFFFF", marginTop: 6, letterSpacing: -0.5,
   },
   balanceLogoBox: {
-    width: 54, height: 54, borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1, borderColor: "rgba(201,169,97,0.45)",
-    padding: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 8,
+    width: 48, height: 48, borderRadius: 14,
+    overflow: "hidden", backgroundColor: "#FFFFFF",
+    borderWidth: 1, borderColor: GOLD_BORDER,
+    padding: 6,
   },
   balanceLogo: { width: "100%", height: "100%" },
   balanceDivider: {
-    height: 1, backgroundColor: "rgba(255,255,255,0.12)", marginVertical: 18,
+    height: 1, backgroundColor: "rgba(255,255,255,0.08)",
+    marginVertical: 16,
   },
   balanceBottomRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", gap: 12,
   },
   referralRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   referralIconBox: {
     width: 30, height: 30, borderRadius: 10,
-    backgroundColor: "rgba(201,169,97,0.18)",
+    backgroundColor: GOLD_BG,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(201,169,97,0.32)",
+    borderWidth: 1, borderColor: GOLD_BORDER,
   },
   referralLabel: {
-    fontFamily: "Inter_500Medium", fontSize: 10.5,
-    color: "rgba(255,255,255,0.65)", letterSpacing: 0.3,
+    fontFamily: "Inter_400Regular", fontSize: 11,
+    color: "rgba(255,255,255,0.55)", letterSpacing: 0.1,
   },
   referralValue: {
-    fontFamily: "Inter_700Bold", fontSize: 13.5, color: GOLD, marginTop: 1,
+    fontFamily: "Inter_700Bold", fontSize: 14,
+    color: GOLD, marginTop: 1,
   },
   balanceCta: {
     flexDirection: "row", alignItems: "center", gap: 4,
     paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(201,169,97,0.14)",
-    borderWidth: 1, borderColor: "rgba(201,169,97,0.32)",
+    borderRadius: 10,
+    backgroundColor: "rgba(212,175,55,0.15)",
+    borderWidth: 1, borderColor: GOLD_BORDER,
   },
   balanceCtaText: {
     fontFamily: "Inter_600SemiBold", fontSize: 12.5,
-    color: GOLD, letterSpacing: 0.3,
+    color: GOLD, letterSpacing: 0.2,
   },
 
-  /* ═══ COMMANDER — design "ticket" ═══ */
+  /* ═══ Commander ═══ */
   commanderWrap: {
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: "hidden",
-    paddingTop: 16, paddingBottom: 18, paddingRight: 18, paddingLeft: 22,
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08, shadowRadius: 14, elevation: 3,
-  },
-  commanderAccent: {
-    position: "absolute", left: 0, top: 0, bottom: 0,
-    width: 4, backgroundColor: GOLD,
-  },
-  commanderDecor: {
-    position: "absolute", top: -40, right: -40,
-    width: 140, height: 140, borderRadius: 70,
-    opacity: 0.55,
-  },
-  commanderBadge: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    alignSelf: "flex-start",
-    paddingHorizontal: 9, paddingVertical: 4,
-    borderRadius: 7, borderWidth: 1,
-  },
-  commanderBadgeDot: {
-    width: 5, height: 5, borderRadius: 3, backgroundColor: GOLD,
-  },
-  commanderBadgeText: {
-    fontFamily: "Inter_700Bold", fontSize: 9,
-    letterSpacing: 1.2,
-  },
-  commanderMain: {
     flexDirection: "row", alignItems: "center",
-    gap: 13, marginTop: 12,
+    borderRadius: 16, borderWidth: 1,
+    padding: 16, gap: 14,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10, elevation: 3,
   },
   commanderIconBox: {
-    width: 48, height: 48, borderRadius: 14,
+    width: 48, height: 48, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8,
   },
   commanderTitle: {
-    fontFamily: "Inter_700Bold", fontSize: 16.5, letterSpacing: 0.1,
+    fontFamily: "Inter_600SemiBold", fontSize: 16,
+    letterSpacing: 0.05,
   },
   commanderSub: {
-    fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 3,
+    fontFamily: "Inter_400Regular", fontSize: 13,
+    marginTop: 3, letterSpacing: 0.1,
   },
   commanderArrowBox: {
     width: 40, height: 40, borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
 
-  /* Section */
+  /* ═══ Section headers ═══ */
   sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   accentBar: { width: 3, height: 16, borderRadius: 2, backgroundColor: GOLD },
-  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15.5, letterSpacing: 0.1 },
-  sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  seeAll: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  sectionTitle: {
+    fontFamily: "Inter_600SemiBold", fontSize: 16,
+    letterSpacing: -0.1,
+  },
+  sectionRow: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between",
+  },
+  seeAll: { fontFamily: "Inter_600SemiBold", fontSize: 13, letterSpacing: 0.1 },
 
-  /* Stats */
-  statsRow: { flexDirection: "row", gap: 10 },
+  /* ═══ Stats ═══ */
+  statsRow: { flexDirection: "row", gap: 12 },
   statCard: {
-    flex: 1, alignItems: "center", gap: 6,
+    flex: 1, alignItems: "center", gap: 8,
     borderRadius: 16, borderWidth: 1,
-    paddingVertical: 16, paddingHorizontal: 8,
+    paddingVertical: 18, paddingHorizontal: 8,
   },
   statIcon: {
-    width: 34, height: 34, borderRadius: 11,
-    alignItems: "center", justifyContent: "center",
+    width: 38, height: 38, borderRadius: 12,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
   },
-  statValue: { fontFamily: "Inter_700Bold", fontSize: 19, letterSpacing: 0.2 },
-  statLabel: { fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center" },
+  statValue: {
+    fontFamily: "Inter_700Bold", fontSize: 20,
+    letterSpacing: -0.3,
+  },
+  statLabel: {
+    fontFamily: "Inter_400Regular", fontSize: 12,
+    textAlign: "center", letterSpacing: 0.1,
+  },
 
-  /* Orders */
+  /* ═══ Orders ═══ */
   orderRow: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: 14, borderWidth: 1, padding: 12,
+    flexDirection: "row", alignItems: "center", gap: 14,
+    borderRadius: 16, borderWidth: 1, padding: 16,
   },
   orderIcon: {
-    width: 36, height: 36, borderRadius: 12,
+    width: 38, height: 38, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
-  orderName: { fontFamily: "Inter_600SemiBold", fontSize: 13.5 },
-  orderMeta: { fontFamily: "Inter_400Regular", fontSize: 11.5, marginTop: 2 },
-  orderPrice: { fontFamily: "Inter_700Bold", fontSize: 13, textAlign: "right" },
-  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 },
-  badgeText: { fontFamily: "Inter_600SemiBold", fontSize: 10 },
+  orderName: { fontFamily: "Inter_600SemiBold", fontSize: 14, letterSpacing: -0.1 },
+  orderMeta: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 3 },
+  orderPrice: { fontFamily: "Inter_700Bold", fontSize: 13.5, letterSpacing: -0.1 },
+  badge: {
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 5,
+  },
+  badgeText: {
+    fontFamily: "Inter_600SemiBold", fontSize: 10,
+    letterSpacing: 0.2,
+  },
 });
