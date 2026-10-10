@@ -70,6 +70,8 @@ const SUCCESS = "#10B981";
 const WARNING = "#F59E0B";
 const INFO    = "#3B82F6";
 const DANGER  = "#EF4444";
+const PURPLE  = "#8B5CF6";
+const PURPLE_LIGHT = "#A78BFA";
 
 // ═══════════════════════════════════════════════════════════════
 //  AsyncStorage helpers
@@ -126,6 +128,8 @@ interface ExoService {
   isPerOne?: boolean;
   isCustomComments?: boolean;
   type?: string;
+  refill?: boolean;
+  cancel?: boolean;
   _rawCategory?: string;
   _provider?: string;
   _isTraffic?: boolean;
@@ -173,6 +177,12 @@ interface ServiceCounts {
   automatique?: number;
   avancee?: number;
   revendeur?: number;
+}
+
+interface GlobalSearchResult {
+  svc: ExoService;
+  platform: PlatformData;
+  score: number;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -432,7 +442,7 @@ function generateServiceDescription(svcName: string, platform: string): {
   if (n.includes("garanti") || n.includes("guarantee")) quality.push("Garanti");
   const target = isStory ? "story" : isReel ? "reel" : isShort ? "Short" : isVideo ? "vidéo" : isPost ? "publication" : "contenu";
 
-  if (n.includes("traffic") || n.includes("seo") || n.includes("backlink")) {
+  if (n.includes("traffic") || n.includes("seo") || n.includes("backlink") || n.includes("web visit")) {
     return { what: "Traffic Web / SEO", desc: `Génère du trafic qualifié vers votre site web. Améliore votre SEO et votre visibilité sur les moteurs de recherche.`, linkType: "URL complète de votre site web", howItWorks: "Collez l'URL de votre site. Le trafic provient de sources réelles et naturelles.", quality };
   }
   if (isLive && (n.includes("viewer") || n.includes("spectateur"))) {
@@ -464,7 +474,7 @@ function generateServiceDescription(svcName: string, platform: string): {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PLATFORM_META — Étendu avec 200+ plateformes
+//  PLATFORM_META — 200+ plateformes
 // ═══════════════════════════════════════════════════════════════
 const PLATFORM_META: Record<string, { label: string; iconUrl: string; color: string }> = {
   // ── Réseaux sociaux majeurs ──
@@ -487,6 +497,7 @@ const PLATFORM_META: Record<string, { label: string; iconUrl: string; color: str
   vimeo:       { label: "Vimeo",        iconUrl: "https://cdn.simpleicons.org/vimeo/1AB7EA",        color: "#1AB7EA" },
   mastodon:    { label: "Mastodon",     iconUrl: "https://cdn.simpleicons.org/mastodon/6364FF",     color: "#6364FF" },
   bluesky:     { label: "Bluesky",      iconUrl: "https://cdn.simpleicons.org/bluesky/0285FF",      color: "#0285FF" },
+  truthsocial: { label: "Truth Social", iconUrl: "https://cdn.simpleicons.org/truthsocial/5448EE",  color: "#5448EE" },
   vk:          { label: "VK",           iconUrl: "https://cdn.simpleicons.org/vk/0077FF",           color: "#0077FF" },
   okru:        { label: "OK.ru",        iconUrl: "https://cdn.simpleicons.org/odnoklassniki/EE8208",color: "#EE8208" },
 
@@ -576,6 +587,7 @@ const PLATFORM_META: Record<string, { label: string; iconUrl: string; color: str
   slither:     { label: "Slither.io",   iconUrl: "https://cdn.simpleicons.org/slither/00FF00",      color: "#00FF00" },
   agario:      { label: "Agar.io",      iconUrl: "https://cdn.simpleicons.org/agario/00FF00",       color: "#00FF00" },
   diepio:      { label: "Diep.io",      iconUrl: "https://cdn.simpleicons.org/diepio/00FF00",       color: "#00FF00" },
+  shellshockers:{ label: "Shell Shockers",iconUrl: "https://cdn.simpleicons.org/shellshockers/FF6600",color: "#FF6600" },
   skribbl:     { label: "Skribbl.io",   iconUrl: "https://cdn.simpleicons.org/skribbl/FF6600",      color: "#FF6600" },
   krunker:     { label: "Krunker.io",   iconUrl: "https://cdn.simpleicons.org/krunker/FF6600",      color: "#FF6600" },
   fallguys:    { label: "Fall Guys",    iconUrl: "https://cdn.simpleicons.org/fallguys/FF6600",     color: "#FF6600" },
@@ -1327,6 +1339,120 @@ const sheetStyles = StyleSheet.create({
 });
 
 // ═══════════════════════════════════════════════════════════════
+//  McFloatingButton — Bouton flottant IA animé et visible
+// ═══════════════════════════════════════════════════════════════
+function McFloatingButton({
+  visible,
+  onPress,
+  bottomInset,
+  isDark,
+}: {
+  visible: boolean;
+  onPress: () => void;
+  bottomInset: number;
+  isDark: boolean;
+}) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    pulseLoop.start();
+    const shimmerLoop = Animated.loop(
+      Animated.timing(shimmer, { toValue: 1, duration: 2200, useNativeDriver: true })
+    );
+    shimmerLoop.start();
+    return () => { pulseLoop.stop(); shimmerLoop.stop(); };
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const shimmerX = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-60, 120],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        bottom: bottomInset + 24,
+        right: 16,
+        transform: [{ scale: pulse }],
+        zIndex: 50,
+        shadowColor: PURPLE,
+        shadowOpacity: 0.55,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 14,
+      }}
+    >
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [{ borderRadius: 30, overflow: "hidden" }, pressed && { opacity: 0.92 }]}
+      >
+        <LinearGradient
+          colors={[PURPLE, GOLD]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: 40,
+              height: "100%",
+              backgroundColor: "rgba(255,255,255,0.28)",
+              transform: [{ translateX: shimmerX }, { skewX: "-20deg" }],
+            }}
+          />
+          <View
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 13,
+              backgroundColor: "rgba(255,255,255,0.25)",
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.5)",
+            }}
+          >
+            <Text style={{ fontSize: 14 }}>🤖</Text>
+          </View>
+          <Text
+            style={{
+              fontFamily: "Inter_800ExtraBold",
+              fontSize: 12,
+              color: "#fff",
+              letterSpacing: 0.4,
+            }}
+          >
+            IA
+          </Text>
+          <Feather name="zap" size={14} color="#fff" />
+        </LinearGradient>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  MAIN SCREEN
 // ═══════════════════════════════════════════════════════════════
 export default function NewOrderScreen() {
@@ -1376,6 +1502,9 @@ export default function NewOrderScreen() {
   const [missingAmount, setMissingAmount] = useState(0);
   const [showMcSearch, setShowMcSearch] = useState(false);
 
+  // ═══ Recherche globale de services (toutes plateformes) ═══
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
+
   const [platforms, setPlatforms] = useState<PlatformData[]>([]);
   const [totalServices, setTotalServices] = useState(0);
   const [loadingServices, setLoadingServices] = useState(false);
@@ -1424,6 +1553,9 @@ export default function NewOrderScreen() {
 
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
 
+  // ═══════════════════════════════════════════════════════════════
+  //  CHARGEMENT FAVORIS / HISTORIQUE
+  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1440,6 +1572,9 @@ export default function NewOrderScreen() {
     return () => { cancelled = true; };
   }, []);
 
+  // ═══════════════════════════════════════════════════════════════
+  //  CHARGEMENT DES COMPTEURS RÉELS DE SERVICES
+  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1487,6 +1622,49 @@ export default function NewOrderScreen() {
     const av = serviceCounts.avancee ?? 0;
     return std + auto + av;
   }, [serviceCounts]);
+
+  // ═══════════════════════════════════════════════════════════════
+  //  RECHERCHE GLOBALE — Sur TOUS les services, toutes plateformes
+  // ═══════════════════════════════════════════════════════════════
+  const globalSearchResults = useMemo((): GlobalSearchResult[] => {
+    const q = normalizeSearch(globalSearchQuery.trim());
+    if (!q || q.length < 2) return [];
+
+    const words = q.split(/\s+/).filter(w => w.length >= 1);
+    if (words.length === 0) return [];
+
+    const results: GlobalSearchResult[] = [];
+
+    for (const plat of platforms) {
+      for (const svc of plat.services) {
+        const nameN = normalizeSearch(svc.name || "");
+        const catN = normalizeSearch(svc.category || "");
+        const typeN = normalizeSearch(svc.type || "");
+        const platN = normalizeSearch(plat.label || plat.key || "");
+
+        const allMatch = words.every(w =>
+          nameN.includes(w) || catN.includes(w) || typeN.includes(w) || platN.includes(w)
+        );
+        if (!allMatch) continue;
+
+        let score = 0;
+        for (const w of words) {
+          if (nameN.startsWith(w)) score += 30;
+          else if (nameN.includes(w)) score += 20;
+          if (platN === w || platN.includes(w)) score += 15;
+          if (catN.includes(w)) score += 8;
+        }
+        if (svc.refill) score += 2;
+
+        results.push({ svc, platform: plat, score });
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score || a.svc.priceXAF - b.svc.priceXAF);
+    return results.slice(0, 300);
+  }, [globalSearchQuery, platforms]);
+
+  const isGlobalSearchActive = globalSearchQuery.trim().length >= 2;
 
   const persistFavorites = useCallback(async (list: FavoriteEntry[]) => {
     setFavorites(list);
@@ -1752,6 +1930,11 @@ export default function NewOrderScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.totalOrders]);
 
+// ═══ FIN PARTIE 1 — À CONTINUER AVEC LA PARTIE 2 ═══
+
+  // ═══════════════════════════════════════════════════════════════
+  //  HANDLERS
+  // ═══════════════════════════════════════════════════════════════
   const handleSelectOrderType = (typeKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedOrderType(typeKey);
@@ -1763,6 +1946,7 @@ export default function NewOrderScreen() {
     setQuantity("");
     setShowPlatformSearch(false);
     setPlatformSearch("");
+    setGlobalSearchQuery(""); // Reset recherche globale
     pendingSubmissionRef.current = null;
     loadServices(typeKey);
   };
@@ -1812,6 +1996,27 @@ export default function NewOrderScreen() {
   const handleLongPressService = (svc: ExoService, platform: PlatformData | null) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setActionTarget({ service: svc, platform });
+  };
+
+  // ═══ Handler : ouvrir un service directement depuis la recherche globale ═══
+  const handleGlobalSearchSelect = (svc: ExoService, platform: PlatformData) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    pendingSubmissionRef.current = null;
+    setSelectedPlatform(platform);
+    const cat: Record<string, ExoService[]> = {};
+    platform.services.forEach((s) => {
+      const rawCat = s.category ?? "";
+      const normalized = normalizeCategory(rawCat) ?? extractCategory(s.name);
+      if (!cat[normalized]) cat[normalized] = [];
+      cat[normalized].push({ ...s, _rawCategory: rawCat } as any);
+    });
+    const sorted: Record<string, ExoService[]> = {};
+    const order = ["followers","likes","views","live_views","live_likes","comments","shares","saves","plays","story_views","impressions","reactions","reposts","poll_votes","mentions","profile_visits","custom_comments","traffic","other"];
+    order.forEach((k) => { if (cat[k]) sorted[k] = cat[k]; });
+    Object.keys(cat).forEach((k) => { if (!sorted[k]) sorted[k] = cat[k]; });
+    setCategorized(sorted);
+    setSelectedService(svc);
+    setGlobalSearchQuery("");
   };
 
   const currentOrderType = ORDER_TYPES.find((t) => t.key === selectedOrderType);
@@ -2023,6 +2228,7 @@ export default function NewOrderScreen() {
 
       setLink(""); setQuantity(""); setCustomComments(""); setSelectedService(null);
       setSelectedCategory(null); setSelectedPlatform(null); setSelectedOrderType(null);
+      setGlobalSearchQuery("");
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
@@ -2032,6 +2238,9 @@ export default function NewOrderScreen() {
     }
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  //  RENDER
+  // ═══════════════════════════════════════════════════════════════
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
@@ -2116,6 +2325,7 @@ export default function NewOrderScreen() {
                     setLink("");
                     setQuantity("");
                     setCustomComments("");
+                    setGlobalSearchQuery("");
                     loadServices(typeKey);
                   }}
                   onRemove={async (favId) => {
@@ -2142,6 +2352,7 @@ export default function NewOrderScreen() {
                     setLink("");
                     setQuantity("");
                     setCustomComments("");
+                    setGlobalSearchQuery("");
                     loadServices(r.orderTypeKey);
                   }}
                   C={C}
@@ -2169,6 +2380,7 @@ export default function NewOrderScreen() {
                 setSelectedOrderType(null); setSelectedPlatform(null);
                 setSelectedCategory(null); setSelectedService(null);
                 setShowPlatformSearch(false); setPlatformSearch("");
+                setGlobalSearchQuery("");
               }}
             >
               <LinearGradient
@@ -2203,7 +2415,24 @@ export default function NewOrderScreen() {
             />
           )}
 
-          {selectedOrderType && (
+          {/* ═══ BARRE RECHERCHE GLOBALE + GROS BOUTON IA ═══ */}
+          {selectedOrderType && !loadingServices && platforms.length > 0 && (
+            <GlobalSearchBar
+              query={globalSearchQuery}
+              setQuery={setGlobalSearchQuery}
+              resultCount={globalSearchResults.length}
+              isSearching={isGlobalSearchActive}
+              results={globalSearchResults}
+              onSelectService={handleGlobalSearchSelect}
+              onOpenAi={() => setShowMcSearch(true)}
+              C={C}
+              isDark={isDark}
+              fmt={fmt}
+            />
+          )}
+
+          {/* ═══ PLATEFORMES (masquées pendant recherche globale active) ═══ */}
+          {selectedOrderType && !isGlobalSearchActive && (
             <PlatformSection
               platforms={sortPlatformsByUsage(platforms)}
               selectedPlatform={selectedPlatform}
@@ -2214,19 +2443,16 @@ export default function NewOrderScreen() {
               orderType={selectedOrderType}
               C={C}
               isDark={isDark}
-              showSearch={showPlatformSearch}
-              setShowSearch={setShowPlatformSearch}
-              search={platformSearch}
-              setSearch={setPlatformSearch}
             />
           )}
 
-          {selectedPlatform && Object.keys(categorized).length > 0 && (
+          {selectedPlatform && Object.keys(categorized).length > 0 && !isGlobalSearchActive && (
             <CategorySection
               categorized={categorized}
               selectedCategory={selectedCategory}
               onSelect={handleSelectCategory}
               platformLabel={selectedPlatform.label}
+              onOpenAi={() => setShowMcSearch(true)}
               C={C}
               isDark={isDark}
             />
@@ -2255,7 +2481,7 @@ export default function NewOrderScreen() {
             />
           )}
 
-          {selectedPlatform && !selectedService && !loadingServices && (
+          {selectedPlatform && !selectedService && !loadingServices && !isGlobalSearchActive && (
             <View style={[styles.hintCard, { backgroundColor: C.surface, borderColor: C.border }]}>
               <View style={[styles.hintIconBox, { backgroundColor: C.iconBg, borderColor: C.iconBorder }]}>
                 <Feather name="arrow-up" size={18} color={C.accentIcon} />
@@ -2266,7 +2492,7 @@ export default function NewOrderScreen() {
             </View>
           )}
 
-          {selectedOrderType && !selectedPlatform && !loadingServices && platforms.length > 0 && (
+          {selectedOrderType && !selectedPlatform && !loadingServices && platforms.length > 0 && !isGlobalSearchActive && (
             <View style={[styles.hintCard, { backgroundColor: C.surface, borderColor: C.border }]}>
               <View style={[styles.hintIconBox, { backgroundColor: C.iconBg, borderColor: C.iconBorder }]}>
                 <Feather name="arrow-up" size={18} color={C.accentIcon} />
@@ -2284,13 +2510,13 @@ export default function NewOrderScreen() {
         onClose={() => setShowServiceModal(false)}
         services={categoryServices}
         selectedService={selectedService}
-        onSelect={(svc) => {
+        onSelect={(svc: ExoService) => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           pendingSubmissionRef.current = null;
           setSelectedService(svc);
           setShowServiceModal(false);
         }}
-        onLongPressService={(svc) => handleLongPressService(svc, selectedPlatform)}
+        onLongPressService={(svc: ExoService) => handleLongPressService(svc, selectedPlatform)}
         orderType={selectedOrderType}
         catMeta={catMeta}
         fmt={fmt}
@@ -2352,12 +2578,12 @@ export default function NewOrderScreen() {
         data={successData}
         onClose={() => setSuccessData(null)}
         onViewOrders={() => { setSuccessData(null); router.push("/(tabs)/orders"); }}
-        onOrderRecommended={(svc) => {
+        onOrderRecommended={(svc: ExoService) => {
           pendingSubmissionRef.current = null;
           setSuccessData(null);
           if (selectedPlatform) setSelectedService(svc);
         }}
-        onToggleFavorite={(svc) => {
+        onToggleFavorite={(svc: ExoService) => {
           if (selectedPlatform) toggleFavorite(svc, selectedPlatform);
         }}
         isFavorite={isFavorite}
@@ -2392,28 +2618,12 @@ export default function NewOrderScreen() {
       />
 
       {/* ═══ Mč — Bouton flottant Recherche IA ═══ */}
-      <Pressable
+      <McFloatingButton
+        visible={!showMcSearch}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowMcSearch(true); }}
-        style={{
-          position: "absolute",
-          bottom: insets.bottom + 24,
-          right: 20,
-          width: 60,
-          height: 60,
-          borderRadius: 30,
-          backgroundColor: isDark ? GOLD : NAVY,
-          alignItems: "center",
-          justifyContent: "center",
-          shadowColor: "#000",
-          shadowOpacity: 0.35,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 10,
-          zIndex: 50,
-        }}
-      >
-        <Feather name="message-circle" size={26} color={isDark ? NAVY : GOLD} />
-      </Pressable>
+        bottomInset={insets.bottom}
+        isDark={isDark}
+      />
 
       <McSearch
         visible={showMcSearch}
@@ -2451,6 +2661,425 @@ export default function NewOrderScreen() {
         isDark={isDark}
         fmt={fmt}
       />
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GlobalSearchBar — Barre de recherche TOUS services + BOUTON IA
+// ═══════════════════════════════════════════════════════════════
+function GlobalSearchBar({
+  query,
+  setQuery,
+  resultCount,
+  isSearching,
+  results,
+  onSelectService,
+  onOpenAi,
+  C,
+  isDark,
+  fmt,
+}: {
+  query: string;
+  setQuery: (v: string) => void;
+  resultCount: number;
+  isSearching: boolean;
+  results: Array<{ svc: ExoService; platform: PlatformData }>;
+  onSelectService: (svc: ExoService, platform: PlatformData) => void;
+  onOpenAi: () => void;
+  C: any;
+  isDark: boolean;
+  fmt: (n: number) => string;
+}) {
+  const pulse = useRef(new Animated.Value(0.85)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.05, duration: 1100, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.85, duration: 1100, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const glow = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 1500, useNativeDriver: false }),
+        Animated.timing(glow, { toValue: 0, duration: 1500, useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const glowShadow = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [10, 24],
+  });
+
+  return (
+    <View style={{ gap: 12 }}>
+      {/* ═══ GROS BOUTON IA — TRÈS VISIBLE ═══ */}
+      <Animated.View
+        style={{
+          transform: [{ scale: pulse }],
+          shadowColor: PURPLE,
+          shadowOpacity: 0.5,
+          shadowRadius: glowShadow as any,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 10,
+        }}
+      >
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onOpenAi();
+          }}
+          style={({ pressed }) => [{ borderRadius: 18, overflow: "hidden" }, pressed && { opacity: 0.9 }]}
+        >
+          <LinearGradient
+            colors={[PURPLE, GOLD]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              paddingVertical: 15,
+              paddingHorizontal: 18,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <View
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                backgroundColor: "rgba(255,255,255,0.22)",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1.5,
+                borderColor: "rgba(255,255,255,0.5)",
+              }}
+            >
+              <Feather name="zap" size={22} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text
+                  style={{
+                    fontFamily: "Inter_800ExtraBold",
+                    fontSize: 15,
+                    color: "#fff",
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  RECHERCHE IA — Mč
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.28)",
+                    borderRadius: 5,
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                  }}
+                >
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#fff" }}>BÊTA</Text>
+                </View>
+              </View>
+              <Text
+                style={{
+                  fontFamily: "Inter_400Regular",
+                  fontSize: 11.5,
+                  color: "rgba(255,255,255,0.92)",
+                  marginTop: 2,
+                }}
+              >
+                Dis-moi juste ce que tu cherches, je trouve pour toi
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={22} color="#fff" />
+          </LinearGradient>
+        </Pressable>
+      </Animated.View>
+
+      {/* ═══ Barre de recherche globale ═══ */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          paddingHorizontal: 14,
+          paddingVertical: 13,
+          borderRadius: 14,
+          backgroundColor: C.inputBg,
+          borderWidth: 1.5,
+          borderColor: isSearching ? PURPLE + "66" : C.inputBorder,
+        }}
+      >
+        <Feather name="search" size={16} color={isSearching ? PURPLE : C.textMuted} />
+        <TextInput
+          style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 14, color: C.text, padding: 0 }}
+          placeholder="Rechercher dans TOUS les services (ex: whatsapp, abonnés, vues…)"
+          placeholderTextColor={C.textMuted}
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+        {query.length > 0 && (
+          <Pressable onPress={() => setQuery("")} hitSlop={8}>
+            <Feather name="x-circle" size={16} color={C.textMuted} />
+          </Pressable>
+        )}
+      </View>
+
+      {/* ═══ Compteur de résultats ═══ */}
+      {isSearching && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingHorizontal: 4,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: resultCount > 0 ? SUCCESS : WARNING,
+              }}
+            />
+            <Text
+              style={{
+                fontFamily: "Inter_700Bold",
+                fontSize: 12,
+                color: resultCount > 0 ? SUCCESS : WARNING,
+              }}
+            >
+              {resultCount > 0
+                ? `${resultCount} service${resultCount > 1 ? "s" : ""} trouvé${resultCount > 1 ? "s" : ""}`
+                : "Aucun résultat"}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); onOpenAi(); }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              backgroundColor: PURPLE + "18",
+              borderRadius: 12,
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              borderWidth: 1,
+              borderColor: PURPLE + "45",
+            }}
+          >
+            <Feather name="zap" size={11} color={PURPLE} />
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10.5, color: PURPLE }}>
+              Affiner avec l'IA
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* ═══ Liste des résultats ═══ */}
+      {isSearching && resultCount > 0 && (
+        <View
+          style={{
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: C.border,
+            backgroundColor: C.surface,
+            overflow: "hidden",
+            maxHeight: 420,
+          }}
+        >
+          <ScrollView
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {results.map(({ svc, platform }, idx) => (
+              <Pressable
+                key={`${svc.id}-${idx}`}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onSelectService(svc, platform);
+                }}
+                style={({ pressed }) => [
+                  {
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    borderBottomWidth: idx < results.length - 1 ? 1 : 0,
+                    borderBottomColor: C.border,
+                  },
+                  pressed && { backgroundColor: C.inputBg },
+                ]}
+              >
+                <View
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    backgroundColor: platform.color + "18",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 1,
+                    borderColor: platform.color + "40",
+                    overflow: "hidden",
+                  }}
+                >
+                  <Image
+                    source={{ uri: platform.iconUrl }}
+                    style={{ width: 22, height: 22 }}
+                    contentFit="contain"
+                  />
+                </View>
+
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter_600SemiBold",
+                      fontSize: 13,
+                      color: C.text,
+                      lineHeight: 17,
+                    }}
+                    numberOfLines={2}
+                  >
+                    {svc.name}
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter_600SemiBold",
+                        fontSize: 10.5,
+                        color: platform.color,
+                      }}
+                    >
+                      {platform.label}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
+                      · min {svc.min.toLocaleString()}
+                    </Text>
+                    {svc.refill && (
+                      <View
+                        style={{
+                          backgroundColor: SUCCESS + "22",
+                          borderRadius: 4,
+                          paddingHorizontal: 5,
+                          paddingVertical: 1,
+                        }}
+                      >
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 8.5, color: SUCCESS }}>
+                          ♻ recharge
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: SUCCESS }}>
+                    {fmt(svc.priceXAF)}
+                  </Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9.5, color: C.textMuted }}>
+                    {svc.isPerOne || svc.isPackage ? "/u" : "/1k"}
+                  </Text>
+                </View>
+
+                <Feather name="arrow-right" size={16} color={C.textMuted} />
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* ═══ Encart invitation IA si aucun résultat ═══ */}
+      {isSearching && resultCount === 0 && (
+        <View
+          style={{
+            borderRadius: 14,
+            padding: 16,
+            backgroundColor: isDark ? "rgba(139,92,246,0.10)" : "rgba(139,92,246,0.06)",
+            borderWidth: 1,
+            borderColor: PURPLE + "40",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <View
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 26,
+              backgroundColor: PURPLE + "20",
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1.5,
+              borderColor: PURPLE + "50",
+            }}
+          >
+            <Text style={{ fontSize: 24 }}>🤖</Text>
+          </View>
+          <Text
+            style={{
+              fontFamily: "Inter_700Bold",
+              fontSize: 14,
+              color: C.text,
+              textAlign: "center",
+              lineHeight: 19,
+            }}
+          >
+            Rien trouvé pour « {query} » ? 🤔
+          </Text>
+          <Text
+            style={{
+              fontFamily: "Inter_400Regular",
+              fontSize: 12.5,
+              color: C.textSecondary,
+              textAlign: "center",
+              lineHeight: 18,
+              paddingHorizontal: 8,
+            }}
+          >
+            Essaie une formulation plus simple, ou laisse notre IA te guider : elle comprend
+            ce que tu veux même si tu ne connais pas le nom exact du service.
+          </Text>
+          <Pressable
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onOpenAi(); }}
+            style={({ pressed }) => [{ borderRadius: 30, overflow: "hidden" }, pressed && { opacity: 0.9 }]}
+          >
+            <LinearGradient
+              colors={[PURPLE, GOLD]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{
+                paddingHorizontal: 22,
+                paddingVertical: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Feather name="zap" size={15} color="#fff" />
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#fff" }}>
+                Demander à l'IA Mč
+              </Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -2867,80 +3496,19 @@ function ResellerPanel({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PlatformSection
+//  PlatformSection — (sans recherche locale, gérée en amont)
 // ═══════════════════════════════════════════════════════════════
 function PlatformSection({
   platforms, selectedPlatform, onSelect, loading, error, onRetry, orderType, C, isDark,
-  showSearch, setShowSearch, search, setSearch,
 }: any) {
   const accent = ORDER_TYPES.find((o) => o.key === orderType)?.color ?? "#1E90FF";
-
-  const filteredPlatforms = useMemo(() => {
-    if (!search.trim()) return platforms;
-    const q = normalizeSearch(search.trim());
-    return platforms.filter((p: PlatformData) =>
-      normalizeSearch(p.label).includes(q)
-    );
-  }, [platforms, search]);
 
   return (
     <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
       <View style={styles.sectionHeaderRow}>
         <View style={[styles.accentBar, { backgroundColor: accent }]} />
         <Text style={[styles.sectionLabel, { color: C.text }]}>Choisissez une plateforme</Text>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            setShowSearch(!showSearch);
-            if (showSearch) setSearch("");
-          }}
-          hitSlop={10}
-          style={{
-            marginLeft: "auto",
-            width: 32, height: 32, borderRadius: 10,
-            backgroundColor: showSearch ? accent + "22" : C.inputBg,
-            borderWidth: 1,
-            borderColor: showSearch ? accent + "55" : C.border,
-            alignItems: "center", justifyContent: "center",
-          }}
-        >
-          <Feather name={showSearch ? "x" : "search"} size={15} color={showSearch ? accent : C.textMuted} />
-        </Pressable>
       </View>
-
-      {showSearch && (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            borderWidth: 1,
-            borderRadius: 12,
-            backgroundColor: C.inputBg,
-            borderColor: accent + "55",
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            marginBottom: 8,
-          }}
-        >
-          <Feather name="search" size={14} color={accent} />
-          <TextInput
-            style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13.5, color: C.text }}
-            placeholder="Rechercher une plateforme (ex: Instagram, TikTok...)"
-            placeholderTextColor={C.textMuted}
-            value={search}
-            onChangeText={setSearch}
-            autoCorrect={false}
-            autoCapitalize="none"
-            autoFocus
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")} hitSlop={8}>
-              <Feather name="x-circle" size={15} color={C.textMuted} />
-            </Pressable>
-          )}
-        </View>
-      )}
 
       {error ? (
         <View style={styles.errorRow}>
@@ -2952,9 +3520,9 @@ function PlatformSection({
         </View>
       ) : null}
 
-      {filteredPlatforms.length > 0 && (
+      {platforms.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.platformScroll}>
-          {filteredPlatforms.map((p: PlatformData) => {
+          {platforms.map((p: PlatformData) => {
             const isActive = selectedPlatform?.key === p.key;
             return (
               <Pressable
@@ -2984,15 +3552,6 @@ function PlatformSection({
         </ScrollView>
       )}
 
-      {showSearch && filteredPlatforms.length === 0 && platforms.length > 0 && (
-        <View style={{ paddingVertical: 16, alignItems: "center", gap: 6 }}>
-          <Feather name="search" size={22} color={C.textMuted} />
-          <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: C.textMuted, textAlign: "center" }}>
-            Aucune plateforme ne correspond à « {search} »
-          </Text>
-        </View>
-      )}
-
       {loading && (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={C.accent} size="small" />
@@ -3004,16 +3563,38 @@ function PlatformSection({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  CategorySection
+//  CategorySection — avec bouton IA intégré
 // ═══════════════════════════════════════════════════════════════
 function CategorySection({
-  categorized, selectedCategory, onSelect, platformLabel, C, isDark,
+  categorized, selectedCategory, onSelect, platformLabel, onOpenAi, C, isDark,
 }: any) {
   return (
     <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
       <View style={styles.sectionHeaderRow}>
         <View style={[styles.accentBar, { backgroundColor: GOLD }]} />
-        <Text style={[styles.sectionLabel, { color: C.text }]}>Catégorie — {platformLabel}</Text>
+        <Text style={[styles.sectionLabel, { color: C.text, flex: 1 }]}>Catégorie — {platformLabel}</Text>
+        <Pressable
+          onPress={() => { Haptics.selectionAsync(); onOpenAi(); }}
+          style={({ pressed }) => [
+            {
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 14,
+              backgroundColor: PURPLE + "18",
+              borderWidth: 1,
+              borderColor: PURPLE + "45",
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Feather name="zap" size={11} color={PURPLE} />
+          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10.5, color: PURPLE }}>
+            IA
+          </Text>
+        </Pressable>
       </View>
       <View style={styles.categoryGrid}>
         {Object.entries(categorized).map(([cat, svcs]: any) => {
@@ -3050,6 +3631,47 @@ function CategorySection({
           );
         })}
       </View>
+
+      {/* ═══ Mini-invitation IA sous les catégories ═══ */}
+      <Pressable
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onOpenAi(); }}
+        style={({ pressed }) => [
+          {
+            marginTop: 4,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            padding: 11,
+            borderRadius: 12,
+            backgroundColor: isDark ? "rgba(139,92,246,0.10)" : "rgba(139,92,246,0.06)",
+            borderWidth: 1,
+            borderColor: PURPLE + "30",
+          },
+          pressed && { opacity: 0.88 },
+        ]}
+      >
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: PURPLE + "22",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ fontSize: 16 }}>🤖</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: C.text }}>
+            Pas trouvé ton service ici ?
+          </Text>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: C.textMuted, marginTop: 1 }}>
+            Laisse l'IA Mč te guider en 1 phrase
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={16} color={PURPLE} />
+      </Pressable>
     </View>
   );
 }
@@ -3285,7 +3907,7 @@ function SelectedServiceForm({
                 <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11.5, color: WARNING, lineHeight: 16 }}>
                   Ce lien semble appartenir à{" "}
                   <Text style={{ fontFamily: "Inter_700Bold" }}>
-                    {PLATFORM_META[detectedLinkPlatform]?.label ?? detectedLinkPlatform}
+                    {(detectedLinkPlatform && PLATFORM_META[detectedLinkPlatform]?.label) || detectedLinkPlatform || "une autre plateforme"}
                   </Text>
                   {", "}mais ce service concerne{" "}
                   <Text style={{ fontFamily: "Inter_700Bold" }}>{selectedPlatform.label}</Text>.
@@ -3307,7 +3929,7 @@ function SelectedServiceForm({
             >
               <Feather name="check-circle" size={12} color={SUCCESS} />
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11.5, color: SUCCESS }}>
-                Lien {PLATFORM_META[detectedLinkPlatform]?.label ?? detectedLinkPlatform} détecté — compatible avec ce service
+                Lien {(detectedLinkPlatform && PLATFORM_META[detectedLinkPlatform]?.label) || detectedLinkPlatform || "une autre plateforme"} détecté — compatible avec ce service
               </Text>
             </View>
           )}
