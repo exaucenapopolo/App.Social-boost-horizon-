@@ -2,10 +2,10 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
-import React, { memo, useCallback, useMemo, useRef, useState } from "react";
+import { router } from "expo-router";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Easing,
   KeyboardAvoidingView,
@@ -52,6 +52,9 @@ const DARK_ICON_BG    = "rgba(212,175,55,0.12)";
 const DARK_ICON_BORD  = "rgba(212,175,55,0.26)";
 
 const SUCCESS = "#10B981";
+const WARNING = "#F59E0B";
+const DANGER  = "#EF4444";
+const INFO    = "#3B82F6";
 
 // ─── Données ───
 const PORTFOLIO_SITES = [
@@ -159,6 +162,73 @@ const FEATURED_EXTERNAL = [
   },
 ];
 
+// ═══════════════════════════════════════════════════════════════
+//  ABONNEMENTS À VIE — Achat direct avec débit du solde
+// ═══════════════════════════════════════════════════════════════
+interface LifetimeSubscription {
+  id: string;
+  icon: any;
+  label: string;
+  sub: string;
+  badge: string;
+  fcfa: number;
+  accent: string;
+  info: {
+    title: string;
+    description: string;
+    bullets: string[];
+    note?: string;
+  };
+}
+
+const LIFETIME_SUBSCRIPTIONS: LifetimeSubscription[] = [
+  {
+    id: "canal-lifetime",
+    icon: "tv" as const,
+    label: "Canal+ à vie",
+    sub: "Toutes les chaînes · Séries · Films",
+    badge: "À vie",
+    fcfa: 3600,
+    accent: "#E11D48",
+    info: {
+      title: "Canal+ à vie — Toutes les chaînes",
+      description:
+        "Recevez une application à installer sur votre téléphone, votre ordinateur ou directement sur votre télévision. Vous pourrez visionner toutes les chaînes disponibles sur Canal+ ainsi que celles de Netflix et bien d'autres fournisseurs.",
+      bullets: [
+        "Installable sur téléphone, ordinateur et télévision",
+        "Toutes les chaînes Canal+ incluses",
+        "Netflix, séries, films et bien plus encore",
+        "Accès à vie, aucun renouvellement à payer",
+        "Livraison de l'accès via WhatsApp après votre achat",
+      ],
+      note: "Le solde de votre compte doit être suffisant pour valider votre commande. Sinon, vous serez invité à recharger.",
+    },
+  },
+  {
+    id: "netflix-lifetime",
+    icon: "play-circle" as const,
+    label: "Netflix à vie",
+    sub: "Android · Toutes les chaînes · Films",
+    badge: "À vie",
+    fcfa: 2500,
+    accent: "#E50914",
+    info: {
+      title: "Netflix à vie — Sur Android",
+      description:
+        "Une application à installer directement sur votre téléphone Android. Vous pourrez regarder toutes les chaînes Canal+, Netflix, séries et films, sans aucune déconnexion. Sur ordinateur ou télévision, vous pourrez utiliser le site web pour visionner vos contenus avec le même compte.",
+      bullets: [
+        "Application Android uniquement (téléphone)",
+        "Sur ordinateur et TV : accès via le site web",
+        "Toutes les chaînes Canal+ et Netflix incluses",
+        "Séries, films, contenus exclusifs",
+        "Aucune déconnexion pendant le visionnage",
+        "Accès à vie, aucun renouvellement à payer",
+      ],
+      note: "Le solde de votre compte doit être suffisant pour valider votre commande. Sinon, vous serez invité à recharger.",
+    },
+  },
+];
+
 const MODAL_SERVICES = [
   { id: "website",  icon: "globe"      as const, label: "Site web",        sub: "Vitrine · E-commerce" },
   { id: "app",      icon: "smartphone" as const, label: "Application",     sub: "Android · iOS" },
@@ -198,7 +268,159 @@ type ModalBaseProps = {
   priceFmt: (fcfa: number) => string;
 };
 
-// ─── Helper animation press (spring) ───
+// ═══════════════════════════════════════════════════════════════
+//  AppModal — Modale personnalisée premium (remplace Alert)
+// ═══════════════════════════════════════════════════════════════
+type ModalKind = "info" | "success" | "warning" | "error";
+
+interface AppModalButton {
+  label: string;
+  onPress?: () => void;
+  style?: "primary" | "danger" | "cancel";
+}
+
+interface AppModalConfig {
+  kind: ModalKind;
+  title: string;
+  message?: string;
+  buttons?: AppModalButton[];
+}
+
+const APP_MODAL_META: Record<ModalKind, { icon: any; color: string; bg: string }> = {
+  info:    { icon: "info",           color: INFO,    bg: "rgba(59,130,246,0.14)"  },
+  success: { icon: "check-circle",   color: SUCCESS, bg: "rgba(16,185,129,0.14)"  },
+  warning: { icon: "alert-triangle", color: WARNING, bg: "rgba(245,158,11,0.14)"  },
+  error:   { icon: "x-circle",       color: DANGER,  bg: "rgba(239,68,68,0.14)"   },
+};
+
+function AppModal({
+  config, onClose,
+}: {
+  config: AppModalConfig | null;
+  onClose: () => void;
+}) {
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const visible = !!config;
+  const [rendered, setRendered] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setRendered(true);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.9, duration: 150, useNativeDriver: true }),
+      ]).start(() => setRendered(false));
+    }
+  }, [visible]);
+
+  if (!rendered || !config) return null;
+
+  const meta = APP_MODAL_META[config.kind] ?? APP_MODAL_META.info;
+  const buttons: AppModalButton[] =
+    config.buttons && config.buttons.length > 0
+      ? config.buttons
+      : [{ label: "OK", style: "primary" }];
+
+  const stacked = buttons.length > 2;
+
+  const handlePress = (btn: AppModalButton) => {
+    Haptics.selectionAsync();
+    onClose();
+    if (btn.onPress) setTimeout(btn.onPress, 180);
+  };
+
+  return (
+    <Modal transparent visible={rendered} animationType="none" onRequestClose={onClose}>
+      <Animated.View style={[amStyles.backdrop, { opacity: fadeAnim }]}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <Animated.View style={[amStyles.card, { transform: [{ scale: scaleAnim }] }]}>
+          <View style={[amStyles.iconWrap, { backgroundColor: meta.bg }]}>
+            <Feather name={meta.icon} size={30} color={meta.color} />
+          </View>
+          <Text style={amStyles.title}>{config.title}</Text>
+          {config.message ? <Text style={amStyles.message}>{config.message}</Text> : null}
+          <View style={[amStyles.actions, stacked && { flexDirection: "column" }]}>
+            {buttons.map((btn, i) => {
+              const st = btn.style ?? (buttons.length === 1 ? "primary" : i === 0 ? "primary" : "cancel");
+              const bg =
+                st === "primary" ? GOLD :
+                st === "danger"  ? DANGER :
+                "rgba(255,255,255,0.10)";
+              const fg = st === "cancel" ? "#E2E8F0" : "#080E1A";
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => handlePress(btn)}
+                  style={({ pressed }) => [
+                    amStyles.btn,
+                    stacked ? { width: "100%" } : { flex: 1 },
+                    { backgroundColor: bg },
+                    pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+                  ]}
+                >
+                  <Text style={[amStyles.btnText, { color: fg }]} numberOfLines={1}>
+                    {btn.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+function useAppModal() {
+  const [config, setConfig] = useState<AppModalConfig | null>(null);
+  const show = useCallback((c: AppModalConfig) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setConfig(c);
+  }, []);
+  const hide = useCallback(() => setConfig(null), []);
+  const modalEl = <AppModal config={config} onClose={hide} />;
+  return { show, hide, modalEl };
+}
+
+const amStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: "rgba(4,10,22,0.72)",
+    alignItems: "center", justifyContent: "center", padding: 24,
+  },
+  card: {
+    width: "100%", maxWidth: 400,
+    backgroundColor: "#0F1B33",
+    borderRadius: 24, paddingVertical: 28, paddingHorizontal: 24,
+    alignItems: "center",
+    borderWidth: 1, borderColor: "rgba(212,175,55,0.22)",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5, shadowRadius: 40, elevation: 20,
+  },
+  iconWrap: {
+    width: 66, height: 66, borderRadius: 33,
+    alignItems: "center", justifyContent: "center", marginBottom: 16,
+  },
+  title: {
+    fontFamily: "Inter_700Bold", fontSize: 18, color: "#FFFFFF",
+    textAlign: "center", letterSpacing: -0.2, marginBottom: 8,
+  },
+  message: {
+    fontFamily: "Inter_400Regular", fontSize: 14,
+    color: "rgba(255,255,255,0.75)",
+    textAlign: "center", lineHeight: 20, marginBottom: 22,
+  },
+  actions: { flexDirection: "row", gap: 10, width: "100%", marginTop: 4 },
+  btn: { paddingVertical: 13, paddingHorizontal: 16, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  btnText: { fontFamily: "Inter_700Bold", fontSize: 14, letterSpacing: 0.1 },
+});
+
+// ─── Animation press ───
 function usePressSpring() {
   const scale = useRef(new Animated.Value(1)).current;
   const onPressIn = useCallback(() => {
@@ -212,10 +434,10 @@ function usePressSpring() {
 
 // ─── Champs réutilisables ───
 function FieldInput({
-  label, value, onChange, placeholder, multiline, keyboardType, theme, secureTextEntry,
+  label, value, onChange, placeholder, multiline, keyboardType, theme,
 }: {
   label: string; value: string; onChange: (v: string) => void; placeholder: string;
-  multiline?: boolean; keyboardType?: any; theme: any; secureTextEntry?: boolean;
+  multiline?: boolean; keyboardType?: any; theme: any;
 }) {
   return (
     <View style={{ gap: 6 }}>
@@ -238,7 +460,6 @@ function FieldInput({
         placeholderTextColor={theme.textMuted}
         multiline={multiline}
         keyboardType={keyboardType ?? "default"}
-        secureTextEntry={secureTextEntry}
         autoCapitalize="none"
       />
     </View>
@@ -340,7 +561,7 @@ function ModalShell({
 function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) {
   const scale = useRef(new Animated.Value(0.6)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-  React.useEffect(() => {
+  useEffect(() => {
     Animated.parallel([
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 8 }),
       Animated.timing(opacity, { toValue: 1, duration: 320, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
@@ -423,6 +644,9 @@ function SubmitButton({ onPress, loading, theme }: { onPress: () => void; loadin
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  Modal info service (externe)
+// ═══════════════════════════════════════════════════════════════
 function ServiceInfoModal({
   visible, onClose, service, theme,
 }: {
@@ -480,8 +704,316 @@ function ServiceInfoModal({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  Modale info abonnement à vie
+// ═══════════════════════════════════════════════════════════════
+function LifetimeInfoModal({
+  visible, onClose, sub, theme, priceFmt,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  sub: LifetimeSubscription | null;
+  theme: any;
+  priceFmt: (fcfa: number) => string;
+}) {
+  if (!sub) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={ms.infoOverlay}>
+        <View style={[ms.infoCard, { backgroundColor: theme.surface }]}>
+          <View style={ms.infoHeader}>
+            <View style={[ms.infoIconBox, { backgroundColor: sub.accent + "18", borderColor: sub.accent + "45" }]}>
+              <Feather name={sub.icon} size={22} color={sub.accent} />
+            </View>
+            <Text style={[ms.infoTitle, { color: theme.text }]} numberOfLines={2}>
+              {sub.info.title}
+            </Text>
+            <Pressable onPress={onClose} hitSlop={10} style={{ padding: 4 }}>
+              <Feather name="x" size={20} color={theme.textMuted} />
+            </Pressable>
+          </View>
+
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={{ backgroundColor: sub.accent + "18", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: sub.accent, letterSpacing: 0.4, textTransform: "uppercase" }}>
+                {sub.badge}
+              </Text>
+            </View>
+            <View style={{ backgroundColor: theme.iconBg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: theme.iconBorder }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: theme.accentIcon }}>
+                {priceFmt(sub.fcfa)}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={[ms.infoDesc, { color: theme.textSecondary }]}>
+            {sub.info.description}
+          </Text>
+
+          <View style={{ gap: 12 }}>
+            {sub.info.bullets.map((b, i) => (
+              <View key={i} style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+                <View style={[ms.bulletDot, { backgroundColor: sub.accent + "18", borderColor: sub.accent + "45" }]}>
+                  <Feather name="check" size={11} color={sub.accent} />
+                </View>
+                <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textSecondary, lineHeight: 20, marginTop: 2 }}>
+                  {b}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {sub.info.note ? (
+            <View style={{ backgroundColor: WARNING + "15", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: WARNING + "30", flexDirection: "row", gap: 10 }}>
+              <Feather name="info" size={14} color={WARNING} style={{ marginTop: 2 }} />
+              <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 12, color: WARNING, lineHeight: 17 }}>
+                {sub.info.note}
+              </Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+            onPress={onClose}
+          >
+            <LinearGradient colors={[NAVY_LIGHT, NAVY]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              <Text style={ms.submitText}>Compris</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Modale d'achat abonnement à vie (débit du solde + notif admin)
+// ═══════════════════════════════════════════════════════════════
+function LifetimePurchaseModal({
+  visible, onClose, sub, theme, priceFmt, onSuccess,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  sub: LifetimeSubscription | null;
+  theme: any;
+  priceFmt: (fcfa: number) => string;
+  onSuccess: () => void;
+}) {
+  const { user, deductBalance, refreshUser } = useAuth();
+  const { show: showModal, modalEl } = useAppModal();
+
+  const [waCode, setWaCode] = useState("+237");
+  const [waPhone, setWaPhone] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (visible && user) {
+      // Pré-remplir avec le nom et le téléphone du profil si disponible
+      if (!fullName && user.name) setFullName(user.name);
+      if (!waPhone && user.phone) {
+        const p = String(user.phone).trim();
+        // Extraire indicatif + numéro si possible
+        const match = p.match(/^(\+\d{1,4})\s*(.+)$/);
+        if (match) {
+          setWaCode(match[1]);
+          setWaPhone(match[2].replace(/\s+/g, ""));
+        } else {
+          setWaPhone(p.replace(/\s+/g, ""));
+        }
+      }
+    }
+  }, [visible, user]);
+
+  const reset = () => {
+    setWaCode("+237"); setWaPhone(""); setFullName("");
+    setLoading(false); setSuccess(false);
+  };
+  const handleClose = () => { onClose(); setTimeout(reset, 400); };
+
+  if (!sub) return null;
+
+  const userBalance = user?.balance ?? 0;
+  const canAfford = userBalance >= sub.fcfa;
+
+  const submit = async () => {
+    if (!fullName.trim()) {
+      showModal({ kind: "warning", title: "Nom requis", message: "Entrez votre nom complet." });
+      return;
+    }
+    if (!waPhone.trim()) {
+      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp pour être contacté." });
+      return;
+    }
+    if (!canAfford) {
+      showModal({
+        kind: "warning",
+        title: "Solde insuffisant",
+        message: `Votre solde (${priceFmt(userBalance)}) est inférieur au prix (${priceFmt(sub.fcfa)}). Rechargez pour continuer.`,
+        buttons: [
+          { label: "Recharger", style: "primary", onPress: () => { handleClose(); router.push("/(tabs)/wallet" as any); } },
+          { label: "Annuler", style: "cancel" },
+        ],
+      });
+      return;
+    }
+
+    setLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      // 1) Débiter le solde
+      const ok = await deductBalance(sub.fcfa);
+      if (!ok) {
+        showModal({ kind: "error", title: "Échec du débit", message: "Votre solde n'a pas pu être débité. Réessayez." });
+        setLoading(false);
+        return;
+      }
+
+      // 2) Envoyer la notification à l'admin via le même circuit que les autres services
+      const r = await postServiceRequest(
+        "subscription",
+        {
+          "Service": sub.label,
+          "Prix payé": priceFmt(sub.fcfa),
+          "Nom complet": fullName,
+          "Type": "Abonnement à vie",
+          "Statut du paiement": "Payé via solde",
+          "Date": new Date().toLocaleString("fr-FR"),
+        },
+        waCode,
+        waPhone
+      );
+
+      if (!r?.success) {
+        // Le solde est déjà débité, mais on n'a pas pu envoyer à l'admin.
+        // On remonte quand même le succès mais on prévient l'utilisateur.
+        showModal({
+          kind: "warning",
+          title: "Commande enregistrée",
+          message: `Votre paiement a été débité. Notre équipe vous contactera sur WhatsApp. Si vous ne recevez rien sous 24h, contactez le support.`,
+        });
+        setSuccess(true);
+        refreshUser().catch(() => {});
+        onSuccess();
+        setLoading(false);
+        return;
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setSuccess(true);
+      refreshUser().catch(() => {});
+      onSuccess();
+    } catch (e: any) {
+      showModal({ kind: "error", title: "Erreur", message: e?.message ?? "Veuillez réessayer." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      {modalEl}
+      <ModalShell visible={visible} onClose={handleClose} title={sub.label} icon={sub.icon} theme={theme}>
+        {success ? (
+          <SuccessScreen onClose={handleClose} theme={theme} />
+        ) : (
+          <>
+            {/* Récap produit */}
+            <View style={{ backgroundColor: theme.iconBg, borderRadius: 12, borderWidth: 1, borderColor: theme.iconBorder, padding: 14, gap: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: sub.accent + "20", alignItems: "center", justifyContent: "center" }}>
+                  <Feather name={sub.icon} size={20} color={sub.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: theme.text }}>{sub.label}</Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{sub.sub}</Text>
+                </View>
+                <View style={{ backgroundColor: sub.accent + "20", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: sub.accent, letterSpacing: 0.4 }}>À VIE</Text>
+                </View>
+              </View>
+
+              <View style={{ borderTopWidth: 1, borderTopColor: theme.separator, paddingTop: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>Prix</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: theme.accentIcon }}>{priceFmt(sub.fcfa)}</Text>
+              </View>
+
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: theme.textSecondary }}>Votre solde</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: canAfford ? SUCCESS : DANGER }}>
+                  {priceFmt(userBalance)}
+                </Text>
+              </View>
+
+              {!canAfford && (
+                <View style={{ backgroundColor: DANGER + "15", borderRadius: 8, padding: 10, borderWidth: 1, borderColor: DANGER + "30", flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Feather name="alert-circle" size={14} color={DANGER} />
+                  <Text style={{ flex: 1, fontFamily: "Inter_500Medium", fontSize: 12, color: DANGER, lineHeight: 16 }}>
+                    Il vous manque {priceFmt(sub.fcfa - userBalance)} pour finaliser cet achat.
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Formulaire de contact */}
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
+              Remplissez ces informations pour que notre équipe puisse vous livrer votre accès via WhatsApp.
+            </Text>
+
+            <FieldInput
+              label="Nom complet *"
+              value={fullName}
+              onChange={setFullName}
+              placeholder="Ex: Jean Dupont"
+              theme={theme}
+            />
+
+            <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
+
+            {/* Boutons */}
+            {canAfford ? (
+              <Pressable
+                style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+                onPress={submit}
+                disabled={loading}
+              >
+                <LinearGradient colors={[NAVY_LIGHT, NAVY]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Feather name="shopping-cart" size={17} color={GOLD} />
+                      <Text style={ms.submitText}>Acheter pour {priceFmt(sub.fcfa)}</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+                onPress={() => { handleClose(); router.push("/(tabs)/wallet" as any); }}
+              >
+                <LinearGradient colors={[GOLD, GOLD_SOFT]} style={ms.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                  <Feather name="plus-circle" size={17} color="#080E1A" />
+                  <Text style={[ms.submitText, { color: "#080E1A" }]}>Recharger mon solde</Text>
+                </LinearGradient>
+              </Pressable>
+            )}
+
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11.5, color: theme.textMuted, textAlign: "center", lineHeight: 16 }}>
+              Votre solde sera débité immédiatement. Livraison via WhatsApp.
+            </Text>
+          </>
+        )}
+      </ModalShell>
+    </>
+  );
+}
+
 // ─── Modal Site Web ───
 const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
+  const { show: showModal, modalEl } = useAppModal();
   const [siteName, setSiteName] = useState("");
   const [company, setCompany] = useState("");
   const [siteType, setSiteType] = useState(SITE_TYPES[0]);
@@ -506,8 +1038,14 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
   const handleClose = () => { onClose(); setTimeout(reset, 400); };
 
   const submit = async () => {
-    if (!desc.trim()) { Alert.alert("Requis", "Veuillez décrire votre projet."); return; }
-    if (!waPhone.trim()) { Alert.alert("WhatsApp requis", "Entrez votre numéro WhatsApp."); return; }
+    if (!desc.trim()) {
+      showModal({ kind: "warning", title: "Description requise", message: "Veuillez décrire votre projet." });
+      return;
+    }
+    if (!waPhone.trim()) {
+      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      return;
+    }
     setLoading(true);
     try {
       const r = await postServiceRequest("website", {
@@ -524,113 +1062,120 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
-    finally { setLoading(false); }
+      } else {
+        showModal({ kind: "error", title: "Échec de l'envoi", message: r?.error ?? "Veuillez réessayer." });
+      }
+    } catch {
+      showModal({ kind: "error", title: "Erreur de connexion", message: "Vérifiez votre connexion internet." });
+    } finally { setLoading(false); }
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="Site web sur mesure" icon="globe" theme={theme}>
-      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
-        <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
-            Nous créons votre site web professionnel depuis 2021. Plus de 50 sites réalisés dans 15 pays.
-          </Text>
-
-          <Pressable
-            onPress={() => setShowPortfolio(!showPortfolio)}
-            style={[ms.portfolioBtn, { borderColor: theme.iconBorder, backgroundColor: theme.iconBg }]}
-          >
-            <Feather name={showPortfolio ? "eye-off" : "eye"} size={15} color={theme.accentIcon} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon }}>
-              {showPortfolio ? "Masquer nos réalisations" : "Voir nos réalisations (13 sites)"}
+    <>
+      {modalEl}
+      <ModalShell visible={visible} onClose={handleClose} title="Site web sur mesure" icon="globe" theme={theme}>
+        {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
+          <>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
+              Nous créons votre site web professionnel depuis 2021. Plus de 50 sites réalisés dans 15 pays.
             </Text>
-          </Pressable>
 
-          {showPortfolio && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
-              {PORTFOLIO_SITES.map((site) => (
-                <TouchableOpacity
-                  key={site.url}
-                  onPress={() => Linking.openURL(site.url)}
-                  style={[ms.portfolioCard, { backgroundColor: theme.surface, borderColor: theme.inputBorder }]}
+            <Pressable
+              onPress={() => setShowPortfolio(!showPortfolio)}
+              style={[ms.portfolioBtn, { borderColor: theme.iconBorder, backgroundColor: theme.iconBg }]}
+            >
+              <Feather name={showPortfolio ? "eye-off" : "eye"} size={15} color={theme.accentIcon} />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon }}>
+                {showPortfolio ? "Masquer nos réalisations" : "Voir nos réalisations (13 sites)"}
+              </Text>
+            </Pressable>
+
+            {showPortfolio && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
+                {PORTFOLIO_SITES.map((site) => (
+                  <TouchableOpacity
+                    key={site.url}
+                    onPress={() => Linking.openURL(site.url)}
+                    style={[ms.portfolioCard, { backgroundColor: theme.surface, borderColor: theme.inputBorder }]}
+                  >
+                    <View style={[ms.portfolioBadge, { backgroundColor: theme.iconBg }]}>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: theme.accentIcon, letterSpacing: 0.2 }}>
+                        {site.badge}
+                      </Text>
+                    </View>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: theme.text, letterSpacing: -0.1 }} numberOfLines={2}>
+                      {site.name}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.textMuted }}>
+                      {site.country}
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+                      <Feather name="external-link" size={11} color={theme.accentIcon} />
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.accentIcon }}>
+                        Voir le site
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+              <Feather name="tag" size={14} color={theme.accentIcon} />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon, letterSpacing: 0.1 }}>
+                {siteType.label} — {priceFmt(siteType.fcfa)}
+              </Text>
+            </View>
+
+            <FieldInput label="Nom du site" value={siteName} onChange={setSiteName} placeholder="Ex: MonSiteWeb" theme={theme} />
+            <FieldInput label="Nom entreprise / organisation" value={company} onChange={setCompany} placeholder="Ex: Social Boost Horizon" theme={theme} />
+
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
+                Type de site *
+              </Text>
+              {SITE_TYPES.map((t) => (
+                <Pressable
+                  key={t.label}
+                  onPress={() => setSiteType(t)}
+                  style={({ pressed }) => [
+                    ms.radioRow,
+                    {
+                      backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
+                      borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
+                    },
+                    pressed && { opacity: 0.9 },
+                  ]}
                 >
-                  <View style={[ms.portfolioBadge, { backgroundColor: theme.iconBg }]}>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: theme.accentIcon, letterSpacing: 0.2 }}>
-                      {site.badge}
-                    </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>{t.label}</Text>
                   </View>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: theme.text, letterSpacing: -0.1 }} numberOfLines={2}>
-                    {site.name}
-                  </Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.textMuted }}>
-                    {site.country}
-                  </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-                    <Feather name="external-link" size={11} color={theme.accentIcon} />
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.accentIcon }}>
-                      Voir le site
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(t.fcfa)}</Text>
+                  {siteType.label === t.label && (
+                    <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
+                  )}
+                </Pressable>
               ))}
-            </ScrollView>
-          )}
+            </View>
 
-          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accentIcon} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon, letterSpacing: 0.1 }}>
-              {siteType.label} — {priceFmt(siteType.fcfa)}
-            </Text>
-          </View>
-
-          <FieldInput label="Nom du site" value={siteName} onChange={setSiteName} placeholder="Ex: MonSiteWeb" theme={theme} />
-          <FieldInput label="Nom entreprise / organisation" value={company} onChange={setCompany} placeholder="Ex: Social Boost Horizon" theme={theme} />
-
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
-              Type de site *
-            </Text>
-            {SITE_TYPES.map((t) => (
-              <Pressable
-                key={t.label}
-                onPress={() => setSiteType(t)}
-                style={({ pressed }) => [
-                  ms.radioRow,
-                  {
-                    backgroundColor: siteType.label === t.label ? theme.iconBg : theme.inputBg,
-                    borderColor: siteType.label === t.label ? theme.accent : theme.inputBorder,
-                  },
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>{t.label}</Text>
-                </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(t.fcfa)}</Text>
-                {siteType.label === t.label && (
-                  <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
-                )}
-              </Pressable>
-            ))}
-          </View>
-
-          <FieldInput label="Budget envisagé" value={budget} onChange={setBudget} placeholder={`Ex: ${priceFmt(siteType.fcfa)}`} theme={theme} />
-          <FieldInput label="Description du projet *" value={desc} onChange={setDesc} placeholder="Fonctionnalités souhaitées..." theme={theme} multiline />
-          <FieldInput label="Couleurs / charte graphique" value={colors2} onChange={setColors2} placeholder="Ex: bleu et blanc..." theme={theme} />
-          <FieldInput label="Sites d'inspiration / références" value={references} onChange={setReferences} placeholder="Ex: apple.com..." theme={theme} />
-          <FieldInput label="Fonctionnalités spécifiques" value={features} onChange={setFeatures} placeholder="Ex: formulaire, blog..." theme={theme} multiline />
-          <TagRow label="Délai souhaité" value={deadline} options={DEADLINES} onSelect={setDeadline} theme={theme} />
-          <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
-          <SubmitButton onPress={submit} loading={loading} theme={theme} />
-        </>
-      )}
-    </ModalShell>
+            <FieldInput label="Budget envisagé" value={budget} onChange={setBudget} placeholder={`Ex: ${priceFmt(siteType.fcfa)}`} theme={theme} />
+            <FieldInput label="Description du projet *" value={desc} onChange={setDesc} placeholder="Fonctionnalités souhaitées..." theme={theme} multiline />
+            <FieldInput label="Couleurs / charte graphique" value={colors2} onChange={setColors2} placeholder="Ex: bleu et blanc..." theme={theme} />
+            <FieldInput label="Sites d'inspiration / références" value={references} onChange={setReferences} placeholder="Ex: apple.com..." theme={theme} />
+            <FieldInput label="Fonctionnalités spécifiques" value={features} onChange={setFeatures} placeholder="Ex: formulaire, blog..." theme={theme} multiline />
+            <TagRow label="Délai souhaité" value={deadline} options={DEADLINES} onSelect={setDeadline} theme={theme} />
+            <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
+            <SubmitButton onPress={submit} loading={loading} theme={theme} />
+          </>
+        )}
+      </ModalShell>
+    </>
   );
 });
 
 // ─── Modal Application ───
-const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
+const AppModal2 = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
+  const { show: showModal, modalEl } = useAppModal();
   const [appName, setAppName] = useState("");
   const [objective, setObjective] = useState("");
   const [platform, setPlatform] = useState(APP_PLATFORMS[0]);
@@ -652,8 +1197,14 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
   const handleClose = () => { onClose(); setTimeout(reset, 400); };
 
   const submit = async () => {
-    if (!desc.trim() && !objective.trim()) { Alert.alert("Requis", "Veuillez décrire votre application."); return; }
-    if (!waPhone.trim()) { Alert.alert("WhatsApp requis", "Entrez votre numéro WhatsApp."); return; }
+    if (!desc.trim() && !objective.trim()) {
+      showModal({ kind: "warning", title: "Description requise", message: "Veuillez décrire votre application." });
+      return;
+    }
+    if (!waPhone.trim()) {
+      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      return;
+    }
     setLoading(true);
     try {
       const r = await postServiceRequest("app", {
@@ -669,72 +1220,79 @@ const AppModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
-    finally { setLoading(false); }
+      } else {
+        showModal({ kind: "error", title: "Échec de l'envoi", message: r?.error ?? "Veuillez réessayer." });
+      }
+    } catch {
+      showModal({ kind: "error", title: "Erreur de connexion", message: "Vérifiez votre connexion internet." });
+    } finally { setLoading(false); }
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="Application mobile" icon="smartphone" theme={theme}>
-      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
-        <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
-            Développons votre application mobile Android / iOS avec support 3 mois inclus.
-          </Text>
-
-          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accentIcon} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon, letterSpacing: 0.1 }}>
-              {pkg.label} — {priceFmt(pkg.fcfa)}
+    <>
+      {modalEl}
+      <ModalShell visible={visible} onClose={handleClose} title="Application mobile" icon="smartphone" theme={theme}>
+        {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
+          <>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
+              Développons votre application mobile Android / iOS avec support 3 mois inclus.
             </Text>
-          </View>
 
-          <FieldInput label="Nom de l'application" value={appName} onChange={setAppName} placeholder="Ex: MyApp Pro" theme={theme} />
-          <FieldInput label="Objectif principal *" value={objective} onChange={setObjective} placeholder="Ex: app e-commerce..." theme={theme} />
-          <TagRow label="Plateforme *" value={platform} options={APP_PLATFORMS} onSelect={setPlatform} theme={theme} />
-          <FieldInput label="Description complète *" value={desc} onChange={setDesc} placeholder="Décrivez votre application..." theme={theme} multiline />
-          <FieldInput label="Fonctionnalités nécessaires" value={features} onChange={setFeatures} placeholder="Ex: authentification, paiement..." theme={theme} multiline />
-          <FieldInput label="Écrans / pages souhaitées" value={screens} onChange={setScreens} placeholder="Ex: accueil, profil, boutique..." theme={theme} />
+            <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+              <Feather name="tag" size={14} color={theme.accentIcon} />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: theme.accentIcon, letterSpacing: 0.1 }}>
+                {pkg.label} — {priceFmt(pkg.fcfa)}
+              </Text>
+            </View>
 
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
-              Package *
-            </Text>
-            {APP_PACKAGES.map((p) => (
-              <Pressable
-                key={p.label}
-                onPress={() => setPkg(p)}
-                style={({ pressed }) => [
-                  ms.radioRow,
-                  {
-                    backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
-                    borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
-                  },
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>{p.label}</Text>
-                </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(p.fcfa)}</Text>
-                {pkg.label === p.label && (
-                  <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
-                )}
-              </Pressable>
-            ))}
-          </View>
+            <FieldInput label="Nom de l'application" value={appName} onChange={setAppName} placeholder="Ex: MyApp Pro" theme={theme} />
+            <FieldInput label="Objectif principal *" value={objective} onChange={setObjective} placeholder="Ex: app e-commerce..." theme={theme} />
+            <TagRow label="Plateforme *" value={platform} options={APP_PLATFORMS} onSelect={setPlatform} theme={theme} />
+            <FieldInput label="Description complète *" value={desc} onChange={setDesc} placeholder="Décrivez votre application..." theme={theme} multiline />
+            <FieldInput label="Fonctionnalités nécessaires" value={features} onChange={setFeatures} placeholder="Ex: authentification, paiement..." theme={theme} multiline />
+            <FieldInput label="Écrans / pages souhaitées" value={screens} onChange={setScreens} placeholder="Ex: accueil, profil, boutique..." theme={theme} />
 
-          <TagRow label="Délai souhaité" value={deadline} options={DEADLINES} onSelect={setDeadline} theme={theme} />
-          <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
-          <SubmitButton onPress={submit} loading={loading} theme={theme} />
-        </>
-      )}
-    </ModalShell>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
+                Package *
+              </Text>
+              {APP_PACKAGES.map((p) => (
+                <Pressable
+                  key={p.label}
+                  onPress={() => setPkg(p)}
+                  style={({ pressed }) => [
+                    ms.radioRow,
+                    {
+                      backgroundColor: pkg.label === p.label ? theme.iconBg : theme.inputBg,
+                      borderColor: pkg.label === p.label ? theme.accent : theme.inputBorder,
+                    },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>{p.label}</Text>
+                  </View>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(p.fcfa)}</Text>
+                  {pkg.label === p.label && (
+                    <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
+                  )}
+                </Pressable>
+              ))}
+            </View>
+
+            <TagRow label="Délai souhaité" value={deadline} options={DEADLINES} onSelect={setDeadline} theme={theme} />
+            <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
+            <SubmitButton onPress={submit} loading={loading} theme={theme} />
+          </>
+        )}
+      </ModalShell>
+    </>
   );
 });
 
 // ─── Modal Pubs ───
 const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
+  const { show: showModal, modalEl } = useAppModal();
   const [adPlatform, setAdPlatform] = useState<"Facebook" | "Instagram">("Facebook");
   const [duration, setDuration] = useState(AD_DURATIONS[1]);
   const [pageLink, setPageLink] = useState("");
@@ -753,8 +1311,14 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
   const handleClose = () => { onClose(); setTimeout(reset, 400); };
 
   const submit = async () => {
-    if (!pageLink.trim()) { Alert.alert("Requis", "Entrez le lien de votre page/profil."); return; }
-    if (!waPhone.trim()) { Alert.alert("WhatsApp requis", "Entrez votre numéro WhatsApp."); return; }
+    if (!pageLink.trim()) {
+      showModal({ kind: "warning", title: "Lien requis", message: "Entrez le lien de votre page/profil." });
+      return;
+    }
+    if (!waPhone.trim()) {
+      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      return;
+    }
     setLoading(true);
     try {
       const r = await postServiceRequest("ads", {
@@ -767,70 +1331,77 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
-    finally { setLoading(false); }
+      } else {
+        showModal({ kind: "error", title: "Échec de l'envoi", message: r?.error ?? "Veuillez réessayer." });
+      }
+    } catch {
+      showModal({ kind: "error", title: "Erreur de connexion", message: "Vérifiez votre connexion internet." });
+    } finally { setLoading(false); }
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="Campagne publicitaire" icon="radio" theme={theme}>
-      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
-        <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
-            Boostez votre visibilité avec nos campagnes Facebook et Instagram ciblées.
-          </Text>
-
-          <TagRow label="Réseau *" value={adPlatform} options={["Facebook", "Instagram"]} onSelect={(v) => setAdPlatform(v as any)} theme={theme} />
-
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
-              Durée de la campagne *
+    <>
+      {modalEl}
+      <ModalShell visible={visible} onClose={handleClose} title="Campagne publicitaire" icon="radio" theme={theme}>
+        {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
+          <>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
+              Boostez votre visibilité avec nos campagnes Facebook et Instagram ciblées.
             </Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              {AD_DURATIONS.map((d) => (
-                <Pressable
-                  key={d.label}
-                  onPress={() => setDuration(d)}
-                  style={({ pressed }) => [
-                    ms.durationTag,
-                    {
-                      backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
-                      borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
-                    },
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: duration.label === d.label ? theme.accentIcon : theme.text }}>
-                    {d.label}
-                  </Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.textMuted }}>
-                    {priceFmt(d.fcfa)}
-                  </Text>
-                </Pressable>
-              ))}
+
+            <TagRow label="Réseau *" value={adPlatform} options={["Facebook", "Instagram"]} onSelect={(v) => setAdPlatform(v as any)} theme={theme} />
+
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
+                Durée de la campagne *
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {AD_DURATIONS.map((d) => (
+                  <Pressable
+                    key={d.label}
+                    onPress={() => setDuration(d)}
+                    style={({ pressed }) => [
+                      ms.durationTag,
+                      {
+                        backgroundColor: duration.label === d.label ? theme.iconBg : theme.inputBg,
+                        borderColor: duration.label === d.label ? theme.accent : theme.inputBorder,
+                      },
+                      pressed && { opacity: 0.9 },
+                    ]}
+                  >
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: duration.label === d.label ? theme.accentIcon : theme.text }}>
+                      {d.label}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: theme.textMuted }}>
+                      {priceFmt(d.fcfa)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-          </View>
 
-          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accentIcon} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: theme.accentIcon, letterSpacing: 0.1 }}>
-              Total : {priceFmt(duration.fcfa)}
-            </Text>
-          </View>
+            <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+              <Feather name="tag" size={14} color={theme.accentIcon} />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: theme.accentIcon, letterSpacing: 0.1 }}>
+                Total : {priceFmt(duration.fcfa)}
+              </Text>
+            </View>
 
-          <FieldInput label="Lien page / profil *" value={pageLink} onChange={setPageLink} placeholder="https://facebook.com/votrepage" theme={theme} keyboardType="url" />
-          <FieldInput label="Lien de la publication" value={postLink} onChange={setPostLink} placeholder="https://facebook.com/publication (optionnel)" theme={theme} keyboardType="url" />
-          <FieldInput label="Observation / cible" value={observation} onChange={setObservation} placeholder="Cible visée, objectif..." theme={theme} multiline />
-          <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
-          <SubmitButton onPress={submit} loading={loading} theme={theme} />
-        </>
-      )}
-    </ModalShell>
+            <FieldInput label="Lien page / profil *" value={pageLink} onChange={setPageLink} placeholder="https://facebook.com/votrepage" theme={theme} keyboardType="url" />
+            <FieldInput label="Lien de la publication" value={postLink} onChange={setPostLink} placeholder="https://facebook.com/publication (optionnel)" theme={theme} keyboardType="url" />
+            <FieldInput label="Observation / cible" value={observation} onChange={setObservation} placeholder="Cible visée, objectif..." theme={theme} multiline />
+            <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
+            <SubmitButton onPress={submit} loading={loading} theme={theme} />
+          </>
+        )}
+      </ModalShell>
+    </>
   );
 });
 
 // ─── Modal Comptes ───
 const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) => {
+  const { show: showModal, modalEl } = useAppModal();
   const [service, setService] = useState(ACCOUNT_SERVICES[0]);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [waCode, setWaCode] = useState("+237");
@@ -854,7 +1425,10 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
   };
 
   const submit = async () => {
-    if (!waPhone.trim()) { Alert.alert("WhatsApp requis", "Entrez votre numéro WhatsApp."); return; }
+    if (!waPhone.trim()) {
+      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      return;
+    }
     const allFields: Record<string, string> = {
       Service: `${service.label} (${priceFmt(service.fcfa)})`, ...fields,
     };
@@ -866,9 +1440,12 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
       if (r?.success) {
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else Alert.alert("Erreur", r?.error ?? "Veuillez réessayer.");
-    } catch { Alert.alert("Erreur", "Vérifiez votre connexion internet."); }
-    finally { setLoading(false); }
+      } else {
+        showModal({ kind: "error", title: "Échec de l'envoi", message: r?.error ?? "Veuillez réessayer." });
+      }
+    } catch {
+      showModal({ kind: "error", title: "Erreur de connexion", message: "Vérifiez votre connexion internet." });
+    } finally { setLoading(false); }
   };
 
   const renderFields = () => {
@@ -1011,59 +1588,64 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
   };
 
   return (
-    <ModalShell visible={visible} onClose={handleClose} title="Comptes et monétisation" icon="award" theme={theme}>
-      {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
-        <>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
-            Choisissez le service et remplissez les informations requises.
-          </Text>
-
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
-              Service souhaité *
+    <>
+      {modalEl}
+      <ModalShell visible={visible} onClose={handleClose} title="Comptes et monétisation" icon="award" theme={theme}>
+        {success ? <SuccessScreen onClose={handleClose} theme={theme} /> : (
+          <>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13.5, color: theme.textMuted, lineHeight: 20 }}>
+              Choisissez le service et remplissez les informations requises.
             </Text>
-            {ACCOUNT_SERVICES.map((svc) => (
-              <Pressable
-                key={svc.label}
-                onPress={() => handleServiceChange(svc)}
-                style={({ pressed }) => [
-                  ms.radioRow,
-                  {
-                    backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
-                    borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
-                  },
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>
-                  {svc.label}
-                </Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(svc.fcfa)}</Text>
-                {service.label === svc.label && (
-                  <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
-                )}
-              </Pressable>
-            ))}
-          </View>
 
-          <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
-            <Feather name="tag" size={14} color={theme.accentIcon} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: theme.accentIcon, letterSpacing: 0.1 }}>
-              {service.label} — {priceFmt(service.fcfa)}
-            </Text>
-          </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: theme.textSecondary, letterSpacing: 0.1 }}>
+                Service souhaité *
+              </Text>
+              {ACCOUNT_SERVICES.map((svc) => (
+                <Pressable
+                  key={svc.label}
+                  onPress={() => handleServiceChange(svc)}
+                  style={({ pressed }) => [
+                    ms.radioRow,
+                    {
+                      backgroundColor: service.label === svc.label ? theme.iconBg : theme.inputBg,
+                      borderColor: service.label === svc.label ? theme.accent : theme.inputBorder,
+                    },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={{ flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: theme.text, letterSpacing: -0.1 }}>
+                    {svc.label}
+                  </Text>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: GOLD_SOFT }}>{priceFmt(svc.fcfa)}</Text>
+                  {service.label === svc.label && (
+                    <Feather name="check-circle" size={17} color={theme.accent} style={{ marginLeft: 8 }} />
+                  )}
+                </Pressable>
+              ))}
+            </View>
 
-          {renderFields()}
+            <View style={[ms.priceBox, { backgroundColor: theme.iconBg, borderColor: theme.iconBorder }]}>
+              <Feather name="tag" size={14} color={theme.accentIcon} />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: theme.accentIcon, letterSpacing: 0.1 }}>
+                {service.label} — {priceFmt(service.fcfa)}
+              </Text>
+            </View>
 
-          <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
-          <SubmitButton onPress={submit} loading={loading} theme={theme} />
-        </>
-      )}
-    </ModalShell>
+            {renderFields()}
+
+            <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
+            <SubmitButton onPress={submit} loading={loading} theme={theme} />
+          </>
+        )}
+      </ModalShell>
+    </>
   );
 });
 
-// ─── Carte service (avec animation spring) ───
+// ═══════════════════════════════════════════════════════════════
+//  Carte service externe (avec animation spring)
+// ═══════════════════════════════════════════════════════════════
 function FeaturedCard({
   svc, theme, isDark, onPress, onInfo,
 }: {
@@ -1106,6 +1688,74 @@ function FeaturedCard({
           <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
             {svc.sub}
           </Text>
+        </View>
+
+        <Pressable
+          style={ms.infoBtn}
+          hitSlop={12}
+          onPress={(e) => { e.stopPropagation?.(); Haptics.selectionAsync(); onInfo(); }}
+        >
+          <Feather name="help-circle" size={18} color={theme.textMuted} />
+        </Pressable>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Carte abonnement à vie
+// ═══════════════════════════════════════════════════════════════
+function LifetimeSubscriptionCard({
+  sub, theme, isDark, onPress, onInfo, priceLabel,
+}: {
+  sub: LifetimeSubscription;
+  theme: any;
+  isDark: boolean;
+  onPress: () => void;
+  onInfo: () => void;
+  priceLabel: string;
+}) {
+  const { scale, onPressIn, onPressOut } = usePressSpring();
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => { onPressIn(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        onPressOut={onPressOut}
+        style={[
+          ms.featuredCard,
+          {
+            backgroundColor: theme.surface,
+            borderColor: sub.accent + "35",
+            shadowColor: isDark ? "#000" : NAVY,
+            shadowOpacity: isDark ? 0.30 : 0.06,
+          },
+        ]}
+      >
+        <View style={[ms.featuredIconBox, { backgroundColor: sub.accent + "18", borderColor: sub.accent + "45" }]}>
+          <Feather name={sub.icon} size={20} color={sub.accent} />
+        </View>
+
+        <View style={ms.featuredRight}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Text style={[ms.featuredTitle, { color: theme.text }]} numberOfLines={1}>
+              {sub.label}
+            </Text>
+            <View style={[ms.featuredBadge, { borderColor: sub.accent + "45", backgroundColor: sub.accent + "12" }]}>
+              <Text style={[ms.featuredBadgeText, { color: sub.accent }]}>
+                {sub.badge}
+              </Text>
+            </View>
+          </View>
+          <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
+            {sub.sub}
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
+            <Feather name="tag" size={11} color={theme.accentIcon} />
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: theme.accentIcon }}>
+              {priceLabel}
+            </Text>
+          </View>
         </View>
 
         <Pressable
@@ -1165,7 +1815,9 @@ function ServiceCard({
   );
 }
 
-// ─── Composant principal ───
+// ═══════════════════════════════════════════════════════════════
+//  Composant principal
+// ═══════════════════════════════════════════════════════════════
 export default function OtherServicesSection() {
   const { user } = useAuth();
   const { isDark: ctxIsDark } = useTheme();
@@ -1200,6 +1852,8 @@ export default function OtherServicesSection() {
 
   const [openModal, setOpenModal] = useState<string | null>(null);
   const [infoService, setInfoService] = useState<(typeof FEATURED_EXTERNAL)[0] | null>(null);
+  const [infoLifetime, setInfoLifetime] = useState<LifetimeSubscription | null>(null);
+  const [purchaseLifetime, setPurchaseLifetime] = useState<LifetimeSubscription | null>(null);
 
   const close = useCallback(() => setOpenModal(null), []);
 
@@ -1210,6 +1864,14 @@ export default function OtherServicesSection() {
 
   const handleInfoTap = useCallback((svc: (typeof FEATURED_EXTERNAL)[0]) => {
     setInfoService(svc);
+  }, []);
+
+  const handleLifetimeTap = useCallback((sub: LifetimeSubscription) => {
+    setPurchaseLifetime(sub);
+  }, []);
+
+  const handleLifetimeInfo = useCallback((sub: LifetimeSubscription) => {
+    setInfoLifetime(sub);
   }, []);
 
   return (
@@ -1237,6 +1899,19 @@ export default function OtherServicesSection() {
             onInfo={() => handleInfoTap(svc)}
           />
         ))}
+
+        {/* ─── Abonnements à vie (2 nouveaux services) ─── */}
+        {LIFETIME_SUBSCRIPTIONS.map((sub) => (
+          <LifetimeSubscriptionCard
+            key={sub.id}
+            sub={sub}
+            theme={theme}
+            isDark={isDark}
+            priceLabel={priceFmt(sub.fcfa)}
+            onPress={() => handleLifetimeTap(sub)}
+            onInfo={() => handleLifetimeInfo(sub)}
+          />
+        ))}
       </View>
 
       {/* Grille services internes */}
@@ -1252,16 +1927,37 @@ export default function OtherServicesSection() {
         ))}
       </View>
 
+      {/* Modales internes */}
       <WebsiteModal visible={openModal === "website"} onClose={close} theme={theme} priceFmt={priceFmt} />
-      <AppModal visible={openModal === "app"} onClose={close} theme={theme} priceFmt={priceFmt} />
+      <AppModal2 visible={openModal === "app"} onClose={close} theme={theme} priceFmt={priceFmt} />
       <AdsModal visible={openModal === "ads"} onClose={close} theme={theme} priceFmt={priceFmt} />
       <AccountsModal visible={openModal === "accounts"} onClose={close} theme={theme} priceFmt={priceFmt} />
 
+      {/* Modale info service externe */}
       <ServiceInfoModal
         visible={infoService !== null}
         onClose={() => setInfoService(null)}
         service={infoService}
         theme={theme}
+      />
+
+      {/* Modale info abonnement à vie */}
+      <LifetimeInfoModal
+        visible={infoLifetime !== null}
+        onClose={() => setInfoLifetime(null)}
+        sub={infoLifetime}
+        theme={theme}
+        priceFmt={priceFmt}
+      />
+
+      {/* Modale achat abonnement à vie */}
+      <LifetimePurchaseModal
+        visible={purchaseLifetime !== null}
+        onClose={() => setPurchaseLifetime(null)}
+        sub={purchaseLifetime}
+        theme={theme}
+        priceFmt={priceFmt}
+        onSuccess={() => { /* Rien à faire côté parent, l'utilisateur est déjà rafraîchi */ }}
       />
     </View>
   );

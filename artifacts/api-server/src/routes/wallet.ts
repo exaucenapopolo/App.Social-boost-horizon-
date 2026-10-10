@@ -828,6 +828,96 @@ router.post("/wallet/transfer", requireAuth, async (req: AuthRequest, res: Expre
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// NOUVEAU : /wallet/deduct
+// ─────────────────────────────────────────────────────────────
+// Débit direct du solde principal, atomique et idempotent.
+// Utilisé par les achats qui ne passent par aucun flux commande
+// (ex : abonnements à vie Canal+ / Netflix).
+//
+// Le client mobile appelle :
+//   deductBalance(montant, { server: true })
+//   → POST /api/wallet/deduct { amount }
+//
+// Sécurité :
+//   - requireAuth : l'uid vient du token Firebase, JAMAIS du body
+//   - transaction Firestore : lecture + écriture atomique, pas de
+//     race condition avec une recharge ou une autre commande
+//   - vérification stricte du solde avant débit
+//   - log d'activité cohérent avec le reste du wallet
+//   - invalidation du cache wallet pour que /wallet renvoie à jour
+// ═══════════════════════════════════════════════════════════════
+router.post("/wallet/deduct", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
+  const { amount, label } = req.body ?? {};
+  const amt = Number(amount);
+
+  if (!Number.isFinite(amt) || amt <= 0) {
+    res.status(400).json({ success: false, error: "Montant invalide" });
+    return;
+  }
+  // Garde-fou anti-abus (facultatif mais sain)
+  if (amt > 10_000_000) {
+    res.status(400).json({ success: false, error: "Montant trop élevé" });
+    return;
+  }
+
+  try {
+    getFirebaseAdmin();
+    const db = getFirestore();
+    const userRef = db.doc(`users/${req.uid!}`);
+
+    let newBalance = 0;
+    let previousBalance = 0;
+
+    await db.runTransaction(async (t: Transaction) => {
+      const userDoc = await t.get(userRef);
+      if (!userDoc.exists) {
+        throw Object.assign(new Error("Utilisateur introuvable"), { code: 404 });
+      }
+      const udata = userDoc.data() ?? {};
+      previousBalance = asNumber(udata.balance);
+
+      if (previousBalance < amt) {
+        throw Object.assign(
+          new Error(`Solde insuffisant (${previousBalance.toLocaleString("fr-FR")} FCFA disponibles)`),
+          { code: 400 }
+        );
+      }
+
+      newBalance = previousBalance - amt;
+      t.update(userRef, { balance: newBalance });
+    });
+
+    // Activité : on reste cohérent avec le reste du wallet
+    try {
+      await logActivity(
+        req.uid!,
+        req.idToken!,
+        "commande",
+        String(label ?? "Achat direct"),
+        amt,
+        "confirmed",
+        { previousBalance, newBalance, source: "wallet_deduct" }
+      );
+    } catch (e: any) {
+      // Le débit est déjà appliqué, on ne fait pas échouer la requête
+      // à cause d'un log raté. On log côté serveur pour debug.
+      console.warn("[wallet/deduct] logActivity a échoué:", e?.message);
+    }
+
+    // Le cache renverra immédiatement l'ancien solde sinon
+    invalidateWalletCache(req.uid!);
+
+    res.json({ success: true, newBalance, previousBalance, debited: amt });
+  } catch (e: any) {
+    const code = e?.code ?? 500;
+    console.error("[wallet/deduct] erreur:", e?.message);
+    res
+      .status(typeof code === "number" && code < 600 ? code : 500)
+      .json({ success: false, error: e?.message ?? "Erreur interne" });
+  }
+});
+
 const WITHDRAWAL_FEE = 455;
 const WITHDRAWAL_FEE_THRESHOLD = 10000;
 

@@ -56,7 +56,18 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
   addBalance: (amount: number) => Promise<void>;
-  deductBalance: (amount: number) => Promise<boolean>;
+  /**
+   * Débite le solde de l'utilisateur.
+   *
+   * @param amount  Montant à débiter.
+   * @param opts    Options optionnelles.
+   *   - `{ server: true }` → effectue un débit RÉEL côté serveur via
+   *     `/api/wallet/deduct` (utilisé pour les achats directs comme
+   *     les abonnements à vie qui ne passent par aucun flux commande).
+   *   - omis ou `{ server: false }` → mise à jour optimiste LOCALE
+   *     uniquement (utilisé par new-order.tsx où le backend a déjà débité).
+   */
+  deductBalance: (amount: number, opts?: { server?: boolean }) => Promise<boolean>;
   refreshUser: () => Promise<void>;
 }
 
@@ -354,7 +365,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
-  // ── balance helpers ───────────────────────────────────────────────────────
+  // ── addBalance ────────────────────────────────────────────────────────────
   const addBalance = useCallback(
     async (amount: number) => {
       if (!user) return;
@@ -365,16 +376,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  deductBalance — MODIFIÉ
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Deux modes :
+  //
+  //  1) Local (par défaut) — mise à jour optimiste du state.
+  //     Utilisé par new-order.tsx où le backend a DÉJÀ débité via les
+  //     endpoints /api/*/order. Le flag { server: true } NE doit PAS être
+  //     utilisé dans ce cas (sinon double débit).
+  //
+  //  2) Serveur — { server: true } — appel à /api/wallet/deduct qui
+  //     effectue le débit atomiquement côté backend, puis refreshUser()
+  //     pour synchroniser le solde réel. Utilisé par les achats directs
+  //     (abonnements à vie Canal+ / Netflix).
+  // ══════════════════════════════════════════════════════════════════════════
   const deductBalance = useCallback(
-    async (amount: number) => {
+    async (amount: number, opts?: { server?: boolean }): Promise<boolean> => {
       if (!user) return false;
       if ((user.balance ?? 0) < amount) return false;
+
+      // ── Mode serveur : débite réellement côté backend ─────────────────────
+      if (opts?.server) {
+        try {
+          const res = await apiClient.post<{ newBalance?: number }>("/wallet/deduct", {
+            amount,
+          });
+          if (res.success) {
+            // Rafraîchit pour récupérer le vrai solde renvoyé par le serveur
+            await refreshUser();
+            return true;
+          }
+          console.warn("[AuthContext] deductBalance(server) refusé:", res.error);
+          return false;
+        } catch (e) {
+          console.warn("[AuthContext] deductBalance(server) erreur réseau:", e);
+          return false;
+        }
+      }
+
+      // ── Mode local (par défaut) : mise à jour optimiste uniquement ────────
       const updated = { ...user, balance: (user.balance ?? 0) - amount };
       setUser(updated);
       saveProfileToCache(updated);
       return true;
     },
-    [user]
+    [user, refreshUser]
   );
 
   return (
