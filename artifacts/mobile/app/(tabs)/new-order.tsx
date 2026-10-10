@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import StarBackground from "@/components/StarBackground";
+import McSearch from "@/components/McSearch";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useOrders } from "@/context/OrdersContext";
@@ -80,7 +81,7 @@ const STORAGE_KEYS = {
   serviceCounts: "@sbh/order/serviceCounts",
 } as const;
 
-const COUNTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 heures
+const COUNTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 async function storageGet<T>(key: string, fallback: T): Promise<T> {
   if (!AsyncStorageModule) return fallback;
@@ -100,10 +101,7 @@ async function storageSet<T>(key: string, value: T): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Idempotence : génération d'un identifiant de soumission unique
-//  Utilisé pour éviter les doubles commandes en cas de timeout réseau.
-//  Le même clientOrderId est réutilisé si l'utilisateur retente
-//  la même soumission (même service, même lien, même quantité).
+//  Idempotence
 // ═══════════════════════════════════════════════════════════════
 function generateClientOrderId(): string {
   const ts = Date.now().toString(36);
@@ -130,6 +128,11 @@ interface ExoService {
   type?: string;
   _rawCategory?: string;
   _provider?: string;
+  _isTraffic?: boolean;
+  _platformKey?: string;
+  _platformLabel?: string;
+  _platformIcon?: string;
+  _platformColor?: string;
 }
 
 interface PlatformData {
@@ -429,6 +432,9 @@ function generateServiceDescription(svcName: string, platform: string): {
   if (n.includes("garanti") || n.includes("guarantee")) quality.push("Garanti");
   const target = isStory ? "story" : isReel ? "reel" : isShort ? "Short" : isVideo ? "vidéo" : isPost ? "publication" : "contenu";
 
+  if (n.includes("traffic") || n.includes("seo") || n.includes("backlink")) {
+    return { what: "Traffic Web / SEO", desc: `Génère du trafic qualifié vers votre site web. Améliore votre SEO et votre visibilité sur les moteurs de recherche.`, linkType: "URL complète de votre site web", howItWorks: "Collez l'URL de votre site. Le trafic provient de sources réelles et naturelles.", quality };
+  }
   if (isLive && (n.includes("viewer") || n.includes("spectateur"))) {
     return { what: "Téléspectateurs en direct", desc: `Envoie des téléspectateurs sur votre live ${plt}, augmentant votre compteur visible en temps réel. Plus votre live semble populaire, plus il est suggéré.`, linkType: "Lien de votre LIVE en cours (pas une vidéo déjà publiée)", howItWorks: "Lancez votre live AVANT de passer la commande, puis collez le lien direct de la diffusion.", warning: "Ne fonctionne QUE sur un live actif. Vérifiez que votre live est bien démarré avant de commander.", quality };
   }
@@ -457,50 +463,352 @@ function generateServiceDescription(svcName: string, platform: string): {
   return { what: "Service de promotion", desc: `Service SMM pour booster votre présence sur ${plt}.`, linkType: "URL de votre page ou contenu", howItWorks: "Fournissez le lien direct de votre contenu et passez la commande.", quality };
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  PLATFORM_META — Étendu avec 200+ plateformes
+// ═══════════════════════════════════════════════════════════════
 const PLATFORM_META: Record<string, { label: string; iconUrl: string; color: string }> = {
-  instagram:   { label: "Instagram",    iconUrl: "https://img.icons8.com/color/96/instagram-new.png",            color: "#E1306C" },
-  tiktok:      { label: "TikTok",       iconUrl: "https://img.icons8.com/color/96/tiktok.png",                   color: "#69C9D0" },
-  youtube:     { label: "YouTube",      iconUrl: "https://img.icons8.com/color/96/youtube-play.png",             color: "#FF0000" },
-  facebook:    { label: "Facebook",     iconUrl: "https://img.icons8.com/color/96/facebook-new.png",             color: "#1877F2" },
-  twitter:     { label: "Twitter / X",  iconUrl: "https://img.icons8.com/color/96/twitter--v1.png",              color: "#1DA1F2" },
-  telegram:    { label: "Telegram",     iconUrl: "https://img.icons8.com/color/96/telegram-app.png",             color: "#0088CC" },
-  whatsapp:    { label: "WhatsApp",     iconUrl: "https://img.icons8.com/color/96/whatsapp--v1.png",             color: "#25D366" },
-  threads:     { label: "Threads",      iconUrl: "https://img.icons8.com/ios-filled/96/threads.png",             color: "#878787" },
-  snapchat:    { label: "Snapchat",     iconUrl: "https://img.icons8.com/color/96/snapchat.png",                 color: "#FFFC00" },
-  linkedin:    { label: "LinkedIn",     iconUrl: "https://img.icons8.com/color/96/linkedin.png",                 color: "#0A66C2" },
-  pinterest:   { label: "Pinterest",    iconUrl: "https://img.icons8.com/color/96/pinterest.png",                color: "#E60023" },
-  reddit:      { label: "Reddit",       iconUrl: "https://img.icons8.com/color/96/reddit.png",                   color: "#FF4500" },
-  tumblr:      { label: "Tumblr",       iconUrl: "https://img.icons8.com/color/96/tumblr--v1.png",               color: "#35465C" },
-  quora:       { label: "Quora",        iconUrl: "https://img.icons8.com/color/96/quora.png",                    color: "#B92B27" },
-  discord:     { label: "Discord",      iconUrl: "https://img.icons8.com/color/96/discord-logo.png",             color: "#5865F2" },
-  clubhouse:   { label: "Clubhouse",    iconUrl: "https://img.icons8.com/color/96/clubhouse.png",                color: "#F1EFE0" },
-  vimeo:       { label: "Vimeo",        iconUrl: "https://img.icons8.com/color/96/vimeo.png",                    color: "#19B7EA" },
-  spotify:     { label: "Spotify",      iconUrl: "https://img.icons8.com/color/96/spotify--v1.png",              color: "#1DB954" },
-  soundcloud:  { label: "SoundCloud",   iconUrl: "https://img.icons8.com/color/96/soundcloud.png",               color: "#FF5500" },
-  deezer:      { label: "Deezer",       iconUrl: "https://img.icons8.com/color/96/deezer.png",                   color: "#FF0092" },
-  applemusic:  { label: "Apple Music",  iconUrl: "https://img.icons8.com/color/96/apple-music.png",              color: "#FB2D48" },
-  shazam:      { label: "Shazam",       iconUrl: "https://img.icons8.com/color/96/shazam.png",                   color: "#2A8AFF" },
-  twitch:      { label: "Twitch",       iconUrl: "https://img.icons8.com/color/96/twitch.png",                   color: "#9146FF" },
-  kick:        { label: "Kick",         iconUrl: "https://img.icons8.com/color/96/streaming.png",                color: "#53FC18" },
-  netflix:     { label: "Netflix",      iconUrl: "https://img.icons8.com/color/96/netflix.png",                  color: "#E50914" },
-  amazon:      { label: "Amazon",       iconUrl: "https://img.icons8.com/color/96/amazon.png",                   color: "#FF9900" },
-  gmail:       { label: "Gmail",        iconUrl: "https://img.icons8.com/color/96/gmail.png",                    color: "#EA4335" },
-  outlook:     { label: "Outlook",      iconUrl: "https://img.icons8.com/color/96/microsoft-outlook-2019.png",   color: "#0078D4" },
-  github:      { label: "GitHub",       iconUrl: "https://img.icons8.com/color/96/github--v1.png",               color: "#8957E5" },
-  google:      { label: "Google",       iconUrl: "https://img.icons8.com/color/96/google-logo.png",              color: "#4285F4" },
-  googleplay:  { label: "Google Play",  iconUrl: "https://img.icons8.com/color/96/google-play.png",              color: "#01875F" },
-  appstore:    { label: "App Store",    iconUrl: "https://img.icons8.com/color/96/apple-app-store--v3.png",      color: "#0D96F6" },
-  steam:       { label: "Steam",        iconUrl: "https://img.icons8.com/color/96/steam.png",                    color: "#66C0F4" },
-  xbox:        { label: "Xbox",         iconUrl: "https://img.icons8.com/color/96/xbox.png",                     color: "#107C10" },
-  ubisoft:     { label: "Ubisoft",      iconUrl: "https://img.icons8.com/color/96/controller.png",               color: "#0070CC" },
-  freefire:    { label: "Free Fire",    iconUrl: "https://img.icons8.com/color/96/fire-element.png",             color: "#FF5722" },
-  chatgpt:     { label: "ChatGPT",      iconUrl: "https://img.icons8.com/color/96/chatgpt.png",                  color: "#10A37F" },
-  deepseek:    { label: "DeepSeek",     iconUrl: "https://img.icons8.com/color/96/artificial-intelligence.png",  color: "#4D6BFE" },
-  canva:       { label: "Canva",        iconUrl: "https://img.icons8.com/color/96/canva.png",                    color: "#00C4CC" },
-  envato:      { label: "Envato",       iconUrl: "https://img.icons8.com/color/96/envato.png",                   color: "#81B441" },
-  flaticon:    { label: "Flaticon",     iconUrl: "https://img.icons8.com/color/96/star--v1.png",                 color: "#FF5733" },
+  // ── Réseaux sociaux majeurs ──
+  instagram:   { label: "Instagram",    iconUrl: "https://cdn.simpleicons.org/instagram/E4405F",    color: "#E4405F" },
+  tiktok:      { label: "TikTok",       iconUrl: "https://cdn.simpleicons.org/tiktok/000000",       color: "#69C9D0" },
+  youtube:     { label: "YouTube",      iconUrl: "https://cdn.simpleicons.org/youtube/FF0000",      color: "#FF0000" },
+  facebook:    { label: "Facebook",     iconUrl: "https://cdn.simpleicons.org/facebook/1877F2",     color: "#1877F2" },
+  twitter:     { label: "X (Twitter)",  iconUrl: "https://cdn.simpleicons.org/x/000000",            color: "#000000" },
+  telegram:    { label: "Telegram",     iconUrl: "https://cdn.simpleicons.org/telegram/26A5E4",     color: "#26A5E4" },
+  whatsapp:    { label: "WhatsApp",     iconUrl: "https://cdn.simpleicons.org/whatsapp/25D366",     color: "#25D366" },
+  threads:     { label: "Threads",      iconUrl: "https://cdn.simpleicons.org/threads/000000",      color: "#000000" },
+  snapchat:    { label: "Snapchat",     iconUrl: "https://cdn.simpleicons.org/snapchat/FFFC00",     color: "#FFFC00" },
+  linkedin:    { label: "LinkedIn",     iconUrl: "https://cdn.simpleicons.org/linkedin/0A66C2",     color: "#0A66C2" },
+  pinterest:   { label: "Pinterest",    iconUrl: "https://cdn.simpleicons.org/pinterest/E60023",    color: "#E60023" },
+  reddit:      { label: "Reddit",       iconUrl: "https://cdn.simpleicons.org/reddit/FF4500",       color: "#FF4500" },
+  tumblr:      { label: "Tumblr",       iconUrl: "https://cdn.simpleicons.org/tumblr/36465D",       color: "#36465D" },
+  quora:       { label: "Quora",        iconUrl: "https://cdn.simpleicons.org/quora/B92B27",        color: "#B92B27" },
+  discord:     { label: "Discord",      iconUrl: "https://cdn.simpleicons.org/discord/5865F2",      color: "#5865F2" },
+  clubhouse:   { label: "Clubhouse",    iconUrl: "https://cdn.simpleicons.org/clubhouse/F1EFE0",    color: "#F1EFE0" },
+  vimeo:       { label: "Vimeo",        iconUrl: "https://cdn.simpleicons.org/vimeo/1AB7EA",        color: "#1AB7EA" },
+  mastodon:    { label: "Mastodon",     iconUrl: "https://cdn.simpleicons.org/mastodon/6364FF",     color: "#6364FF" },
+  bluesky:     { label: "Bluesky",      iconUrl: "https://cdn.simpleicons.org/bluesky/0285FF",      color: "#0285FF" },
+  vk:          { label: "VK",           iconUrl: "https://cdn.simpleicons.org/vk/0077FF",           color: "#0077FF" },
+  okru:        { label: "OK.ru",        iconUrl: "https://cdn.simpleicons.org/odnoklassniki/EE8208",color: "#EE8208" },
+
+  // ── Streaming musical ──
+  spotify:     { label: "Spotify",      iconUrl: "https://cdn.simpleicons.org/spotify/1DB954",      color: "#1DB954" },
+  soundcloud:  { label: "SoundCloud",   iconUrl: "https://cdn.simpleicons.org/soundcloud/FF5500",   color: "#FF5500" },
+  audiomack:   { label: "Audiomack",    iconUrl: "https://cdn.simpleicons.org/audiomack/FFA200",    color: "#FFA200" },
+  boomplay:    { label: "Boomplay",     iconUrl: "https://cdn.simpleicons.org/boomplay/FF6600",     color: "#FF6600" },
+  deezer:      { label: "Deezer",       iconUrl: "https://cdn.simpleicons.org/deezer/A238A2",       color: "#A238A2" },
+  applemusic:  { label: "Apple Music",  iconUrl: "https://cdn.simpleicons.org/applemusic/FA243C",   color: "#FA243C" },
+  mixcloud:    { label: "Mixcloud",     iconUrl: "https://cdn.simpleicons.org/mixcloud/5000FF",     color: "#5000FF" },
+  shazam:      { label: "Shazam",       iconUrl: "https://cdn.simpleicons.org/shazam/0088FF",       color: "#0088FF" },
+  napster:     { label: "Napster",      iconUrl: "https://cdn.simpleicons.org/napster/00A2E8",      color: "#00A2E8" },
+  tidal:       { label: "Tidal",        iconUrl: "https://cdn.simpleicons.org/tidal/000000",        color: "#000000" },
+  anghami:     { label: "Anghami",      iconUrl: "https://cdn.simpleicons.org/anghami/8E24AA",      color: "#8E24AA" },
+  jiosaavn:    { label: "JioSaavn",     iconUrl: "https://cdn.simpleicons.org/jiosaavn/2BC5B4",     color: "#2BC5B4" },
+  resso:       { label: "Resso",        iconUrl: "https://cdn.simpleicons.org/resso/FE2C55",        color: "#FE2C55" },
+  gaana:       { label: "Gaana",        iconUrl: "https://cdn.simpleicons.org/gaana/E5232D",        color: "#E5232D" },
+  wynk:        { label: "Wynk",         iconUrl: "https://cdn.simpleicons.org/wynk/EE1B24",         color: "#EE1B24" },
+
+  // ── Streaming vidéo / Live ──
+  twitch:      { label: "Twitch",       iconUrl: "https://cdn.simpleicons.org/twitch/9146FF",       color: "#9146FF" },
+  kick:        { label: "Kick",         iconUrl: "https://cdn.simpleicons.org/kick/53FC18",         color: "#53FC18" },
+  trovo:       { label: "Trovo",        iconUrl: "https://cdn.simpleicons.org/trovo/00B5A0",        color: "#00B5A0" },
+  rumble:      { label: "Rumble",       iconUrl: "https://cdn.simpleicons.org/rumble/85C742",       color: "#85C742" },
+  odysee:      { label: "Odysee",       iconUrl: "https://cdn.simpleicons.org/odysee/EF1970",       color: "#EF1970" },
+  bitchute:    { label: "BitChute",     iconUrl: "https://cdn.simpleicons.org/bitchute/E4041E",     color: "#E4041E" },
+  dailymotion: { label: "Dailymotion",  iconUrl: "https://cdn.simpleicons.org/dailymotion/0066DC",  color: "#0066DC" },
+  veoh:        { label: "Veoh",         iconUrl: "https://cdn.simpleicons.org/veoh/FF6600",         color: "#FF6600" },
+  rutube:      { label: "Rutube",       iconUrl: "https://cdn.simpleicons.org/rutube/000000",       color: "#000000" },
+
+  // ── Messagerie ──
+  viber:       { label: "Viber",        iconUrl: "https://cdn.simpleicons.org/viber/665CAC",        color: "#665CAC" },
+  line:        { label: "LINE",         iconUrl: "https://cdn.simpleicons.org/line/00C300",         color: "#00C300" },
+  wechat:      { label: "WeChat",       iconUrl: "https://cdn.simpleicons.org/wechat/07C160",       color: "#07C160" },
+  kakaotalk:   { label: "KakaoTalk",    iconUrl: "https://cdn.simpleicons.org/kakaotalk/FFCD00",    color: "#FFCD00" },
+  zalo:        { label: "Zalo",         iconUrl: "https://cdn.simpleicons.org/zalo/0068FF",         color: "#0068FF" },
+  signal:      { label: "Signal",       iconUrl: "https://cdn.simpleicons.org/signal/3A76F0",       color: "#3A76F0" },
+  skype:       { label: "Skype",        iconUrl: "https://cdn.simpleicons.org/skype/00AFF0",        color: "#00AFF0" },
+
+  // ── Rencontres ──
+  tinder:      { label: "Tinder",       iconUrl: "https://cdn.simpleicons.org/tinder/FD5061",       color: "#FD5061" },
+  bumble:      { label: "Bumble",       iconUrl: "https://cdn.simpleicons.org/bumble/FFC629",       color: "#FFC629" },
+  badoo:       { label: "Badoo",        iconUrl: "https://cdn.simpleicons.org/badoo/783BF9",        color: "#783BF9" },
+  grindr:      { label: "Grindr",       iconUrl: "https://cdn.simpleicons.org/grindr/F5AC00",       color: "#F5AC00" },
+  hinge:       { label: "Hinge",        iconUrl: "https://cdn.simpleicons.org/hinge/000000",        color: "#000000" },
+  okcupid:     { label: "OkCupid",      iconUrl: "https://cdn.simpleicons.org/okcupid/0500BE",      color: "#0500BE" },
+  tagged:      { label: "Tagged",       iconUrl: "https://cdn.simpleicons.org/tagged/00A9E0",       color: "#00A9E0" },
+
+  // ── Gaming ──
+  roblox:      { label: "Roblox",       iconUrl: "https://cdn.simpleicons.org/roblox/E2231A",       color: "#E2231A" },
+  pubg:        { label: "PUBG",         iconUrl: "https://cdn.simpleicons.org/pubg/F2A900",         color: "#F2A900" },
+  freefire:    { label: "Free Fire",    iconUrl: "https://cdn.simpleicons.org/garena/FF6B00",       color: "#FF6B00" },
+  callofduty:  { label: "Call of Duty", iconUrl: "https://cdn.simpleicons.org/callofduty/000000",   color: "#000000" },
+  fortnite:    { label: "Fortnite",     iconUrl: "https://cdn.simpleicons.org/fortnite/000000",     color: "#000000" },
+  minecraft:   { label: "Minecraft",    iconUrl: "https://cdn.simpleicons.org/minecraft/62B47A",    color: "#62B47A" },
+  genshin:     { label: "Genshin",      iconUrl: "https://cdn.simpleicons.org/genshinimpact/3B4255",color: "#3B4255" },
+  honkai:      { label: "Honkai",       iconUrl: "https://cdn.simpleicons.org/honkai/FF6600",       color: "#FF6600" },
+  valorant:    { label: "Valorant",     iconUrl: "https://cdn.simpleicons.org/valorant/FF4655",     color: "#FF4655" },
+  leagueoflegends:{ label: "League of Legends", iconUrl: "https://cdn.simpleicons.org/leagueoflegends/C89B3C", color: "#C89B3C" },
+  dota:        { label: "Dota 2",       iconUrl: "https://cdn.simpleicons.org/dota2/A53B2A",        color: "#A53B2A" },
+  csgo:        { label: "CS:GO / CS2",  iconUrl: "https://cdn.simpleicons.org/counterstrike/000000",color: "#000000" },
+  apexlegends: { label: "Apex Legends", iconUrl: "https://cdn.simpleicons.org/apexlegends/DA292A",  color: "#DA292A" },
+  overwatch:   { label: "Overwatch",    iconUrl: "https://cdn.simpleicons.org/overwatch/F99E1B",    color: "#F99E1B" },
+  rocketleague:{ label: "Rocket League",iconUrl: "https://cdn.simpleicons.org/rocketleague/0078F2", color: "#0078F2" },
+  clashofclans:{ label: "Clash of Clans",iconUrl: "https://cdn.simpleicons.org/clashofclans/FFFFFF",color: "#C7A44D" },
+  clashroyale: { label: "Clash Royale", iconUrl: "https://cdn.simpleicons.org/clashroyale/FFFFFF",  color: "#4B8BFF" },
+  brawlstars:  { label: "Brawl Stars",  iconUrl: "https://cdn.simpleicons.org/brawlstars/FFFFFF",   color: "#FFC107" },
+  hayday:      { label: "Hay Day",      iconUrl: "https://cdn.simpleicons.org/hayday/8CC63F",       color: "#8CC63F" },
+  mobilelegends:{ label: "Mobile Legends",iconUrl: "https://cdn.simpleicons.org/mobilelegends/1A4B8C",color: "#1A4B8C" },
+  arenaofvalor:{ label: "Arena of Valor",iconUrl: "https://cdn.simpleicons.org/arenaofvalor/FF6600",color: "#FF6600" },
+  wildrift:    { label: "Wild Rift",    iconUrl: "https://cdn.simpleicons.org/leagueoflegends/C89B3C",color: "#C89B3C" },
+  steam:       { label: "Steam",        iconUrl: "https://cdn.simpleicons.org/steam/66C0F4",        color: "#66C0F4" },
+  xbox:        { label: "Xbox",         iconUrl: "https://cdn.simpleicons.org/xbox/107C10",         color: "#107C10" },
+  playstation: { label: "PlayStation",  iconUrl: "https://cdn.simpleicons.org/playstation/003791",  color: "#003791" },
+  nintendo:    { label: "Nintendo",     iconUrl: "https://cdn.simpleicons.org/nintendoswitch/E60012",color: "#E60012" },
+  ubisoft:     { label: "Ubisoft",      iconUrl: "https://cdn.simpleicons.org/ubisoft/0070CC",      color: "#0070CC" },
+  epicgames:   { label: "Epic Games",   iconUrl: "https://cdn.simpleicons.org/epicgames/313131",    color: "#313131" },
+  riotgames:   { label: "Riot Games",   iconUrl: "https://cdn.simpleicons.org/riotgames/D32936",    color: "#D32936" },
+  blizzard:    { label: "Blizzard",     iconUrl: "https://cdn.simpleicons.org/blizzard/148EFF",     color: "#148EFF" },
+  garena:      { label: "Garena",       iconUrl: "https://cdn.simpleicons.org/garena/FF0000",       color: "#FF0000" },
+  pokemon:     { label: "Pokémon",      iconUrl: "https://cdn.simpleicons.org/pokemon/FFCB05",      color: "#FFCB05" },
+  fifa:        { label: "FIFA",         iconUrl: "https://cdn.simpleicons.org/ea/000000",           color: "#000000" },
+  nba2k:       { label: "NBA 2K",       iconUrl: "https://cdn.simpleicons.org/nba/1D428A",          color: "#1D428A" },
+  gta:         { label: "GTA",          iconUrl: "https://cdn.simpleicons.org/grandtheftauto/000000",color: "#000000" },
+  amongus:     { label: "Among Us",     iconUrl: "https://cdn.simpleicons.org/amongus/000000",      color: "#000000" },
+  slither:     { label: "Slither.io",   iconUrl: "https://cdn.simpleicons.org/slither/00FF00",      color: "#00FF00" },
+  agario:      { label: "Agar.io",      iconUrl: "https://cdn.simpleicons.org/agario/00FF00",       color: "#00FF00" },
+  diepio:      { label: "Diep.io",      iconUrl: "https://cdn.simpleicons.org/diepio/00FF00",       color: "#00FF00" },
+  skribbl:     { label: "Skribbl.io",   iconUrl: "https://cdn.simpleicons.org/skribbl/FF6600",      color: "#FF6600" },
+  krunker:     { label: "Krunker.io",   iconUrl: "https://cdn.simpleicons.org/krunker/FF6600",      color: "#FF6600" },
+  fallguys:    { label: "Fall Guys",    iconUrl: "https://cdn.simpleicons.org/fallguys/FF6600",     color: "#FF6600" },
+
+  // ── Streaming TV / Films ──
+  netflix:     { label: "Netflix",      iconUrl: "https://cdn.simpleicons.org/netflix/E50914",      color: "#E50914" },
+  disneyplus:  { label: "Disney+",      iconUrl: "https://cdn.simpleicons.org/disneyplus/113CCF",   color: "#113CCF" },
+  hulu:        { label: "Hulu",         iconUrl: "https://cdn.simpleicons.org/hulu/1CE783",         color: "#1CE783" },
+  primevideo:  { label: "Prime Video",  iconUrl: "https://cdn.simpleicons.org/amazonprime/FF9900",  color: "#FF9900" },
+  hbo:         { label: "HBO Max",      iconUrl: "https://cdn.simpleicons.org/hbo/5822B4",          color: "#5822B4" },
+  appletv:     { label: "Apple TV+",    iconUrl: "https://cdn.simpleicons.org/appletv/000000",      color: "#000000" },
+  paramount:   { label: "Paramount+",   iconUrl: "https://cdn.simpleicons.org/paramountplus/0064FF",color: "#0064FF" },
+  peacock:     { label: "Peacock",      iconUrl: "https://cdn.simpleicons.org/peacock/000000",      color: "#000000" },
+  crunchyroll: { label: "Crunchyroll",  iconUrl: "https://cdn.simpleicons.org/crunchyroll/F47521",  color: "#F47521" },
+  funimation:  { label: "Funimation",   iconUrl: "https://cdn.simpleicons.org/funimation/5B0BB5",   color: "#5B0BB5" },
+  canalplus:   { label: "Canal+",       iconUrl: "https://cdn.simpleicons.org/canalplus/000000",    color: "#000000" },
+  bein:        { label: "beIN Sports",  iconUrl: "https://cdn.simpleicons.org/bein/8A2BE2",         color: "#8A2BE2" },
+  dazn:        { label: "DAZN",         iconUrl: "https://cdn.simpleicons.org/dazn/FCFF00",         color: "#FCFF00" },
+  espn:        { label: "ESPN",         iconUrl: "https://cdn.simpleicons.org/espn/FF0000",         color: "#FF0000" },
+  skysports:   { label: "Sky Sports",   iconUrl: "https://cdn.simpleicons.org/skysports/0072C9",    color: "#0072C9" },
+  fubotv:      { label: "FuboTV",       iconUrl: "https://cdn.simpleicons.org/fubotv/FF6A00",       color: "#FF6A00" },
+  youtubetv:   { label: "YouTube TV",   iconUrl: "https://cdn.simpleicons.org/youtubetv/FF0000",    color: "#FF0000" },
+  sling:       { label: "Sling TV",     iconUrl: "https://cdn.simpleicons.org/sling/00A6D6",        color: "#00A6D6" },
+  philo:       { label: "Philo",        iconUrl: "https://cdn.simpleicons.org/philo/00B4B0",        color: "#00B4B0" },
+  tubi:        { label: "Tubi",         iconUrl: "https://cdn.simpleicons.org/tubi/FF6600",         color: "#FF6600" },
+  pluto:       { label: "Pluto TV",     iconUrl: "https://cdn.simpleicons.org/plutotv/000000",      color: "#000000" },
+  roku:        { label: "Roku",         iconUrl: "https://cdn.simpleicons.org/roku/6F1AB1",         color: "#6F1AB1" },
+  plex:        { label: "Plex",         iconUrl: "https://cdn.simpleicons.org/plex/E5A00D",         color: "#E5A00D" },
+  kodi:        { label: "Kodi",         iconUrl: "https://cdn.simpleicons.org/kodi/17B2E7",         color: "#17B2E7" },
+
+  // ── E-commerce ──
+  amazon:      { label: "Amazon",       iconUrl: "https://cdn.simpleicons.org/amazon/FF9900",       color: "#FF9900" },
+  ebay:        { label: "eBay",         iconUrl: "https://cdn.simpleicons.org/ebay/E53238",         color: "#E53238" },
+  etsy:        { label: "Etsy",         iconUrl: "https://cdn.simpleicons.org/etsy/F45800",         color: "#F45800" },
+  shopify:     { label: "Shopify",      iconUrl: "https://cdn.simpleicons.org/shopify/7AB55C",      color: "#7AB55C" },
+  aliexpress:  { label: "AliExpress",   iconUrl: "https://cdn.simpleicons.org/aliexpress/FF4747",   color: "#FF4747" },
+  alibaba:     { label: "Alibaba",      iconUrl: "https://cdn.simpleicons.org/alibaba/FF6A00",      color: "#FF6A00" },
+  wish:        { label: "Wish",         iconUrl: "https://cdn.simpleicons.org/wish/2FB7EC",         color: "#2FB7EC" },
+  shopee:      { label: "Shopee",       iconUrl: "https://cdn.simpleicons.org/shopee/EE4D2D",       color: "#EE4D2D" },
+  lazada:      { label: "Lazada",       iconUrl: "https://cdn.simpleicons.org/lazada/0F146D",       color: "#0F146D" },
+  tokopedia:   { label: "Tokopedia",    iconUrl: "https://cdn.simpleicons.org/tokopedia/42B549",    color: "#42B549" },
+  mercadolibre:{ label: "Mercado Libre",iconUrl: "https://cdn.simpleicons.org/mercadolibre/FFE600", color: "#FFE600" },
+  flipkart:    { label: "Flipkart",     iconUrl: "https://cdn.simpleicons.org/flipkart/2874F0",     color: "#2874F0" },
+  jumia:       { label: "Jumia",        iconUrl: "https://cdn.simpleicons.org/jumia/F68B1E",        color: "#F68B1E" },
+  avito:       { label: "Avito",        iconUrl: "https://cdn.simpleicons.org/avito/04E061",        color: "#04E061" },
+  olx:         { label: "OLX",          iconUrl: "https://cdn.simpleicons.org/olx/000000",          color: "#000000" },
+
+  // ── Cloud / Stockage ──
+  dropbox:     { label: "Dropbox",      iconUrl: "https://cdn.simpleicons.org/dropbox/0061FF",      color: "#0061FF" },
+  googledrive: { label: "Google Drive", iconUrl: "https://cdn.simpleicons.org/googledrive/4285F4",  color: "#4285F4" },
+  onedrive:    { label: "OneDrive",     iconUrl: "https://cdn.simpleicons.org/microsoftonedrive/0078D4",color: "#0078D4" },
+  mega:        { label: "MEGA",         iconUrl: "https://cdn.simpleicons.org/mega/D9272E",         color: "#D9272E" },
+  turbobit:    { label: "Turbobit",     iconUrl: "https://cdn.simpleicons.org/turbobit/000000",     color: "#000000" },
+  mediafire:   { label: "MediaFire",    iconUrl: "https://cdn.simpleicons.org/mediafire/1299F3",    color: "#1299F3" },
+  "1fichier":  { label: "1fichier",     iconUrl: "https://cdn.simpleicons.org/1fichier/000000",     color: "#000000" },
+  zippyshare:  { label: "Zippyshare",   iconUrl: "https://cdn.simpleicons.org/zippyshare/000000",   color: "#000000" },
+
+  // ── IA / Productivité ──
+  chatgpt:     { label: "ChatGPT",      iconUrl: "https://cdn.simpleicons.org/openai/412991",       color: "#412991" },
+  deepseek:    { label: "DeepSeek",     iconUrl: "https://cdn.simpleicons.org/deepseek/4D6BFE",     color: "#4D6BFE" },
+  claude:      { label: "Claude",       iconUrl: "https://cdn.simpleicons.org/anthropic/D97757",    color: "#D97757" },
+  gemini:      { label: "Gemini",       iconUrl: "https://cdn.simpleicons.org/googlegemini/8E75B2", color: "#8E75B2" },
+  canva:       { label: "Canva",        iconUrl: "https://cdn.simpleicons.org/canva/00C4CC",        color: "#00C4CC" },
+  notion:      { label: "Notion",       iconUrl: "https://cdn.simpleicons.org/notion/000000",       color: "#000000" },
+  grammarly:   { label: "Grammarly",    iconUrl: "https://cdn.simpleicons.org/grammarly/15C39A",    color: "#15C39A" },
+  quillbot:    { label: "QuillBot",     iconUrl: "https://cdn.simpleicons.org/quillbot/00B4D8",     color: "#00B4D8" },
+  midjourney:  { label: "Midjourney",   iconUrl: "https://cdn.simpleicons.org/midjourney/000000",   color: "#000000" },
+  dalle:       { label: "DALL·E",       iconUrl: "https://cdn.simpleicons.org/openai/412991",       color: "#412991" },
+  stablediffusion:{ label: "Stable Diffusion",iconUrl: "https://cdn.simpleicons.org/stablediffusion/000000",color: "#000000" },
+  figma:       { label: "Figma",        iconUrl: "https://cdn.simpleicons.org/figma/F24E1E",        color: "#F24E1E" },
+  adobe:       { label: "Adobe",        iconUrl: "https://cdn.simpleicons.org/adobe/FF0000",        color: "#FF0000" },
+  envato:      { label: "Envato",       iconUrl: "https://cdn.simpleicons.org/envato/81B441",       color: "#81B441" },
+  flaticon:    { label: "Flaticon",     iconUrl: "https://cdn.simpleicons.org/flaticon/FF5733",     color: "#FF5733" },
+  shutterstock:{ label: "Shutterstock", iconUrl: "https://cdn.simpleicons.org/shutterstock/EE2B24", color: "#EE2B24" },
+  freepik:     { label: "Freepik",      iconUrl: "https://cdn.simpleicons.org/freepik/1273EB",      color: "#1273EB" },
+  unsplash:    { label: "Unsplash",     iconUrl: "https://cdn.simpleicons.org/unsplash/000000",     color: "#000000" },
+  pexels:      { label: "Pexels",       iconUrl: "https://cdn.simpleicons.org/pexels/05A081",       color: "#05A081" },
+
+  // ── Éducation ──
+  duolingo:    { label: "Duolingo",     iconUrl: "https://cdn.simpleicons.org/duolingo/58CC02",     color: "#58CC02" },
+  coursera:    { label: "Coursera",     iconUrl: "https://cdn.simpleicons.org/coursera/0056D2",     color: "#0056D2" },
+  udemy:       { label: "Udemy",        iconUrl: "https://cdn.simpleicons.org/udemy/A435F0",        color: "#A435F0" },
+  skillshare:  { label: "Skillshare",   iconUrl: "https://cdn.simpleicons.org/skillshare/00FF84",   color: "#00FF84" },
+  masterclass: { label: "MasterClass",  iconUrl: "https://cdn.simpleicons.org/masterclass/E5002B",  color: "#E5002B" },
+  khanacademy: { label: "Khan Academy", iconUrl: "https://cdn.simpleicons.org/khanacademy/14BF96",  color: "#14BF96" },
+  brilliant:   { label: "Brilliant",    iconUrl: "https://cdn.simpleicons.org/brilliant/2B6CB0",    color: "#2B6CB0" },
+  codecademy:  { label: "Codecademy",   iconUrl: "https://cdn.simpleicons.org/codecademy/1F4056",   color: "#1F4056" },
+  domestika:   { label: "Domestika",    iconUrl: "https://cdn.simpleicons.org/domestika/000000",    color: "#000000" },
+
+  // ── SaaS / Business ──
+  microsoft:   { label: "Microsoft",    iconUrl: "https://cdn.simpleicons.org/microsoft/00A4EF",    color: "#00A4EF" },
+  googleworkspace:{ label: "Google Workspace",iconUrl: "https://cdn.simpleicons.org/google/4285F4", color: "#4285F4" },
+  slack:       { label: "Slack",        iconUrl: "https://cdn.simpleicons.org/slack/4A154B",        color: "#4A154B" },
+  zoom:        { label: "Zoom",         iconUrl: "https://cdn.simpleicons.org/zoom/2D8CFF",         color: "#2D8CFF" },
+  msteams:     { label: "Microsoft Teams",iconUrl: "https://cdn.simpleicons.org/microsoftteams/6264A7",color: "#6264A7" },
+  trello:      { label: "Trello",       iconUrl: "https://cdn.simpleicons.org/trello/0052CC",       color: "#0052CC" },
+  asana:       { label: "Asana",        iconUrl: "https://cdn.simpleicons.org/asana/F06A6A",        color: "#F06A6A" },
+  monday:      { label: "Monday.com",   iconUrl: "https://cdn.simpleicons.org/mondaydotcom/FF3D57", color: "#FF3D57" },
+  clickup:     { label: "ClickUp",      iconUrl: "https://cdn.simpleicons.org/clickup/7B68EE",      color: "#7B68EE" },
+  airtable:    { label: "Airtable",     iconUrl: "https://cdn.simpleicons.org/airtable/18BFFF",     color: "#18BFFF" },
+  zapier:      { label: "Zapier",       iconUrl: "https://cdn.simpleicons.org/zapier/FF4A00",       color: "#FF4A00" },
+  hubspot:     { label: "HubSpot",      iconUrl: "https://cdn.simpleicons.org/hubspot/FF7A59",      color: "#FF7A59" },
+  salesforce:  { label: "Salesforce",   iconUrl: "https://cdn.simpleicons.org/salesforce/00A1E0",   color: "#00A1E0" },
+  mailchimp:   { label: "Mailchimp",    iconUrl: "https://cdn.simpleicons.org/mailchimp/FFE01B",    color: "#FFE01B" },
+  brevo:       { label: "Brevo",        iconUrl: "https://cdn.simpleicons.org/brevo/0B996E",        color: "#0B996E" },
+  convertkit:  { label: "ConvertKit",   iconUrl: "https://cdn.simpleicons.org/convertkit/FB6979",   color: "#FB6979" },
+  activecampaign:{ label: "ActiveCampaign",iconUrl: "https://cdn.simpleicons.org/activecampaign/356AE6",color: "#356AE6" },
+
+  // ── VPN / Sécurité ──
+  nordvpn:     { label: "NordVPN",      iconUrl: "https://cdn.simpleicons.org/nordvpn/4687FF",      color: "#4687FF" },
+  expressvpn:  { label: "ExpressVPN",   iconUrl: "https://cdn.simpleicons.org/expressvpn/DA3940",   color: "#DA3940" },
+  surfshark:   { label: "Surfshark",    iconUrl: "https://cdn.simpleicons.org/surfshark/1EBFBF",    color: "#1EBFBF" },
+  cyberghost:  { label: "CyberGhost",   iconUrl: "https://cdn.simpleicons.org/cyberghost/FFCC00",   color: "#FFCC00" },
+  pia:         { label: "PIA VPN",      iconUrl: "https://cdn.simpleicons.org/privateinternetaccess/00A651",color: "#00A651" },
+  protonvpn:   { label: "ProtonVPN",    iconUrl: "https://cdn.simpleicons.org/protonvpn/8B89CC",    color: "#8B89CC" },
+  mullvad:     { label: "Mullvad",      iconUrl: "https://cdn.simpleicons.org/mullvad/000000",      color: "#000000" },
+  kaspersky:   { label: "Kaspersky",    iconUrl: "https://cdn.simpleicons.org/kaspersky/006D5C",    color: "#006D5C" },
+  norton:      { label: "Norton",       iconUrl: "https://cdn.simpleicons.org/norton/FFD100",       color: "#FFD100" },
+  mcafee:      { label: "McAfee",       iconUrl: "https://cdn.simpleicons.org/mcafee/C01818",       color: "#C01818" },
+  bitdefender: { label: "Bitdefender",  iconUrl: "https://cdn.simpleicons.org/bitdefender/ED1C24",  color: "#ED1C24" },
+  avast:       { label: "Avast",        iconUrl: "https://cdn.simpleicons.org/avast/FF7800",        color: "#FF7800" },
+  avg:         { label: "AVG",          iconUrl: "https://cdn.simpleicons.org/avg/FF7800",          color: "#FF7800" },
+  eset:        { label: "ESET",         iconUrl: "https://cdn.simpleicons.org/eset/00A0DF",         color: "#00A0DF" },
+  malwarebytes:{ label: "Malwarebytes", iconUrl: "https://cdn.simpleicons.org/malwarebytes/0D3ECC", color: "#0D3ECC" },
+
+  // ── Finance / Crypto ──
+  binance:     { label: "Binance",      iconUrl: "https://cdn.simpleicons.org/binance/F0B90B",      color: "#F0B90B" },
+  coinbase:    { label: "Coinbase",     iconUrl: "https://cdn.simpleicons.org/coinbase/0052FF",     color: "#0052FF" },
+  kraken:      { label: "Kraken",       iconUrl: "https://cdn.simpleicons.org/kraken/5741D9",       color: "#5741D9" },
+  kucoin:      { label: "KuCoin",       iconUrl: "https://cdn.simpleicons.org/kucoin/26A17B",       color: "#26A17B" },
+  bybit:       { label: "Bybit",        iconUrl: "https://cdn.simpleicons.org/bybit/F7A600",        color: "#F7A600" },
+  okx:         { label: "OKX",          iconUrl: "https://cdn.simpleicons.org/okx/000000",          color: "#000000" },
+  bitget:      { label: "Bitget",       iconUrl: "https://cdn.simpleicons.org/bitget/00F0FF",       color: "#00F0FF" },
+  gateio:      { label: "Gate.io",      iconUrl: "https://cdn.simpleicons.org/gate/2354E6",         color: "#2354E6" },
+  htx:         { label: "HTX",          iconUrl: "https://cdn.simpleicons.org/htx/1F3C88",          color: "#1F3C88" },
+  cryptocom:   { label: "Crypto.com",   iconUrl: "https://cdn.simpleicons.org/cryptocom/1199FA",    color: "#1199FA" },
+  metamask:    { label: "MetaMask",     iconUrl: "https://cdn.simpleicons.org/metamask/F6851B",     color: "#F6851B" },
+  trustwallet: { label: "Trust Wallet", iconUrl: "https://cdn.simpleicons.org/trustwallet/3375BB",  color: "#3375BB" },
+  paypal:      { label: "PayPal",       iconUrl: "https://cdn.simpleicons.org/paypal/00457C",       color: "#00457C" },
+  stripe:      { label: "Stripe",       iconUrl: "https://cdn.simpleicons.org/stripe/635BFF",       color: "#635BFF" },
+  wise:        { label: "Wise",         iconUrl: "https://cdn.simpleicons.org/wise/9FE870",         color: "#9FE870" },
+  revolut:     { label: "Revolut",      iconUrl: "https://cdn.simpleicons.org/revolut/000000",      color: "#000000" },
+  venmo:       { label: "Venmo",        iconUrl: "https://cdn.simpleicons.org/venmo/008CFF",        color: "#008CFF" },
+  cashapp:     { label: "Cash App",     iconUrl: "https://cdn.simpleicons.org/cashapp/00C244",      color: "#00C244" },
+  zelle:       { label: "Zelle",        iconUrl: "https://cdn.simpleicons.org/zelle/6D1ED4",        color: "#6D1ED4" },
+  skrill:      { label: "Skrill",       iconUrl: "https://cdn.simpleicons.org/skrill/8B1A8C",       color: "#8B1A8C" },
+  neteller:    { label: "Neteller",     iconUrl: "https://cdn.simpleicons.org/neteller/87C64E",     color: "#87C64E" },
+  payoneer:    { label: "Payoneer",     iconUrl: "https://cdn.simpleicons.org/payoneer/FF4800",     color: "#FF4800" },
+  paystack:    { label: "Paystack",     iconUrl: "https://cdn.simpleicons.org/paystack/011B33",     color: "#011B33" },
+  flutterwave: { label: "Flutterwave",  iconUrl: "https://cdn.simpleicons.org/flutterwave/F5A623",  color: "#F5A623" },
+  mtnmomo:     { label: "MTN MoMo",     iconUrl: "https://cdn.simpleicons.org/mtn/FFCB05",          color: "#FFCB05" },
+  orangemoney: { label: "Orange Money", iconUrl: "https://cdn.simpleicons.org/orange/FF7900",       color: "#FF7900" },
+  wave:        { label: "Wave",         iconUrl: "https://cdn.simpleicons.org/wave/1DC8FF",         color: "#1DC8FF" },
+  moov:        { label: "Moov",         iconUrl: "https://cdn.simpleicons.org/moov/0066B3",         color: "#0066B3" },
+
+  // ── Emails ──
+  gmail:       { label: "Gmail",        iconUrl: "https://cdn.simpleicons.org/gmail/EA4335",        color: "#EA4335" },
+  outlook:     { label: "Outlook",      iconUrl: "https://cdn.simpleicons.org/microsoftoutlook/0078D4",color: "#0078D4" },
+  yahoo:       { label: "Yahoo",        iconUrl: "https://cdn.simpleicons.org/yahoo/6001D2",        color: "#6001D2" },
+  protonmail:  { label: "ProtonMail",   iconUrl: "https://cdn.simpleicons.org/protonmail/8B89CC",   color: "#8B89CC" },
+  zoho:        { label: "Zoho",         iconUrl: "https://cdn.simpleicons.org/zoho/E42527",         color: "#E42527" },
+  yandex:      { label: "Yandex",       iconUrl: "https://cdn.simpleicons.org/yandex/FF0000",       color: "#FF0000" },
+  gmx:         { label: "GMX",          iconUrl: "https://cdn.simpleicons.org/gmx/1C69D4",          color: "#1C69D4" },
+  aol:         { label: "AOL",          iconUrl: "https://cdn.simpleicons.org/aol/009BEF",          color: "#009BEF" },
+
+  // ── Développement ──
+  github:      { label: "GitHub",       iconUrl: "https://cdn.simpleicons.org/github/181717",       color: "#181717" },
+  gitlab:      { label: "GitLab",       iconUrl: "https://cdn.simpleicons.org/gitlab/FC6D26",       color: "#FC6D26" },
+  bitbucket:   { label: "Bitbucket",    iconUrl: "https://cdn.simpleicons.org/bitbucket/0052CC",    color: "#0052CC" },
+  stackoverflow:{ label: "Stack Overflow",iconUrl: "https://cdn.simpleicons.org/stackoverflow/F58025",color: "#F58025" },
+  npm:         { label: "npm",          iconUrl: "https://cdn.simpleicons.org/npm/CB3837",          color: "#CB3837" },
+  docker:      { label: "Docker",       iconUrl: "https://cdn.simpleicons.org/docker/2496ED",       color: "#2496ED" },
+  vercel:      { label: "Vercel",       iconUrl: "https://cdn.simpleicons.org/vercel/000000",       color: "#000000" },
+  netlify:     { label: "Netlify",      iconUrl: "https://cdn.simpleicons.org/netlify/00C7B7",      color: "#00C7B7" },
+  heroku:      { label: "Heroku",       iconUrl: "https://cdn.simpleicons.org/heroku/430098",       color: "#430098" },
+  aws:         { label: "AWS",          iconUrl: "https://cdn.simpleicons.org/amazonaws/FF9900",    color: "#FF9900" },
+  azure:       { label: "Azure",        iconUrl: "https://cdn.simpleicons.org/microsoftazure/0078D4",color: "#0078D4" },
+  googlecloud: { label: "Google Cloud", iconUrl: "https://cdn.simpleicons.org/googlecloud/4285F4",  color: "#4285F4" },
+
+  // ── Avis / Freelance ──
+  trustpilot:  { label: "Trustpilot",   iconUrl: "https://cdn.simpleicons.org/trustpilot/00B67A",   color: "#00B67A" },
+  sitejabber:  { label: "Sitejabber",   iconUrl: "https://cdn.simpleicons.org/sitejabber/FF6600",   color: "#FF6600" },
+  glassdoor:   { label: "Glassdoor",    iconUrl: "https://cdn.simpleicons.org/glassdoor/0CAA41",    color: "#0CAA41" },
+  indeed:      { label: "Indeed",       iconUrl: "https://cdn.simpleicons.org/indeed/003A9B",       color: "#003A9B" },
+  upwork:      { label: "Upwork",       iconUrl: "https://cdn.simpleicons.org/upwork/6FDA44",       color: "#6FDA44" },
+  fiverr:      { label: "Fiverr",       iconUrl: "https://cdn.simpleicons.org/fiverr/1DBF73",       color: "#1DBF73" },
+  freelancer:  { label: "Freelancer",   iconUrl: "https://cdn.simpleicons.org/freelancer/29B2FE",   color: "#29B2FE" },
+  toptal:      { label: "Toptal",       iconUrl: "https://cdn.simpleicons.org/toptal/3863A0",       color: "#3863A0" },
+
+  // ── Divers ──
+  likee:       { label: "Likee",        iconUrl: "https://cdn.simpleicons.org/likee/FF0099",        color: "#FF0099" },
+  kwai:        { label: "Kwai",         iconUrl: "https://cdn.simpleicons.org/kwai/FF6600",         color: "#FF6600" },
+  snackvideo:  { label: "Snack Video",  iconUrl: "https://cdn.simpleicons.org/snackvideo/FF6600",   color: "#FF6600" },
+  triller:     { label: "Triller",      iconUrl: "https://cdn.simpleicons.org/triller/000000",      color: "#000000" },
+  clapper:     { label: "Clapper",      iconUrl: "https://cdn.simpleicons.org/clapper/FF006E",      color: "#FF006E" },
+  minds:       { label: "Minds",        iconUrl: "https://cdn.simpleicons.org/minds/FED12D",        color: "#FED12D" },
+  yandexzen:   { label: "Yandex Zen",   iconUrl: "https://cdn.simpleicons.org/yandex/FF0000",       color: "#FF0000" },
+  dzen:        { label: "Dzen",         iconUrl: "https://cdn.simpleicons.org/dzen/000000",         color: "#000000" },
+  pikabu:      { label: "Pikabu",       iconUrl: "https://cdn.simpleicons.org/pikabu/8CC63F",       color: "#8CC63F" },
+  drive2:      { label: "Drive2",       iconUrl: "https://cdn.simpleicons.org/drive2/0072C9",       color: "#0072C9" },
+  wildberries: { label: "Wildberries",  iconUrl: "https://cdn.simpleicons.org/wildberries/7B1FA2",  color: "#7B1FA2" },
+  ozon:        { label: "Ozon",         iconUrl: "https://cdn.simpleicons.org/ozon/005BFF",         color: "#005BFF" },
+  pandalive:   { label: "Panda TV",     iconUrl: "https://cdn.simpleicons.org/pandalive/FF6600",    color: "#FF6600" },
+  liveme:      { label: "LiveMe",       iconUrl: "https://cdn.simpleicons.org/liveme/FF6600",       color: "#FF6600" },
+  bigo:        { label: "Bigo Live",    iconUrl: "https://cdn.simpleicons.org/bigolive/FF6600",     color: "#FF6600" },
+  kuaishou:    { label: "Kuaishou",     iconUrl: "https://cdn.simpleicons.org/kuaishou/FF6600",     color: "#FF6600" },
+  flipboard:   { label: "Flipboard",    iconUrl: "https://cdn.simpleicons.org/flipboard/E12828",    color: "#E12828" },
+  mix:         { label: "Mix",          iconUrl: "https://cdn.simpleicons.org/mix/FF6600",          color: "#FF6600" },
+  "9gag":      { label: "9GAG",         iconUrl: "https://cdn.simpleicons.org/9gag/000000",         color: "#000000" },
+  imgur:       { label: "Imgur",        iconUrl: "https://cdn.simpleicons.org/imgur/1BB76E",        color: "#1BB76E" },
+  ifunny:      { label: "iFunny",       iconUrl: "https://cdn.simpleicons.org/ifunny/FFCC00",       color: "#FFCC00" },
+  onlyfans:    { label: "OnlyFans",     iconUrl: "https://cdn.simpleicons.org/onlyfans/00AFF0",     color: "#00AFF0" },
+  fansly:      { label: "Fansly",       iconUrl: "https://cdn.simpleicons.org/fansly/00AFF0",       color: "#00AFF0" },
+  patreon:     { label: "Patreon",      iconUrl: "https://cdn.simpleicons.org/patreon/FF424D",      color: "#FF424D" },
+  kofi:        { label: "Ko-fi",        iconUrl: "https://cdn.simpleicons.org/kofi/FF5E5B",         color: "#FF5E5B" },
+  buymeacoffee:{ label: "Buy Me a Coffee",iconUrl: "https://cdn.simpleicons.org/buymeacoffee/FFDD00",color: "#FFDD00" },
+  depop:       { label: "Depop",        iconUrl: "https://cdn.simpleicons.org/depop/FF2300",        color: "#FF2300" },
+  poshmark:    { label: "Poshmark",     iconUrl: "https://cdn.simpleicons.org/poshmark/7A0019",     color: "#7A0019" },
+  vinted:      { label: "Vinted",       iconUrl: "https://cdn.simpleicons.org/vinted/007782",       color: "#007782" },
+  grailed:     { label: "Grailed",      iconUrl: "https://cdn.simpleicons.org/grailed/000000",      color: "#000000" },
+  stockx:      { label: "StockX",       iconUrl: "https://cdn.simpleicons.org/stockx/006340",       color: "#006340" },
+  goat:        { label: "GOAT",         iconUrl: "https://cdn.simpleicons.org/goat/000000",         color: "#000000" },
+
+  // ── Trafic ──
+  traffic:     { label: "Traffic Web / SEO", iconUrl: "https://cdn.simpleicons.org/googleanalytics/E37400", color: "#E37400" },
+
+  // ── Autres ──
+  other:       { label: "Autres",       iconUrl: "https://cdn.simpleicons.org/star/666666",         color: "#666666" },
 };
 
+// ═══════════════════════════════════════════════════════════════
+//  CATEGORY_META
+// ═══════════════════════════════════════════════════════════════
 const CATEGORY_META: Record<string, { label: string; icon: string; color: string; shortLabel: string }> = {
   followers:      { label: "Abonnés / Followers",      shortLabel: "Abonnés",     icon: "users",         color: "#1E90FF" },
   views:          { label: "Vues",                      shortLabel: "Vues",        icon: "eye",           color: "#9C27B0" },
@@ -519,6 +827,7 @@ const CATEGORY_META: Record<string, { label: string; icon: string; color: string
   story_views:    { label: "Vues story",                shortLabel: "Story",       icon: "eye",           color: "#EC407A" },
   profile_visits: { label: "Visites profil",            shortLabel: "Visites",     icon: "user-check",    color: "#26A69A" },
   custom_comments:{ label: "Commentaires personnalisés",shortLabel: "Custom",      icon: "edit-2",        color: "#FFA726" },
+  traffic:        { label: "Traffic Web / SEO",         shortLabel: "Traffic",     icon: "globe",         color: "#E37400" },
   other:          { label: "Autres services",           shortLabel: "Autres",      icon: "star",          color: "#D4AF37" },
 };
 
@@ -549,6 +858,7 @@ function normalizeCategory(raw: string): string | null {
   if (r === "live views" || r === "live viewers" || r === "spectateurs live") return "live_views";
   if (r === "story views" || r === "vues stories") return "story_views";
   if (r === "plays" || r === "lectures" || r === "streams") return "plays";
+  if (r === "traffic" || r === "seo" || r === "web traffic") return "traffic";
   return null;
 }
 
@@ -557,6 +867,7 @@ function extractCategory(name: string): string {
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/['']/g, "'");
 
+  if (n.includes("traffic") || n.includes("seo") || n.includes("backlink") || n.includes("web visit")) return "traffic";
   if ((n.includes("en direct") || n.includes("live") || n.includes("stream")) && (n.includes("vue") || n.includes("view") || n.includes("spectateur") || n.includes("viewer"))) return "live_views";
   if ((n.includes("en direct") || n.includes("live")) && (n.includes("like") || n.includes("j'aime") || n.includes("jaime"))) return "live_likes";
   if (n.includes("story") && (n.includes("vue") || n.includes("view"))) return "story_views";
@@ -1063,6 +1374,7 @@ export default function NewOrderScreen() {
   const [showResellerSpace, setShowResellerSpace] = useState(false);
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
   const [missingAmount, setMissingAmount] = useState(0);
+  const [showMcSearch, setShowMcSearch] = useState(false);
 
   const [platforms, setPlatforms] = useState<PlatformData[]>([]);
   const [totalServices, setTotalServices] = useState(0);
@@ -1105,19 +1417,13 @@ export default function NewOrderScreen() {
     platform?: string;
   }>({ visible: false });
 
-  // Recherche plateforme dépliable
   const [showPlatformSearch, setShowPlatformSearch] = useState(false);
   const [platformSearch, setPlatformSearch] = useState("");
 
-  // ── Idempotence : référence stable tant que la soumission reste identique.
-  //    Évite les doubles commandes en cas de timeout réseau suivi d'un retry.
   const pendingSubmissionRef = useRef<{ clientOrderId: string; payloadKey: string } | null>(null);
 
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
 
-  // ═══════════════════════════════════════════════════════════════
-  //  CHARGEMENT FAVORIS / HISTORIQUE
-  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1134,13 +1440,9 @@ export default function NewOrderScreen() {
     return () => { cancelled = true; };
   }, []);
 
-  // ═══════════════════════════════════════════════════════════════
-  //  CHARGEMENT DES COMPTEURS RÉELS DE SERVICES
-  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // 1) Cache d'abord (TTL 6h)
       const cached = await storageGet<{ data: ServiceCounts; ts: number } | null>(
         STORAGE_KEYS.serviceCounts, null
       );
@@ -1149,7 +1451,6 @@ export default function NewOrderScreen() {
         return;
       }
 
-      // 2) Sinon on fetch en arrière-plan
       try {
         const [stdRes, autoRes, avRes] = await Promise.allSettled([
           fetch(`${BASE_URL}api/exo-services`),
@@ -1179,7 +1480,6 @@ export default function NewOrderScreen() {
     return () => { cancelled = true; };
   }, []);
 
-  // Total réel = standard + automatique + avancée (revendeur = standard → pas de double comptage)
   const trueTotalServices = useMemo(() => {
     if (!serviceCounts) return 0;
     const std = serviceCounts.standard ?? 0;
@@ -1309,6 +1609,7 @@ export default function NewOrderScreen() {
   }
 
   function extractPlatformFromService(svc: ExoService): string {
+    if ((svc as any)._platformKey) return (svc as any)._platformKey;
     const n = (svc.name + " " + (svc.category ?? "")).toLowerCase();
     if (n.includes("instagram") || n.includes("insta"))                             return "instagram";
     if (n.includes("tiktok"))                                                        return "tiktok";
@@ -1328,6 +1629,8 @@ export default function NewOrderScreen() {
     if (n.includes("clubhouse"))                                                     return "clubhouse";
     if (n.includes("vimeo"))                                                         return "vimeo";
     if (n.includes("spotify"))                                                       return "spotify";
+    if (n.includes("audiomack"))                                                     return "audiomack";
+    if (n.includes("boomplay"))                                                      return "boomplay";
     if (n.includes("soundcloud"))                                                    return "soundcloud";
     if (n.includes("deezer"))                                                        return "deezer";
     if (n.includes("apple music") || n.includes("applemusic") || n.includes("itunes")) return "applemusic";
@@ -1351,6 +1654,26 @@ export default function NewOrderScreen() {
     if (n.includes("canva"))                                                         return "canva";
     if (n.includes("envato"))                                                        return "envato";
     if (n.includes("flaticon"))                                                      return "flaticon";
+    if (n.includes("tinder"))                                                        return "tinder";
+    if (n.includes("bumble"))                                                        return "bumble";
+    if (n.includes("badoo"))                                                         return "badoo";
+    if (n.includes("roblox"))                                                        return "roblox";
+    if (n.includes("pubg"))                                                          return "pubg";
+    if (n.includes("duolingo"))                                                      return "duolingo";
+    if (n.includes("binance"))                                                       return "binance";
+    if (n.includes("trustpilot"))                                                    return "trustpilot";
+    if (n.includes("rutube"))                                                        return "rutube";
+    if (n.includes("vk") || n.includes("vkontakte"))                                return "vk";
+    if (n.includes("ok.ru") || n.includes("odnoklassniki"))                         return "okru";
+    if (n.includes("turbobit"))                                                      return "turbobit";
+    if (n.includes("likee"))                                                         return "likee";
+    if (n.includes("kwai"))                                                          return "kwai";
+    if (n.includes("ebay"))                                                          return "ebay";
+    if (n.includes("shopee"))                                                        return "shopee";
+    if (n.includes("rumble"))                                                        return "rumble";
+    if (n.includes("pandalive") || n.includes("panda tv"))                          return "pandalive";
+    if (n.includes("avito"))                                                         return "avito";
+    if (n.includes("traffic") || n.includes("seo") || n.includes("backlink"))       return "traffic";
     return "other";
   }
 
@@ -1395,7 +1718,7 @@ export default function NewOrderScreen() {
         const keyLow = key.toLowerCase();
         const meta = PLATFORM_META[keyLow] ?? {
           label: keyLow.charAt(0).toUpperCase() + keyLow.slice(1),
-          iconUrl: `https://img.icons8.com/color/96/${keyLow}.png`,
+          iconUrl: `https://cdn.simpleicons.org/${keyLow}`,
           color: "#1E90FF",
         };
         list.push({ key: keyLow, label: meta.label, iconUrl: meta.iconUrl, color: meta.color, services: processed });
@@ -1404,7 +1727,6 @@ export default function NewOrderScreen() {
       setTotalServices(total);
       setFullLoader({ visible: true, count: total });
 
-      // Mise à jour opportuniste du compteur de la catégorie visitée
       setServiceCounts((prev) => {
         if (!prev) return prev;
         const key = typeKey === "revendeur" ? "revendeur" : typeKey;
@@ -1430,9 +1752,6 @@ export default function NewOrderScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.totalOrders]);
 
-  // ═══════════════════════════════════════════════════════════════
-  //  HANDLERS
-  // ═══════════════════════════════════════════════════════════════
   const handleSelectOrderType = (typeKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedOrderType(typeKey);
@@ -1444,7 +1763,7 @@ export default function NewOrderScreen() {
     setQuantity("");
     setShowPlatformSearch(false);
     setPlatformSearch("");
-    pendingSubmissionRef.current = null; // nouvelle soumission → nouvelle référence
+    pendingSubmissionRef.current = null;
     loadServices(typeKey);
   };
 
@@ -1462,7 +1781,7 @@ export default function NewOrderScreen() {
       cat[normalized].push({ ...svc, _rawCategory: rawCat } as any);
     });
     const sorted: Record<string, ExoService[]> = {};
-    const order = ["followers","likes","views","live_views","live_likes","comments","shares","saves","plays","story_views","impressions","reactions","reposts","poll_votes","mentions","profile_visits","custom_comments","other"];
+    const order = ["followers","likes","views","live_views","live_likes","comments","shares","saves","plays","story_views","impressions","reactions","reposts","poll_votes","mentions","profile_visits","custom_comments","traffic","other"];
     order.forEach((k) => { if (cat[k]) sorted[k] = cat[k]; });
     Object.keys(cat).forEach((k) => { if (!sorted[k]) sorted[k] = cat[k]; });
     setCategorized(sorted);
@@ -1515,7 +1834,6 @@ export default function NewOrderScreen() {
     if (typeKey === "automatique") {
       if (provider === "smmwiz") return `${BASE_URL}api/smmwiz/order`;
       if (provider === "mtp")    return `${BASE_URL}api/mtp/order`;
-      // Refus défensif : un fournisseur inconnu ne doit JAMAIS emprunter une route par défaut.
       throw new Error(
         "Fournisseur automatique inconnu — impossible de router la commande de manière sécurisée. " +
         "Contactez le support."
@@ -1542,7 +1860,6 @@ export default function NewOrderScreen() {
     if (!selectedService) { Alert.alert("Service requis", "Sélectionnez un service."); return; }
     if (!link.trim()) { Alert.alert("Lien requis", "Entrez le lien de votre page/post."); return; }
 
-    // ─── Détection automatique du lien vs plateforme ───
     const isAccountSale = isAccountSaleService(selectedService);
     if (!isAccountSale) {
       const detected = detectLinkPlatform(link);
@@ -1599,8 +1916,6 @@ export default function NewOrderScreen() {
       return;
     }
 
-    // ─── Idempotence : même payload → même clientOrderId, sinon nouvelle référence.
-    //     Empêche les doubles commandes si l'utilisateur retente après un timeout réseau.
     const payloadKey = `${selectedService.id}|${selectedService._provider ?? ""}|${selectedOrderType ?? "standard"}|${link.trim()}|${qty}|${comments ?? ""}`;
     let clientOrderId: string;
     const prev = pendingSubmissionRef.current;
@@ -1622,7 +1937,7 @@ export default function NewOrderScreen() {
         serviceId: selectedService.id,
         link: link.trim(),
         quantity: qty,
-        clientOrderId, // ← idempotence backend
+        clientOrderId,
       };
       if (comments) payload.comments = comments;
 
@@ -1704,7 +2019,6 @@ export default function NewOrderScreen() {
         recommendations: recos,
       });
 
-      // Succès → on remet la référence d'idempotence à zéro
       pendingSubmissionRef.current = null;
 
       setLink(""); setQuantity(""); setCustomComments(""); setSelectedService(null);
@@ -1718,9 +2032,6 @@ export default function NewOrderScreen() {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  //  RENDER
-  // ═══════════════════════════════════════════════════════════════
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
@@ -1975,7 +2286,7 @@ export default function NewOrderScreen() {
         selectedService={selectedService}
         onSelect={(svc) => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          pendingSubmissionRef.current = null; // nouveau service → nouvelle référence
+          pendingSubmissionRef.current = null;
           setSelectedService(svc);
           setShowServiceModal(false);
         }}
@@ -2078,6 +2389,67 @@ export default function NewOrderScreen() {
         isDark={isDark}
         count={fullLoader.count}
         platform={fullLoader.platform}
+      />
+
+      {/* ═══ Mč — Bouton flottant Recherche IA ═══ */}
+      <Pressable
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowMcSearch(true); }}
+        style={{
+          position: "absolute",
+          bottom: insets.bottom + 24,
+          right: 20,
+          width: 60,
+          height: 60,
+          borderRadius: 30,
+          backgroundColor: isDark ? GOLD : NAVY,
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: "#000",
+          shadowOpacity: 0.35,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 10,
+          zIndex: 50,
+        }}
+      >
+        <Feather name="message-circle" size={26} color={isDark ? NAVY : GOLD} />
+      </Pressable>
+
+      <McSearch
+        visible={showMcSearch}
+        onClose={() => setShowMcSearch(false)}
+        allServices={platforms.flatMap(p => p.services.map(s => ({
+          ...s,
+          _platformKey: p.key,
+          _platformLabel: p.label,
+          _platformIcon: p.iconUrl,
+          _platformColor: p.color,
+        })))}
+        userName={user?.name ?? (user as any)?.displayName ?? (user as any)?.username ?? "utilisateur"}
+        onSelectService={(svc) => {
+          setShowMcSearch(false);
+          const plat = platforms.find(p => p.key === svc._platformKey);
+          if (plat) {
+            setSelectedPlatform(plat);
+            const cat: Record<string, ExoService[]> = {};
+            plat.services.forEach((s) => {
+              const rawCat = s.category ?? "";
+              const normalized = normalizeCategory(rawCat) ?? extractCategory(s.name);
+              if (!cat[normalized]) cat[normalized] = [];
+              cat[normalized].push({ ...s, _rawCategory: rawCat } as any);
+            });
+            const sorted: Record<string, ExoService[]> = {};
+            const order = ["followers","likes","views","live_views","live_likes","comments","shares","saves","plays","story_views","impressions","reactions","reposts","poll_votes","mentions","profile_visits","custom_comments","traffic","other"];
+            order.forEach((k) => { if (cat[k]) sorted[k] = cat[k]; });
+            Object.keys(cat).forEach((k) => { if (!sorted[k]) sorted[k] = cat[k]; });
+            setCategorized(sorted);
+            setSelectedService(svc);
+            setSelectedOrderType("automatique");
+          }
+        }}
+        C={C}
+        isDark={isDark}
+        fmt={fmt}
       />
     </View>
   );
@@ -2228,7 +2600,7 @@ function RecentServicesSection({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  OrderTypeSelector — avec compteurs réels + illustration confuse
+//  OrderTypeSelector
 // ═══════════════════════════════════════════════════════════════
 function OrderTypeSelector({
   loading, onSelect, onOpenHelp, counts, C, isDark,
@@ -2311,7 +2683,7 @@ function OrderTypeSelector({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  OrderTypeRow — avec badge de compteur
+//  OrderTypeRow
 // ═══════════════════════════════════════════════════════════════
 function OrderTypeRow({
   ot, onPress, count, C, isDark, index,
@@ -2495,7 +2867,7 @@ function ResellerPanel({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PlatformSection — avec recherche dépliable
+//  PlatformSection
 // ═══════════════════════════════════════════════════════════════
 function PlatformSection({
   platforms, selectedPlatform, onSelect, loading, error, onRetry, orderType, C, isDark,
@@ -2683,7 +3055,7 @@ function CategorySection({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SelectedServiceForm — avec détection de lien
+//  SelectedServiceForm
 // ═══════════════════════════════════════════════════════════════
 function SelectedServiceForm({
   selectedService, selectedPlatform, selectedOrderType, catMeta,
@@ -2709,7 +3081,6 @@ function SelectedServiceForm({
   const origComputedPrice = origPrice && qty > 0 ? Math.ceil((pricePerUnit ? origPrice : origPrice / 1000) * qty * autoMargin) : 0;
   const savings = origComputedPrice > 0 && liveComputedPrice > 0 ? origComputedPrice - liveComputedPrice : 0;
 
-  // ─── Détection automatique du lien ───
   const detectedLinkPlatform = useMemo(() => {
     if (isAccountSale) return null;
     return detectLinkPlatform(link);
@@ -3741,7 +4112,7 @@ function CategoriesHelpModal({ visible, onClose, C, isDark }: any) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SuccessOrderModal — avec étoile favori sur recommandations
+//  SuccessOrderModal
 // ═══════════════════════════════════════════════════════════════
 function SuccessOrderModal({
   data, onClose, onViewOrders, onOrderRecommended, onToggleFavorite, isFavorite, fmt, isDark,

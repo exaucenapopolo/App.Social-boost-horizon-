@@ -52,9 +52,7 @@ const USD_TO_XAF      = 1230;
 const USD_TO_XAF_AUTO = 1845;
 
 // ═══════════════════════════════════════════════════════════════
-//  IDEMPOTENCE — Cache en mémoire
-//  Évite les doubles commandes en cas de timeout réseau côté mobile.
-//  Clé : `${uid}:${clientOrderId}` — TTL 10 minutes.
+//  IDEMPOTENCE — Cache en mémoire (TTL 10 min)
 // ═══════════════════════════════════════════════════════════════
 const idempotencyCache = new Map<string, { orderId: string; ts: number }>();
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
@@ -74,8 +72,6 @@ function checkIdempotency(uid: string, clientOrderId: string | undefined | null)
 function storeIdempotency(uid: string, clientOrderId: string | undefined | null, orderId: string): void {
   if (!clientOrderId || typeof clientOrderId !== "string") return;
   idempotencyCache.set(`${uid}:${clientOrderId}`, { orderId, ts: Date.now() });
-
-  // Nettoyage opportuniste
   if (idempotencyCache.size > 5000) {
     const now = Date.now();
     for (const [k, v] of idempotencyCache) {
@@ -84,7 +80,6 @@ function storeIdempotency(uid: string, clientOrderId: string | undefined | null,
   }
 }
 
-// Nettoyage périodique
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of idempotencyCache) {
@@ -125,54 +120,351 @@ type FormattedSvc = {
   description: string;
   platform: string;
   _provider?: string;
+  _isTraffic?: boolean;
 };
 
+// ═══════════════════════════════════════════════════════════════
+//  detectPlatform — 200+ plateformes, ordre strict, priorité traffic
+// ═══════════════════════════════════════════════════════════════
 function detectPlatform(svc: RawSvc): string {
-  const t = ((svc.name ?? "") + " " + (svc.category ?? "") + " " + (svc.network ?? ""))
+  const raw = ((svc.name ?? "") + " " + (svc.category ?? "") + " " + (svc.network ?? ""))
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  if (t.includes("instagram") || t.includes("insta"))                             return "instagram";
-  if (t.includes("tiktok") || t.includes("tik tok"))                              return "tiktok";
-  if (t.includes("youtube") || t.includes(" yt "))                                return "youtube";
-  if (t.includes("facebook") || t.includes(" fb "))                               return "facebook";
-  if (t.includes("twitter") || t.includes("x/twitter") || t.includes("tweet"))   return "twitter";
-  if (t.includes("telegram"))                                                      return "telegram";
-  if (t.includes("whatsapp"))                                                      return "whatsapp";
-  if (t.includes("threads"))                                                       return "threads";
-  if (t.includes("snapchat"))                                                      return "snapchat";
-  if (t.includes("linkedin"))                                                      return "linkedin";
-  if (t.includes("pinterest"))                                                     return "pinterest";
-  if (t.includes("reddit"))                                                        return "reddit";
-  if (t.includes("tumblr"))                                                        return "tumblr";
-  if (t.includes("quora"))                                                         return "quora";
-  if (t.includes("discord"))                                                       return "discord";
-  if (t.includes("clubhouse"))                                                     return "clubhouse";
-  if (t.includes("vimeo"))                                                         return "vimeo";
-  if (t.includes("spotify"))                                                       return "spotify";
-  if (t.includes("soundcloud"))                                                    return "soundcloud";
-  if (t.includes("deezer"))                                                        return "deezer";
-  if (t.includes("apple music") || t.includes("applemusic") || t.includes("itunes")) return "applemusic";
-  if (t.includes("shazam"))                                                        return "shazam";
-  if (t.includes("twitch"))                                                        return "twitch";
-  if (t.includes("kick.com") || t.includes(" kick ") || t.includes("kick stream")) return "kick";
-  if (t.includes("netflix"))                                                       return "netflix";
-  if (t.includes("amazon") || t.includes("prime video"))                          return "amazon";
-  if (t.includes("gmail"))                                                         return "gmail";
-  if (t.includes("outlook"))                                                       return "outlook";
-  if (t.includes("github"))                                                        return "github";
-  if (t.includes("google play") || t.includes("googleplay") || t.includes("play store")) return "googleplay";
-  if (t.includes("app store") || t.includes("appstore") || t.includes("apple store"))    return "appstore";
-  if (t.includes("google"))                                                        return "google";
-  if (t.includes("steam"))                                                         return "steam";
-  if (t.includes("xbox"))                                                          return "xbox";
-  if (t.includes("ubisoft"))                                                       return "ubisoft";
-  if (t.includes("free fire") || t.includes("freefire") || t.includes("garena"))  return "freefire";
-  if (t.includes("chatgpt") || t.includes("openai"))                              return "chatgpt";
-  if (t.includes("deepseek"))                                                      return "deepseek";
-  if (t.includes("canva"))                                                         return "canva";
-  if (t.includes("envato"))                                                        return "envato";
-  if (t.includes("flaticon"))                                                      return "flaticon";
+  // ── TRAFFIC / SEO / Website en priorité ──
+  const trafficKeywords = [
+    "website traffic", "web traffic", "traffic from", "organic traffic",
+    "google traffic", "seo traffic", "direct traffic", "referral traffic",
+    "backlink", "seo service", "website visit", "web hit", "web impression",
+    "keyword traffic", "search traffic", "social traffic", "adult traffic",
+    "country traffic", "geo traffic", "mobile traffic", "desktop traffic",
+    "web visitors", "website visitors", "hits from", "traffic package",
+  ];
+  if (trafficKeywords.some(kw => raw.includes(kw))) return "traffic";
+
+  // ── Plateformes majeures ──
+  if (raw.includes("instagram") || raw.includes("insta")) return "instagram";
+  if (raw.includes("tiktok") || raw.includes("tik tok") || raw.includes("douyin")) return "tiktok";
+  if (raw.includes("youtube") || raw.includes("youtu.be")) return "youtube";
+  if (raw.includes("facebook") || raw.includes("fb.com") || raw.includes("fb watch") || raw.includes("fb page")) return "facebook";
+  if (raw.includes("twitter") || raw.includes("x.com") || raw.includes("x/twitter") || raw.includes("tweet")) return "twitter";
+  if (raw.includes("telegram") || raw.includes("t.me") || raw.includes("telegram.org")) return "telegram";
+  if (raw.includes("whatsapp") || raw.includes("wa.me") || raw.includes("chat.whatsapp") || raw.includes("wa business")) return "whatsapp";
+
+  // ── Réseaux sociaux secondaires ──
+  if (raw.includes("threads")) return "threads";
+  if (raw.includes("snapchat")) return "snapchat";
+  if (raw.includes("linkedin")) return "linkedin";
+  if (raw.includes("pinterest") || raw.includes("pin.it")) return "pinterest";
+  if (raw.includes("reddit") || raw.includes("redd.it")) return "reddit";
+  if (raw.includes("tumblr")) return "tumblr";
+  if (raw.includes("quora")) return "quora";
+  if (raw.includes("discord")) return "discord";
+  if (raw.includes("clubhouse")) return "clubhouse";
+  if (raw.includes("mastodon")) return "mastodon";
+  if (raw.includes("bluesky") || raw.includes("bsky")) return "bluesky";
+  if (raw.includes("truth social") || raw.includes("truthsocial")) return "truthsocial";
+  if (raw.includes("vk") || raw.includes("vkontakte")) return "vk";
+  if (raw.includes("ok.ru") || raw.includes("odnoklassniki")) return "okru";
+  if (raw.includes("likee")) return "likee";
+  if (raw.includes("kwai")) return "kwai";
+  if (raw.includes("snack video") || raw.includes("snackvideo")) return "snackvideo";
+  if (raw.includes("triller")) return "triller";
+
+  // ── Streaming musical ──
+  if (raw.includes("spotify")) return "spotify";
+  if (raw.includes("soundcloud")) return "soundcloud";
+  if (raw.includes("audiomack")) return "audiomack";
+  if (raw.includes("boomplay")) return "boomplay";
+  if (raw.includes("deezer")) return "deezer";
+  if (raw.includes("apple music") || raw.includes("applemusic") || raw.includes("itunes")) return "applemusic";
+  if (raw.includes("mixcloud")) return "mixcloud";
+  if (raw.includes("shazam")) return "shazam";
+  if (raw.includes("napster")) return "napster";
+  if (raw.includes("tidal")) return "tidal";
+  if (raw.includes("anghami")) return "anghami";
+  if (raw.includes("jiosaavn")) return "jiosaavn";
+  if (raw.includes("resso")) return "resso";
+  if (raw.includes("gaana")) return "gaana";
+  if (raw.includes("wynk")) return "wynk";
+
+  // ── Streaming vidéo / Live ──
+  if (raw.includes("twitch")) return "twitch";
+  if (raw.includes("kick.com")) return "kick";
+  if (raw.includes("trovo")) return "trovo";
+  if (raw.includes("rumble")) return "rumble";
+  if (raw.includes("odysee")) return "odysee";
+  if (raw.includes("bitchute")) return "bitchute";
+  if (raw.includes("dailymotion")) return "dailymotion";
+  if (raw.includes("vimeo")) return "vimeo";
+  if (raw.includes("rutube")) return "rutube";
+
+  // ── Messagerie ──
+  if (raw.includes("viber")) return "viber";
+  if (raw.includes("line.me") || raw.includes("line app")) return "line";
+  if (raw.includes("wechat") || raw.includes("weixin")) return "wechat";
+  if (raw.includes("kakaotalk") || raw.includes("kakao")) return "kakaotalk";
+  if (raw.includes("zalo")) return "zalo";
+  if (raw.includes("signal")) return "signal";
+  if (raw.includes("skype")) return "skype";
+
+  // ── Rencontres ──
+  if (raw.includes("tinder")) return "tinder";
+  if (raw.includes("bumble")) return "bumble";
+  if (raw.includes("badoo")) return "badoo";
+  if (raw.includes("grindr")) return "grindr";
+  if (raw.includes("hinge")) return "hinge";
+  if (raw.includes("okcupid")) return "okcupid";
+  if (raw.includes("plenty of fish") || raw.includes("pof ")) return "pof";
+  if (raw.includes("tagged")) return "tagged";
+  if (raw.includes("mamba")) return "mamba";
+
+  // ── Gaming ──
+  if (raw.includes("roblox") || raw.includes("robux")) return "roblox";
+  if (raw.includes("pubg")) return "pubg";
+  if (raw.includes("free fire") || raw.includes("freefire") || raw.includes("garena")) return "freefire";
+  if (raw.includes("call of duty") || raw.includes("cod mobile")) return "callofduty";
+  if (raw.includes("fortnite")) return "fortnite";
+  if (raw.includes("minecraft")) return "minecraft";
+  if (raw.includes("genshin")) return "genshin";
+  if (raw.includes("honkai")) return "honkai";
+  if (raw.includes("valorant")) return "valorant";
+  if (raw.includes("league of legends")) return "leagueoflegends";
+  if (raw.includes("dota")) return "dota";
+  if (raw.includes("csgo") || raw.includes("cs2") || raw.includes("counter strike")) return "csgo";
+  if (raw.includes("apex legends") || raw.includes("apex")) return "apexlegends";
+  if (raw.includes("overwatch")) return "overwatch";
+  if (raw.includes("rocket league")) return "rocketleague";
+  if (raw.includes("clash of clans")) return "clashofclans";
+  if (raw.includes("clash royale")) return "clashroyale";
+  if (raw.includes("brawl stars")) return "brawlstars";
+  if (raw.includes("hay day")) return "hayday";
+  if (raw.includes("mobile legends") || raw.includes("mlbb")) return "mobilelegends";
+  if (raw.includes("arena of valor")) return "arenaofvalor";
+  if (raw.includes("wild rift")) return "wildrift";
+  if (raw.includes("steam")) return "steam";
+  if (raw.includes("xbox")) return "xbox";
+  if (raw.includes("playstation") || raw.includes("psn") || raw.includes("ps4") || raw.includes("ps5")) return "playstation";
+  if (raw.includes("nintendo") || raw.includes("switch")) return "nintendo";
+  if (raw.includes("ubisoft")) return "ubisoft";
+  if (raw.includes("epic games") || raw.includes("epicgames")) return "epicgames";
+  if (raw.includes("riot games") || raw.includes("riot")) return "riotgames";
+  if (raw.includes("battle.net") || raw.includes("blizzard")) return "blizzard";
+  if (raw.includes("pokemon") || raw.includes("pokémon")) return "pokemon";
+  if (raw.includes("fifa")) return "fifa";
+  if (raw.includes("nba 2k") || raw.includes("nba2k")) return "nba2k";
+  if (raw.includes("gta") || raw.includes("grand theft auto")) return "gta";
+  if (raw.includes("among us") || raw.includes("amongus")) return "amongus";
+  if (raw.includes("fall guys")) return "fallguys";
+
+  // ── Streaming TV / Films ──
+  if (raw.includes("netflix")) return "netflix";
+  if (raw.includes("disney")) return "disneyplus";
+  if (raw.includes("hulu")) return "hulu";
+  if (raw.includes("prime video") || raw.includes("amazon prime")) return "primevideo";
+  if (raw.includes("hbo")) return "hbo";
+  if (raw.includes("apple tv") || raw.includes("appletv")) return "appletv";
+  if (raw.includes("paramount")) return "paramount";
+  if (raw.includes("peacock")) return "peacock";
+  if (raw.includes("crunchyroll")) return "crunchyroll";
+  if (raw.includes("funimation")) return "funimation";
+  if (raw.includes("canal+") || raw.includes("canal plus")) return "canalplus";
+  if (raw.includes("bein")) return "bein";
+  if (raw.includes("dazn")) return "dazn";
+  if (raw.includes("espn")) return "espn";
+  if (raw.includes("sky sports")) return "skysports";
+  if (raw.includes("fubotv") || raw.includes("fubo")) return "fubotv";
+  if (raw.includes("youtube tv")) return "youtubetv";
+  if (raw.includes("sling")) return "sling";
+  if (raw.includes("philo")) return "philo";
+  if (raw.includes("tubi")) return "tubi";
+  if (raw.includes("pluto")) return "pluto";
+  if (raw.includes("roku")) return "roku";
+  if (raw.includes("plex")) return "plex";
+  if (raw.includes("kodi")) return "kodi";
+
+  // ── E-commerce ──
+  if (raw.includes("amazon")) return "amazon";
+  if (raw.includes("ebay")) return "ebay";
+  if (raw.includes("etsy")) return "etsy";
+  if (raw.includes("shopify")) return "shopify";
+  if (raw.includes("aliexpress")) return "aliexpress";
+  if (raw.includes("alibaba")) return "alibaba";
+  if (raw.includes("wish")) return "wish";
+  if (raw.includes("shopee")) return "shopee";
+  if (raw.includes("lazada")) return "lazada";
+  if (raw.includes("tokopedia")) return "tokopedia";
+  if (raw.includes("mercado libre") || raw.includes("mercadolibre")) return "mercadolibre";
+  if (raw.includes("flipkart")) return "flipkart";
+  if (raw.includes("jumia")) return "jumia";
+  if (raw.includes("avito")) return "avito";
+  if (raw.includes("olx")) return "olx";
+  if (raw.includes("wildberries")) return "wildberries";
+  if (raw.includes("ozon")) return "ozon";
+
+  // ── Cloud / Stockage ──
+  if (raw.includes("dropbox")) return "dropbox";
+  if (raw.includes("google drive") || raw.includes("gdrive")) return "googledrive";
+  if (raw.includes("onedrive")) return "onedrive";
+  if (raw.includes("mega.nz")) return "mega";
+  if (raw.includes("turbobit")) return "turbobit";
+  if (raw.includes("mediafire")) return "mediafire";
+  if (raw.includes("1fichier")) return "1fichier";
+  if (raw.includes("zippyshare")) return "zippyshare";
+
+  // ── IA / Productivité ──
+  if (raw.includes("chatgpt") || raw.includes("openai")) return "chatgpt";
+  if (raw.includes("deepseek")) return "deepseek";
+  if (raw.includes("claude") || raw.includes("anthropic")) return "claude";
+  if (raw.includes("gemini") || raw.includes("bard")) return "gemini";
+  if (raw.includes("canva")) return "canva";
+  if (raw.includes("notion")) return "notion";
+  if (raw.includes("grammarly")) return "grammarly";
+  if (raw.includes("quillbot")) return "quillbot";
+  if (raw.includes("midjourney")) return "midjourney";
+  if (raw.includes("dall-e") || raw.includes("dalle")) return "dalle";
+  if (raw.includes("stable diffusion")) return "stablediffusion";
+  if (raw.includes("figma")) return "figma";
+  if (raw.includes("adobe")) return "adobe";
+  if (raw.includes("envato")) return "envato";
+  if (raw.includes("flaticon")) return "flaticon";
+  if (raw.includes("shutterstock")) return "shutterstock";
+  if (raw.includes("freepik")) return "freepik";
+  if (raw.includes("unsplash")) return "unsplash";
+  if (raw.includes("pexels")) return "pexels";
+
+  // ── Éducation ──
+  if (raw.includes("duolingo")) return "duolingo";
+  if (raw.includes("coursera")) return "coursera";
+  if (raw.includes("udemy")) return "udemy";
+  if (raw.includes("skillshare")) return "skillshare";
+  if (raw.includes("masterclass")) return "masterclass";
+  if (raw.includes("khan academy")) return "khanacademy";
+  if (raw.includes("brilliant")) return "brilliant";
+  if (raw.includes("codecademy")) return "codecademy";
+  if (raw.includes("domestika")) return "domestika";
+
+  // ── SaaS / Business ──
+  if (raw.includes("microsoft") || raw.includes("windows") || raw.includes("office 365") || raw.includes("ms office")) return "microsoft";
+  if (raw.includes("google workspace") || raw.includes("g suite")) return "googleworkspace";
+  if (raw.includes("slack")) return "slack";
+  if (raw.includes("zoom")) return "zoom";
+  if (raw.includes("microsoft teams") || raw.includes("teams")) return "msteams";
+  if (raw.includes("trello")) return "trello";
+  if (raw.includes("asana")) return "asana";
+  if (raw.includes("monday.com") || raw.includes("monday")) return "monday";
+  if (raw.includes("clickup")) return "clickup";
+  if (raw.includes("airtable")) return "airtable";
+  if (raw.includes("zapier")) return "zapier";
+  if (raw.includes("hubspot")) return "hubspot";
+  if (raw.includes("salesforce")) return "salesforce";
+  if (raw.includes("mailchimp")) return "mailchimp";
+  if (raw.includes("brevo") || raw.includes("sendinblue")) return "brevo";
+  if (raw.includes("convertkit")) return "convertkit";
+  if (raw.includes("activecampaign")) return "activecampaign";
+
+  // ── VPN / Sécurité ──
+  if (raw.includes("nordvpn")) return "nordvpn";
+  if (raw.includes("expressvpn")) return "expressvpn";
+  if (raw.includes("surfshark")) return "surfshark";
+  if (raw.includes("cyberghost")) return "cyberghost";
+  if (raw.includes("private internet access") || raw.includes("pia vpn")) return "pia";
+  if (raw.includes("protonvpn")) return "protonvpn";
+  if (raw.includes("mullvad")) return "mullvad";
+  if (raw.includes("kaspersky")) return "kaspersky";
+  if (raw.includes("norton")) return "norton";
+  if (raw.includes("mcafee")) return "mcafee";
+  if (raw.includes("bitdefender")) return "bitdefender";
+  if (raw.includes("avast")) return "avast";
+  if (raw.includes("avg ")) return "avg";
+  if (raw.includes("eset")) return "eset";
+  if (raw.includes("malwarebytes")) return "malwarebytes";
+
+  // ── Finance / Crypto ──
+  if (raw.includes("binance")) return "binance";
+  if (raw.includes("coinbase")) return "coinbase";
+  if (raw.includes("kraken")) return "kraken";
+  if (raw.includes("kucoin")) return "kucoin";
+  if (raw.includes("bybit")) return "bybit";
+  if (raw.includes("okx")) return "okx";
+  if (raw.includes("bitget")) return "bitget";
+  if (raw.includes("gate.io") || raw.includes("gateio")) return "gateio";
+  if (raw.includes("huobi") || raw.includes("htx")) return "htx";
+  if (raw.includes("crypto.com") || raw.includes("cryptocom")) return "cryptocom";
+  if (raw.includes("metamask")) return "metamask";
+  if (raw.includes("trust wallet") || raw.includes("trustwallet")) return "trustwallet";
+  if (raw.includes("paypal")) return "paypal";
+  if (raw.includes("stripe")) return "stripe";
+  if (raw.includes("wise") || raw.includes("transferwise")) return "wise";
+  if (raw.includes("revolut")) return "revolut";
+  if (raw.includes("venmo")) return "venmo";
+  if (raw.includes("cash app") || raw.includes("cashapp")) return "cashapp";
+  if (raw.includes("zelle")) return "zelle";
+  if (raw.includes("skrill")) return "skrill";
+  if (raw.includes("neteller")) return "neteller";
+  if (raw.includes("payoneer")) return "payoneer";
+  if (raw.includes("paystack")) return "paystack";
+  if (raw.includes("flutterwave")) return "flutterwave";
+  if (raw.includes("mtn momo") || raw.includes("mtn mobile money")) return "mtnmomo";
+  if (raw.includes("orange money")) return "orangemoney";
+  if (raw.includes("wave")) return "wave";
+  if (raw.includes("moov")) return "moov";
+
+  // ── Emails ──
+  if (raw.includes("gmail")) return "gmail";
+  if (raw.includes("outlook") || raw.includes("hotmail")) return "outlook";
+  if (raw.includes("yahoo")) return "yahoo";
+  if (raw.includes("protonmail") || raw.includes("proton mail")) return "protonmail";
+  if (raw.includes("zoho")) return "zoho";
+  if (raw.includes("yandex")) return "yandex";
+  if (raw.includes("gmx")) return "gmx";
+  if (raw.includes("aol")) return "aol";
+
+  // ── Développement ──
+  if (raw.includes("github")) return "github";
+  if (raw.includes("gitlab")) return "gitlab";
+  if (raw.includes("bitbucket")) return "bitbucket";
+  if (raw.includes("stackoverflow") || raw.includes("stack overflow")) return "stackoverflow";
+  if (raw.includes("npm")) return "npm";
+  if (raw.includes("docker")) return "docker";
+  if (raw.includes("vercel")) return "vercel";
+  if (raw.includes("netlify")) return "netlify";
+  if (raw.includes("heroku")) return "heroku";
+  if (raw.includes("aws") || raw.includes("amazon web services")) return "aws";
+  if (raw.includes("azure")) return "azure";
+  if (raw.includes("google cloud") || raw.includes("gcp")) return "googlecloud";
+
+  // ── Avis / Freelance ──
+  if (raw.includes("trustpilot")) return "trustpilot";
+  if (raw.includes("sitejabber")) return "sitejabber";
+  if (raw.includes("glassdoor")) return "glassdoor";
+  if (raw.includes("indeed")) return "indeed";
+  if (raw.includes("upwork")) return "upwork";
+  if (raw.includes("fiverr")) return "fiverr";
+  if (raw.includes("freelancer")) return "freelancer";
+  if (raw.includes("toptal")) return "toptal";
+
+  // ── Divers ──
+  if (raw.includes("pandalive") || raw.includes("panda tv")) return "pandalive";
+  if (raw.includes("liveme")) return "liveme";
+  if (raw.includes("bigo")) return "bigo";
+  if (raw.includes("kuaishou")) return "kuaishou";
+  if (raw.includes("flipboard")) return "flipboard";
+  if (raw.includes("9gag")) return "9gag";
+  if (raw.includes("imgur")) return "imgur";
+  if (raw.includes("ifunny")) return "ifunny";
+  if (raw.includes("onlyfans")) return "onlyfans";
+  if (raw.includes("fansly")) return "fansly";
+  if (raw.includes("patreon")) return "patreon";
+  if (raw.includes("ko-fi") || raw.includes("kofi")) return "kofi";
+  if (raw.includes("buymeacoffee") || raw.includes("buy me a coffee")) return "buymeacoffee";
+  if (raw.includes("depop")) return "depop";
+  if (raw.includes("poshmark")) return "poshmark";
+  if (raw.includes("vinted")) return "vinted";
+  if (raw.includes("grailed")) return "grailed";
+  if (raw.includes("stockx")) return "stockx";
+  if (raw.includes("goat")) return "goat";
+
   return "other";
 }
 
@@ -194,6 +486,9 @@ function formatService(raw: RawSvc, provider?: string, xafRate: number = USD_TO_
 
   const averageTime = rate < 0.5 ? "Lent" : rate < 2 ? "Normal" : rate < 5 ? "Rapide" : "Très rapide";
 
+  const platform = detectPlatform(raw);
+  const isTraffic = platform === "traffic";
+
   return {
     id:              raw.service,
     name:            raw.name ?? "",
@@ -209,7 +504,8 @@ function formatService(raw: RawSvc, provider?: string, xafRate: number = USD_TO_
     isCustomComments,
     averageTime,
     description:     String(raw.description ?? ""),
-    platform:        detectPlatform(raw),
+    platform,
+    _isTraffic:      isTraffic,
     ...(provider ? { _provider: provider } : {}),
   };
 }
@@ -281,9 +577,7 @@ async function smmPanelOrder(
     const ct = r.headers.get("content-type") ?? "";
     let data: Record<string, unknown> = {};
     try {
-      data = ct.includes("json")
-        ? await r.json()
-        : JSON.parse(await r.text());
+      data = ct.includes("json") ? await r.json() : JSON.parse(await r.text());
     } catch { }
 
     if (!r.ok || data?.error) {
@@ -303,7 +597,104 @@ async function smmPanelOrder(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SMM PANELS — Exo / MTP / SMMWiz / AfriqueBoost
+//  Mč — Assistant IA conversationnel (Groq)
+// ═══════════════════════════════════════════════════════════════
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+
+router.post("/mc/chat", async (req: Request, res: ExpressResponse) => {
+  try {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({
+        success: false,
+        error: "GROQ_API_KEY non configurée. Contactez l'administrateur.",
+      });
+      return;
+    }
+
+    const { messages, catalogSummary } = req.body ?? {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ success: false, error: "messages requis" });
+      return;
+    }
+
+    const systemPrompt = `Tu es "Mč", l'assistant IA de Social Boost Horizon.
+Tu aides les utilisateurs à trouver le service de boost parfait pour leurs réseaux sociaux.
+
+RÈGLES :
+1. Réponds TOUJOURS en français, de manière chaleureuse et professionnelle.
+2. Si l'utilisateur n'est pas clair, pose UNE question à la fois pour comprendre :
+   - Son secteur d'activité (artiste, influenceur, e-commerçant, restaurant, etc.)
+   - Sa plateforme cible (Instagram, TikTok, Spotify, etc.)
+   - Son objectif (plus d'abonnés, plus de vues, plus de ventes, etc.)
+3. Quand tu as assez d'informations, propose 3 à 5 services concrets avec leurs prix.
+4. Ne propose JAMAIS de service qui n'existe pas dans le catalogue.
+5. Sois bref : 2-3 phrases maximum par réponse.
+6. Utilise des emojis pour rendre la conversation vivante.
+
+CATALOGUE DISPONIBLE :
+${catalogSummary ?? "(non fourni)"}
+
+Quand tu proposes des services, termine ta réponse par :
+RECOMMENDATIONS: [id1, id2, id3]`;
+
+    const groqRes = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages,
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!groqRes.ok) {
+      const errText = await groqRes.text().catch(() => "");
+      console.error("[mc/chat] Groq error:", groqRes.status, errText);
+      res.status(502).json({
+        success: false,
+        error: `Erreur IA (HTTP ${groqRes.status})`,
+      });
+      return;
+    }
+
+    const groqData = await groqRes.json() as any;
+    const rawReply = String(groqData?.choices?.[0]?.message?.content ?? "").trim();
+
+    const match = rawReply.match(/RECOMMENDATIONS:\s*\[([^\]]*)\]/i);
+    const recIds: number[] = [];
+    if (match) {
+      const parts = match[1].split(",").map((s: string) => parseInt(s.trim(), 10)).filter((n: number) => !isNaN(n));
+      recIds.push(...parts);
+    }
+
+    const cleanReply = rawReply.replace(/RECOMMENDATIONS:\s*\[[^\]]*\]/gi, "").trim();
+
+    res.json({
+      success: true,
+      reply: cleanReply,
+      recommendations: recIds,
+    });
+  } catch (e: any) {
+    console.error("[mc/chat] Erreur:", e?.message);
+    res.status(500).json({
+      success: false,
+      error: e?.message ?? "Erreur IA",
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  SMM PANELS — Exo / MTP / SMMWiz / AfriqueBoost
 // ═══════════════════════════════════════════════════════════════
 
 router.get("/exo-services", async (_req: Request, res: ExpressResponse) => {
@@ -320,7 +711,6 @@ router.post("/order-exo", requireAuth, async (req: AuthRequest, res: ExpressResp
   const { serviceId, link, quantity, comments, clientOrderId } = req.body ?? {};
   const uid = req.uid!;
 
-  // Idempotence
   const cachedOrderId = checkIdempotency(uid, clientOrderId);
   if (cachedOrderId) {
     console.log(`[order-exo] Idempotent retry: user=${uid} clientId=${clientOrderId} → orderId=${cachedOrderId}`);
@@ -385,7 +775,6 @@ router.post("/mtp/order", requireAuth, async (req: AuthRequest, res: ExpressResp
   }
 });
 
-// ── SMMWiz (remplace SMMGen) ──
 router.get("/smmwiz/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${SMMWIZ_BASE}?key=${encodeURIComponent(SMMWIZ_KEY)}&action=services`);
@@ -400,9 +789,6 @@ router.post("/smmwiz/order", requireAuth, async (req: AuthRequest, res: ExpressR
   const { serviceId, link, quantity, comments, clientOrderId } = req.body ?? {};
   const uid = req.uid!;
 
-  // ─── Idempotence : si ce clientOrderId a déjà été traité, on renvoie
-  //     la même commande sans rappeler SMMWiz. Évite les doubles commandes
-  //     en cas de timeout réseau côté mobile suivi d'un retry.
   const cachedOrderId = checkIdempotency(uid, clientOrderId);
   if (cachedOrderId) {
     console.log(`[smmwiz/order] Idempotent retry: user=${uid} clientId=${clientOrderId} → orderId=${cachedOrderId}`);
@@ -501,7 +887,7 @@ router.get("/services/auto", async (_req: Request, res: ExpressResponse) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// ROUTES DE COMPATIBILITÉ LEGACY
+//  ROUTES DE COMPATIBILITÉ LEGACY
 // ═══════════════════════════════════════════════════════════════
 
 router.get("/smmgen/services", async (_req: Request, res: ExpressResponse) => {
@@ -522,7 +908,7 @@ router.post("/smmgen/order", requireAuth, async (_req: AuthRequest, res: Express
 });
 
 // ═══════════════════════════════════════════════════════════════
-// FAPSHI — Paiement Mobile Money Cameroun
+//  FAPSHI — Paiement Mobile Money Cameroun
 // ═══════════════════════════════════════════════════════════════
 
 router.post("/create-fapshi-checkout", async (req: Request, res: ExpressResponse) => {
@@ -592,7 +978,7 @@ router.get("/fapshi/status/:transId", async (req: Request, res: ExpressResponse)
 });
 
 // ═══════════════════════════════════════════════════════════════
-// ACCOUNTPE / SWYCHR — Mobile Money international
+//  ACCOUNTPE / SWYCHR — Mobile Money international
 // ═══════════════════════════════════════════════════════════════
 const ACCOUNTPE_BASE = "https://api.accountpe.com/api/payin";
 
@@ -698,9 +1084,7 @@ router.post("/create-payment", requireAuth, async (req: AuthRequest, res: Expres
       depositNotifSent: false,
     });
 
-    const host = (req.headers["x-forwarded-host"] as string)
-      || (req.headers.host as string)
-      || "";
+    const host = (req.headers["x-forwarded-host"] as string) || (req.headers.host as string) || "";
     const proto = (req.headers["x-forwarded-proto"] as string) || "https";
     const baseUrl = host ? `${proto}://${host}` : "";
     const callbackUrl = baseUrl ? `${baseUrl}/api/webhook/swychr` : undefined;
@@ -777,7 +1161,7 @@ router.post("/create-payment", requireAuth, async (req: AuthRequest, res: Expres
 });
 
 // ═══════════════════════════════════════════════════════════════
-// NELSIUSPAY — Paiement carte bancaire Visa/Mastercard
+//  NELSIUSPAY — Paiement carte bancaire Visa/Mastercard
 // ═══════════════════════════════════════════════════════════════
 const NELSIUSPAY_API_URL          = "https://api.nelsiuspay.com/api/v1";
 const NELSIUSPAY_MIN_AMOUNT_XAF   = 1380;
