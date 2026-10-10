@@ -100,6 +100,19 @@ async function storageSet<T>(key: string, value: T): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  Idempotence : génération d'un identifiant de soumission unique
+//  Utilisé pour éviter les doubles commandes en cas de timeout réseau.
+//  Le même clientOrderId est réutilisé si l'utilisateur retente
+//  la même soumission (même service, même lien, même quantité).
+// ═══════════════════════════════════════════════════════════════
+function generateClientOrderId(): string {
+  const ts = Date.now().toString(36);
+  const r1 = Math.random().toString(36).slice(2, 10);
+  const r2 = Math.random().toString(36).slice(2, 6);
+  return `c-${ts}-${r1}${r2}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  Types
 // ═══════════════════════════════════════════════════════════════
 interface ExoService {
@@ -1096,6 +1109,10 @@ export default function NewOrderScreen() {
   const [showPlatformSearch, setShowPlatformSearch] = useState(false);
   const [platformSearch, setPlatformSearch] = useState("");
 
+  // ── Idempotence : référence stable tant que la soumission reste identique.
+  //    Évite les doubles commandes en cas de timeout réseau suivi d'un retry.
+  const pendingSubmissionRef = useRef<{ clientOrderId: string; payloadKey: string } | null>(null);
+
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
 
   // ═══════════════════════════════════════════════════════════════
@@ -1427,6 +1444,7 @@ export default function NewOrderScreen() {
     setQuantity("");
     setShowPlatformSearch(false);
     setPlatformSearch("");
+    pendingSubmissionRef.current = null; // nouvelle soumission → nouvelle référence
     loadServices(typeKey);
   };
 
@@ -1495,7 +1513,13 @@ export default function NewOrderScreen() {
   function getOrderEndpoint(typeKey: string, provider?: string): string {
     if (typeKey === "avancee") return `${BASE_URL}api/afriqueboost/order`;
     if (typeKey === "automatique") {
-      return provider === "smmgen" ? `${BASE_URL}api/smmgen/order` : `${BASE_URL}api/mtp/order`;
+      if (provider === "smmwiz") return `${BASE_URL}api/smmwiz/order`;
+      if (provider === "mtp")    return `${BASE_URL}api/mtp/order`;
+      // Refus défensif : un fournisseur inconnu ne doit JAMAIS emprunter une route par défaut.
+      throw new Error(
+        "Fournisseur automatique inconnu — impossible de router la commande de manière sécurisée. " +
+        "Contactez le support."
+      );
     }
     return `${BASE_URL}api/order-exo`;
   }
@@ -1574,6 +1598,19 @@ export default function NewOrderScreen() {
       setShowInsufficientBalance(true);
       return;
     }
+
+    // ─── Idempotence : même payload → même clientOrderId, sinon nouvelle référence.
+    //     Empêche les doubles commandes si l'utilisateur retente après un timeout réseau.
+    const payloadKey = `${selectedService.id}|${selectedService._provider ?? ""}|${selectedOrderType ?? "standard"}|${link.trim()}|${qty}|${comments ?? ""}`;
+    let clientOrderId: string;
+    const prev = pendingSubmissionRef.current;
+    if (prev && prev.payloadKey === payloadKey) {
+      clientOrderId = prev.clientOrderId;
+    } else {
+      clientOrderId = generateClientOrderId();
+      pendingSubmissionRef.current = { clientOrderId, payloadKey };
+    }
+
     setSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
@@ -1585,6 +1622,7 @@ export default function NewOrderScreen() {
         serviceId: selectedService.id,
         link: link.trim(),
         quantity: qty,
+        clientOrderId, // ← idempotence backend
       };
       if (comments) payload.comments = comments;
 
@@ -1665,6 +1703,9 @@ export default function NewOrderScreen() {
         type: selectedOrderType ?? "standard",
         recommendations: recos,
       });
+
+      // Succès → on remet la référence d'idempotence à zéro
+      pendingSubmissionRef.current = null;
 
       setLink(""); setQuantity(""); setCustomComments(""); setSelectedService(null);
       setSelectedCategory(null); setSelectedPlatform(null); setSelectedOrderType(null);
@@ -1756,6 +1797,7 @@ export default function NewOrderScreen() {
                   onSelect={(fav) => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     const typeKey = fav.orderTypeKey;
+                    pendingSubmissionRef.current = null;
                     setSelectedOrderType(typeKey);
                     setSelectedService(fav.service);
                     setSelectedCategory(null);
@@ -1781,6 +1823,7 @@ export default function NewOrderScreen() {
                   recents={recentServices.slice(0, 5)}
                   onSelect={(r) => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    pendingSubmissionRef.current = null;
                     setSelectedOrderType(r.orderTypeKey);
                     setSelectedService(r.service);
                     setSelectedCategory(null);
@@ -1811,6 +1854,7 @@ export default function NewOrderScreen() {
             <Pressable
               style={[styles.backTypeBtn, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() => {
+                pendingSubmissionRef.current = null;
                 setSelectedOrderType(null); setSelectedPlatform(null);
                 setSelectedCategory(null); setSelectedService(null);
                 setShowPlatformSearch(false); setPlatformSearch("");
@@ -1931,6 +1975,7 @@ export default function NewOrderScreen() {
         selectedService={selectedService}
         onSelect={(svc) => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          pendingSubmissionRef.current = null; // nouveau service → nouvelle référence
           setSelectedService(svc);
           setShowServiceModal(false);
         }}
@@ -1958,6 +2003,7 @@ export default function NewOrderScreen() {
         onSelect={() => {
           if (actionTarget) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            pendingSubmissionRef.current = null;
             setSelectedService(actionTarget.service);
           }
           setActionTarget(null);
@@ -1996,6 +2042,7 @@ export default function NewOrderScreen() {
         onClose={() => setSuccessData(null)}
         onViewOrders={() => { setSuccessData(null); router.push("/(tabs)/orders"); }}
         onOrderRecommended={(svc) => {
+          pendingSubmissionRef.current = null;
           setSuccessData(null);
           if (selectedPlatform) setSelectedService(svc);
         }}

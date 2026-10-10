@@ -35,6 +35,7 @@ async function checkUserCanOrder(uid: string): Promise<{ allowed: boolean; error
 // ─────────────────────────────────────────────────────────────
 const EXO_KEY    = process.env.EXOSUPPLIER_API_KEY        ?? "";
 const MTP_KEY    = process.env.MORETHANPANEL_API_KEY      ?? "";
+const SMMWIZ_KEY = process.env.SMMWIZ_API_KEY             ?? "";
 const SMMGEN_KEY = process.env.SMMGEN_API_KEY             ?? "";
 const AFB_KEY    = process.env.ADVANCED_PROVIDER_API_KEY  ?? "";
 const FAPSHI_USER   = process.env.FAPSHI_API_USER         ?? "";
@@ -42,12 +43,54 @@ const FAPSHI_SECRET = process.env.FAPSHI_SECRET_KEY       ?? "";
 
 const EXO_BASE    = "https://exosupplier.com/api/v2";
 const MTP_BASE    = "https://morethanpanel.com/api/v2";
+const SMMWIZ_BASE = "https://smmwiz.com/api/v2";
 const SMMGEN_BASE = "https://smmgen.com/api/v2";
 const AFB_BASE    = "https://afriqueboost.com/api/v2";
 const FAPSHI_BASE = "https://live.fapshi.com";
 
 const USD_TO_XAF      = 1230;
 const USD_TO_XAF_AUTO = 1845;
+
+// ═══════════════════════════════════════════════════════════════
+//  IDEMPOTENCE — Cache en mémoire
+//  Évite les doubles commandes en cas de timeout réseau côté mobile.
+//  Clé : `${uid}:${clientOrderId}` — TTL 10 minutes.
+// ═══════════════════════════════════════════════════════════════
+const idempotencyCache = new Map<string, { orderId: string; ts: number }>();
+const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
+
+function checkIdempotency(uid: string, clientOrderId: string | undefined | null): string | null {
+  if (!clientOrderId || typeof clientOrderId !== "string") return null;
+  const key = `${uid}:${clientOrderId}`;
+  const entry = idempotencyCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > IDEMPOTENCY_TTL_MS) {
+    idempotencyCache.delete(key);
+    return null;
+  }
+  return entry.orderId;
+}
+
+function storeIdempotency(uid: string, clientOrderId: string | undefined | null, orderId: string): void {
+  if (!clientOrderId || typeof clientOrderId !== "string") return;
+  idempotencyCache.set(`${uid}:${clientOrderId}`, { orderId, ts: Date.now() });
+
+  // Nettoyage opportuniste
+  if (idempotencyCache.size > 5000) {
+    const now = Date.now();
+    for (const [k, v] of idempotencyCache) {
+      if (now - v.ts > IDEMPOTENCY_TTL_MS) idempotencyCache.delete(k);
+    }
+  }
+}
+
+// Nettoyage périodique
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of idempotencyCache) {
+    if (now - v.ts > IDEMPOTENCY_TTL_MS) idempotencyCache.delete(k);
+  }
+}, 5 * 60 * 1000);
 
 type RawSvc = {
   service: number;
@@ -211,7 +254,8 @@ async function smmPanelOrder(
   link: string,
   quantity: number,
   comments?: string,
-  res?: ExpressResponse
+  res?: ExpressResponse,
+  extraParams?: Record<string, string>
 ): Promise<{ ok: boolean; orderId?: string; error?: string }> {
   try {
     const params: Record<string, string> = {
@@ -220,6 +264,7 @@ async function smmPanelOrder(
       service: String(serviceId),
       link,
       quantity: String(quantity),
+      ...(extraParams ?? {}),
     };
     if (comments) params.comments = comments;
 
@@ -258,7 +303,7 @@ async function smmPanelOrder(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SMM PANELS — Exo / MTP / SMMGen / AfriqueBoost
+// SMM PANELS — Exo / MTP / SMMWiz / AfriqueBoost
 // ═══════════════════════════════════════════════════════════════
 
 router.get("/exo-services", async (_req: Request, res: ExpressResponse) => {
@@ -272,7 +317,17 @@ router.get("/exo-services", async (_req: Request, res: ExpressResponse) => {
 });
 
 router.post("/order-exo", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
-  const { serviceId, link, quantity, comments } = req.body ?? {};
+  const { serviceId, link, quantity, comments, clientOrderId } = req.body ?? {};
+  const uid = req.uid!;
+
+  // Idempotence
+  const cachedOrderId = checkIdempotency(uid, clientOrderId);
+  if (cachedOrderId) {
+    console.log(`[order-exo] Idempotent retry: user=${uid} clientId=${clientOrderId} → orderId=${cachedOrderId}`);
+    res.json({ success: true, orderId: cachedOrderId, idempotent: true });
+    return;
+  }
+
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
     return;
@@ -282,7 +337,13 @@ router.post("/order-exo", requireAuth, async (req: AuthRequest, res: ExpressResp
     res.status(403).json({ success: false, error: check.errorMsg, code: check.errorCode });
     return;
   }
-  await smmPanelOrder(EXO_BASE, EXO_KEY, String(serviceId), String(link), Number(quantity), comments, res);
+  const result = await smmPanelOrder(EXO_BASE, EXO_KEY, String(serviceId), String(link), Number(quantity), comments, undefined);
+  if (result.ok && result.orderId) {
+    storeIdempotency(uid, clientOrderId, result.orderId);
+    res.json({ success: true, orderId: result.orderId });
+  } else {
+    res.status(400).json({ success: false, error: result.error || "Erreur inconnue" });
+  }
 });
 
 router.get("/mtp/services", async (_req: Request, res: ExpressResponse) => {
@@ -296,7 +357,16 @@ router.get("/mtp/services", async (_req: Request, res: ExpressResponse) => {
 });
 
 router.post("/mtp/order", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
-  const { serviceId, link, quantity, comments } = req.body ?? {};
+  const { serviceId, link, quantity, comments, clientOrderId } = req.body ?? {};
+  const uid = req.uid!;
+
+  const cachedOrderId = checkIdempotency(uid, clientOrderId);
+  if (cachedOrderId) {
+    console.log(`[mtp/order] Idempotent retry: user=${uid} clientId=${clientOrderId} → orderId=${cachedOrderId}`);
+    res.json({ success: true, orderId: cachedOrderId, idempotent: true });
+    return;
+  }
+
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
     return;
@@ -306,21 +376,40 @@ router.post("/mtp/order", requireAuth, async (req: AuthRequest, res: ExpressResp
     res.status(403).json({ success: false, error: check.errorMsg, code: check.errorCode });
     return;
   }
-  await smmPanelOrder(MTP_BASE, MTP_KEY, String(serviceId), String(link), Number(quantity), comments, res);
+  const result = await smmPanelOrder(MTP_BASE, MTP_KEY, String(serviceId), String(link), Number(quantity), comments, undefined);
+  if (result.ok && result.orderId) {
+    storeIdempotency(uid, clientOrderId, result.orderId);
+    res.json({ success: true, orderId: result.orderId });
+  } else {
+    res.status(400).json({ success: false, error: result.error || "Erreur inconnue" });
+  }
 });
 
-router.get("/smmgen/services", async (_req: Request, res: ExpressResponse) => {
+// ── SMMWiz (remplace SMMGen) ──
+router.get("/smmwiz/services", async (_req: Request, res: ExpressResponse) => {
   try {
-    const raw = await fetchServices(`${SMMGEN_BASE}?key=${encodeURIComponent(SMMGEN_KEY)}&action=services`);
-    const svcs = raw.map((s) => formatService(s, "smmgen", USD_TO_XAF_AUTO));
+    const raw = await fetchServices(`${SMMWIZ_BASE}?key=${encodeURIComponent(SMMWIZ_KEY)}&action=services`);
+    const svcs = raw.map((s) => formatService(s, "smmwiz", USD_TO_XAF_AUTO));
     res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
   } catch (e: any) {
-    res.status(502).json({ success: false, error: "Fournisseur SMMGen inaccessible: " + e?.message });
+    res.status(502).json({ success: false, error: "Fournisseur SMMWiz inaccessible: " + e?.message });
   }
 });
 
-router.post("/smmgen/order", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
-  const { serviceId, link, quantity, comments } = req.body ?? {};
+router.post("/smmwiz/order", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
+  const { serviceId, link, quantity, comments, clientOrderId } = req.body ?? {};
+  const uid = req.uid!;
+
+  // ─── Idempotence : si ce clientOrderId a déjà été traité, on renvoie
+  //     la même commande sans rappeler SMMWiz. Évite les doubles commandes
+  //     en cas de timeout réseau côté mobile suivi d'un retry.
+  const cachedOrderId = checkIdempotency(uid, clientOrderId);
+  if (cachedOrderId) {
+    console.log(`[smmwiz/order] Idempotent retry: user=${uid} clientId=${clientOrderId} → orderId=${cachedOrderId}`);
+    res.json({ success: true, orderId: cachedOrderId, idempotent: true });
+    return;
+  }
+
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
     return;
@@ -330,7 +419,13 @@ router.post("/smmgen/order", requireAuth, async (req: AuthRequest, res: ExpressR
     res.status(403).json({ success: false, error: check.errorMsg, code: check.errorCode });
     return;
   }
-  await smmPanelOrder(SMMGEN_BASE, SMMGEN_KEY, String(serviceId), String(link), Number(quantity), comments, res);
+  const result = await smmPanelOrder(SMMWIZ_BASE, SMMWIZ_KEY, String(serviceId), String(link), Number(quantity), comments, undefined);
+  if (result.ok && result.orderId) {
+    storeIdempotency(uid, clientOrderId, result.orderId);
+    res.json({ success: true, orderId: result.orderId });
+  } else {
+    res.status(400).json({ success: false, error: result.error || "Erreur inconnue" });
+  }
 });
 
 router.get("/afriqueboost/services", async (_req: Request, res: ExpressResponse) => {
@@ -344,7 +439,16 @@ router.get("/afriqueboost/services", async (_req: Request, res: ExpressResponse)
 });
 
 router.post("/afriqueboost/order", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
-  const { serviceId, link, quantity, comments } = req.body ?? {};
+  const { serviceId, link, quantity, comments, clientOrderId } = req.body ?? {};
+  const uid = req.uid!;
+
+  const cachedOrderId = checkIdempotency(uid, clientOrderId);
+  if (cachedOrderId) {
+    console.log(`[afriqueboost/order] Idempotent retry: user=${uid} clientId=${clientOrderId} → orderId=${cachedOrderId}`);
+    res.json({ success: true, orderId: cachedOrderId, idempotent: true });
+    return;
+  }
+
   if (!serviceId || !link || !quantity) {
     res.status(400).json({ success: false, error: "serviceId, link et quantity sont requis" });
     return;
@@ -354,14 +458,21 @@ router.post("/afriqueboost/order", requireAuth, async (req: AuthRequest, res: Ex
     res.status(403).json({ success: false, error: check.errorMsg, code: check.errorCode });
     return;
   }
-  await smmPanelOrder(AFB_BASE, AFB_KEY, String(serviceId), String(link), Number(quantity), comments, res);
+  const result = await smmPanelOrder(AFB_BASE, AFB_KEY, String(serviceId), String(link), Number(quantity), comments, undefined);
+  if (result.ok && result.orderId) {
+    storeIdempotency(uid, clientOrderId, result.orderId);
+    res.json({ success: true, orderId: result.orderId });
+  } else {
+    res.status(400).json({ success: false, error: result.error || "Erreur inconnue" });
+  }
 });
 
+// ── Catalogue automatique fusionné : MTP + SMMWiz ──
 router.get("/services/auto", async (_req: Request, res: ExpressResponse) => {
   try {
-    const [mtpRes, smmRes] = await Promise.allSettled([
+    const [mtpRes, smmwizRes] = await Promise.allSettled([
       fetchServices(`${MTP_BASE}?key=${encodeURIComponent(MTP_KEY)}&action=services`),
-      fetchServices(`${SMMGEN_BASE}?key=${encodeURIComponent(SMMGEN_KEY)}&action=services`),
+      fetchServices(`${SMMWIZ_BASE}?key=${encodeURIComponent(SMMWIZ_KEY)}&action=services`),
     ]);
 
     let allServices: FormattedSvc[] = [];
@@ -371,9 +482,9 @@ router.get("/services/auto", async (_req: Request, res: ExpressResponse) => {
       allServices = allServices.concat(mtpRes.value.map((s) => formatService(s, "mtp", USD_TO_XAF_AUTO)));
       if (mtpRes.value.length > 0) providers.push("MTP");
     }
-    if (smmRes.status === "fulfilled") {
-      allServices = allServices.concat(smmRes.value.map((s) => formatService(s, "smmgen", USD_TO_XAF_AUTO)));
-      if (smmRes.value.length > 0) providers.push("SMMGen");
+    if (smmwizRes.status === "fulfilled") {
+      allServices = allServices.concat(smmwizRes.value.map((s) => formatService(s, "smmwiz", USD_TO_XAF_AUTO)));
+      if (smmwizRes.value.length > 0) providers.push("SMMWiz");
     }
 
     if (allServices.length === 0) {
@@ -387,6 +498,27 @@ router.get("/services/auto", async (_req: Request, res: ExpressResponse) => {
   } catch (e: any) {
     res.status(502).json({ success: false, error: "Fournisseur inaccessible: " + e?.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// ROUTES DE COMPATIBILITÉ LEGACY
+// ═══════════════════════════════════════════════════════════════
+
+router.get("/smmgen/services", async (_req: Request, res: ExpressResponse) => {
+  try {
+    const raw = await fetchServices(`${SMMWIZ_BASE}?key=${encodeURIComponent(SMMWIZ_KEY)}&action=services`);
+    const svcs = raw.map((s) => formatService(s, "smmwiz", USD_TO_XAF_AUTO));
+    res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
+  } catch (e: any) {
+    res.status(502).json({ success: false, error: "Catalogue indisponible: " + e?.message });
+  }
+});
+
+router.post("/smmgen/order", requireAuth, async (_req: AuthRequest, res: ExpressResponse) => {
+  res.status(410).json({
+    success: false,
+    error: "SMMGen n'est plus un fournisseur actif. Veuillez mettre à jour l'application.",
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -460,7 +592,7 @@ router.get("/fapshi/status/:transId", async (req: Request, res: ExpressResponse)
 });
 
 // ═══════════════════════════════════════════════════════════════
-// ACCOUNTPE / SWYCHR — Mobile Money international (DIRECT)
+// ACCOUNTPE / SWYCHR — Mobile Money international
 // ═══════════════════════════════════════════════════════════════
 const ACCOUNTPE_BASE = "https://api.accountpe.com/api/payin";
 
@@ -504,11 +636,6 @@ async function generateIntlReference(): Promise<string> {
   return `SBH-INT-${String(next).padStart(6, "0")}`;
 }
 
-/**
- * POST /create-payment
- * Crée un paiement Mobile Money international DIRECTEMENT chez AccountPe.
- * Le userId vient du token Firebase (req.uid), pas du body.
- */
 router.post("/create-payment", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   try {
     const uid = req.uid!;
@@ -810,7 +937,6 @@ async function creditNelsiusOnce(reference: string, uid: string): Promise<{ alre
   return { alreadyCredited: already, creditedAmount: amount, newBalance };
 }
 
-// ── POST /nelsiuspay/checkout ────────────────────────────────
 router.post("/nelsiuspay/checkout", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   try {
     const uid = req.uid!;
@@ -940,7 +1066,6 @@ router.post("/nelsiuspay/checkout", requireAuth, async (req: AuthRequest, res: E
   }
 });
 
-// ── POST /nelsiuspay/status ──────────────────────────────────
 router.post("/nelsiuspay/status", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   try {
     const uid = req.uid!;
@@ -1017,7 +1142,6 @@ router.post("/nelsiuspay/status", requireAuth, async (req: AuthRequest, res: Exp
   }
 });
 
-// ── POST /nelsiuspay/webhook ─────────────────────────────────
 router.post("/nelsiuspay/webhook", async (req: Request, res: ExpressResponse) => {
   try {
     const event = String(req.body?.event ?? "");

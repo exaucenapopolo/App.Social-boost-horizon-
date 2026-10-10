@@ -14,19 +14,17 @@ import { sendOrderStatusEmail } from "../lib/email.js";
 
 const EXO_KEY    = process.env.EXOSUPPLIER_API_KEY       ?? "";
 const MTP_KEY    = process.env.MORETHANPANEL_API_KEY      ?? "";
-const SMMGEN_KEY = process.env.SMMGEN_API_KEY             ?? "";
+const SMMWIZ_KEY = process.env.SMMWIZ_API_KEY             ?? "";
+const SMMGEN_KEY = process.env.SMMGEN_API_KEY             ?? ""; // legacy — historique seulement
 const AFB_KEY    = process.env.ADVANCED_PROVIDER_API_KEY  ?? "";
 const EXO_BASE    = "https://exosupplier.com/api/v2";
 const MTP_BASE    = "https://morethanpanel.com/api/v2";
-const SMMGEN_BASE = "https://smmgen.com/api/v2";
+const SMMWIZ_BASE = "https://smmwiz.com/api/v2";
+const SMMGEN_BASE = "https://smmgen.com/api/v2"; // legacy
 const AFB_BASE    = "https://afriqueboost.com/api/v2";
 
-// ── Paramètres de polling ──────────────────────────────────────────────────
-// Cycle de 8 min — chaque commande est vérifiée toutes les ~8 min
-// Budget lecture Firestore : 180 cycles/jour × 50 commandes = 9 000 reads/jour
-// Bien en dessous de la limite gratuite de 50 000 reads/jour.
-const POLL_INTERVAL_MS   = 8 * 60_000;  // 8 minutes entre chaque cycle
-const MAX_ORDERS_PER_RUN = 50;          // max 50 commandes actives par cycle
+const POLL_INTERVAL_MS   = 8 * 60_000;
+const MAX_ORDERS_PER_RUN = 50;
 
 const PROVIDER_STATUS_MAP: Record<string, string> = {
   pending:     "En attente",
@@ -57,7 +55,6 @@ interface OrderDetails {
   charge: number;
 }
 
-// Type minimal pour contourner le conflit de `Response`
 type HttpRes = {
   ok: boolean;
   status: number;
@@ -94,7 +91,6 @@ async function fetchOrderDetails(
   }
 }
 
-// ── Cache info utilisateur (4h) ───────────────────────────────────────────
 const userInfoCache = new Map<string, { firstName: string; email: string; fetchedAt: number }>();
 const USER_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
@@ -112,7 +108,6 @@ async function getCachedUserInfo(db: ReturnType<typeof getFirestore>, uid: strin
   } catch { return { firstName: "", email: "" }; }
 }
 
-// ── Traitement d'une commande individuelle ────────────────────────────────
 async function processOrder(
   db: ReturnType<typeof getFirestore>,
   doc: QueryDocumentSnapshot,
@@ -130,10 +125,23 @@ async function processOrder(
   if (type === "avancée" || type === "avancee") {
     details = await fetchOrderDetails(AFB_BASE, AFB_KEY, providerOrderId);
   } else if (type === "automatique") {
-    details = provider === "smmgen"
-      ? await fetchOrderDetails(SMMGEN_BASE, SMMGEN_KEY, providerOrderId)
-      : (await fetchOrderDetails(MTP_BASE, MTP_KEY, providerOrderId)) ??
-        (await fetchOrderDetails(SMMGEN_BASE, SMMGEN_KEY, providerOrderId));
+    // ── Routage strict : un seul fournisseur interrogé, pas de fallback ──
+    if (provider === "smmwiz") {
+      details = await fetchOrderDetails(SMMWIZ_BASE, SMMWIZ_KEY, providerOrderId);
+    } else if (provider === "mtp") {
+      details = await fetchOrderDetails(MTP_BASE, MTP_KEY, providerOrderId);
+    } else if (provider === "smmgen") {
+      // Commande historique — on utilise SMMGen uniquement si sa clé existe encore
+      if (SMMGEN_KEY) {
+        details = await fetchOrderDetails(SMMGEN_BASE, SMMGEN_KEY, providerOrderId);
+      } else {
+        console.warn(`[poller] ⚠️ Commande ${doc.id} : SMMGen legacy sans clé — statut non vérifiable`);
+        return;
+      }
+    } else {
+      console.warn(`[poller] ⚠️ Commande ${doc.id} : fournisseur automatique inconnu "${provider}" — ignorée`);
+      return;
+    }
   } else {
     details = await fetchOrderDetails(EXO_BASE, EXO_KEY, providerOrderId);
   }
@@ -143,10 +151,8 @@ async function processOrder(
   const mapped     = mapStatus(details.status);
   const prevStatus = String(order.status ?? "");
 
-  // Pas de changement de statut → rien à écrire, rien à notifier
   if (mapped === prevStatus) return;
 
-  // ── Statut changé → on met à jour le document commande ──────────────────
   await doc.ref.update({
     status:        mapped,
     lastRefreshed: new Date(now).toISOString(),
@@ -168,7 +174,6 @@ async function processOrder(
   const greeting      = userFirstName ? `, ${userFirstName}` : "";
   const orderIdLabel  = String(order.orderId ?? doc.id);
 
-  // ── COMMANDE LIVRÉE ──────────────────────────────────────────────────────
   if (mapped === "succès" && prevStatus !== "succès") {
     await saveNotifAndSendPush(
       uid,
@@ -179,7 +184,6 @@ async function processOrder(
       "orders",
       { serviceName, platform, quantity: qty, orderId: orderIdLabel }
     );
-    // Email statut livré
     if (userEmail) {
       sendOrderStatusEmail(userEmail, userFirstName, "succès", serviceName, platform, qty, price, orderIdLabel).catch(() => {});
     }
@@ -187,7 +191,6 @@ async function processOrder(
     invalidateOrdersCache(uid);
     invalidateNotifCache(uid);
 
-  // ── COMMANDE PARTIELLEMENT LIVRÉE ────────────────────────────────────────
   } else if (mapped === "partiel" && prevStatus !== "partiel" && !order.refundProcessed) {
     const remains     = details.remains > 0 ? details.remains : 0;
     const refundRatio = qty > 0 && remains > 0 ? remains / qty : 0;
@@ -198,7 +201,7 @@ async function processOrder(
         await db.runTransaction(async (t: Transaction) => {
           const orderRef = db.doc(`commandes/${doc.id}`);
           const snap = await t.get(orderRef);
-          if (snap.data()?.refundProcessed) return; // Déjà traité
+          if (snap.data()?.refundProcessed) return;
           t.update(orderRef, { refundProcessed: true, refundAmount: refundAmt });
           t.update(db.doc(`users/${uid}`), { balance: FieldValue.increment(refundAmt) });
         });
@@ -223,12 +226,10 @@ async function processOrder(
       "orders",
       { serviceName, platform, quantity: qty, remains, refundAmount: refundAmt, orderId: orderIdLabel }
     );
-    // Email statut partiel
     if (userEmail) {
       sendOrderStatusEmail(userEmail, userFirstName, "partiel", serviceName, platform, qty, price, orderIdLabel, refundAmt > 0 ? refundAmt : undefined).catch(() => {});
     }
 
-  // ── COMMANDE ANNULÉE PAR LE PRESTATAIRE ──────────────────────────────────
   } else if ((mapped === "annulée" || mapped === "remboursé") &&
              prevStatus !== "annulée" && prevStatus !== "remboursé" &&
              !order.refundProcessed) {
@@ -237,7 +238,7 @@ async function processOrder(
         await db.runTransaction(async (t: Transaction) => {
           const orderRef = db.doc(`commandes/${doc.id}`);
           const snap = await t.get(orderRef);
-          if (snap.data()?.refundProcessed) return; // Déjà traité
+          if (snap.data()?.refundProcessed) return;
           t.update(orderRef, { refundProcessed: true, refundAmount: price });
           t.update(db.doc(`users/${uid}`), { balance: FieldValue.increment(price) });
         });
@@ -262,7 +263,6 @@ async function processOrder(
       "orders",
       { serviceName, platform, quantity: qty, refundAmount: price, orderId: orderIdLabel }
     );
-    // Email statut annulée/remboursé
     if (userEmail) {
       const emailStatus = mapped === "remboursé" ? "remboursé" : "annulée";
       sendOrderStatusEmail(userEmail, userFirstName, emailStatus, serviceName, platform, qty, price, orderIdLabel, price > 0 ? price : undefined).catch(() => {});
@@ -270,20 +270,11 @@ async function processOrder(
   }
 }
 
-// ── Cycle principal ───────────────────────────────────────────────────────
-// Budget Firestore : 180 cycles/jour × 50 docs = 9 000 reads/jour max.
-//
-// ⚠️  IMPORTANT : On utilise UN SEUL filtre "status IN [...]" pour éviter
-//    d'avoir besoin d'un index composite Firestore (status + createdAt).
-//    Un index composite absent entraîne un rejet silencieux → 0 commandes traitées.
-//    Le tri en mémoire prend en charge la limite temporelle si nécessaire.
 async function pollOnce(): Promise<void> {
   getFirebaseAdmin();
   const db  = getFirestore();
   const now = Date.now();
 
-  // Requête simple à 1 filtre uniquement → pas d'index composite requis
-  // Inclut toutes les variantes de statut "actif" possibles (majuscule ou non)
   let snap: QuerySnapshot | null = null;
   try {
     snap = await db.collection("commandes")
@@ -291,10 +282,8 @@ async function pollOnce(): Promise<void> {
       .limit(MAX_ORDERS_PER_RUN)
       .get();
   } catch (err: unknown) {
-    // Logue l'erreur réelle plutôt que de l'avaler silencieusement
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[poller] ❌ Erreur requête Firestore: ${msg}`);
-    // Si index manquant, essai de repli avec un filtre encore plus simple
     try {
       snap = await db.collection("commandes")
         .where("status", "in", ["En attente", "en cours"])
@@ -314,7 +303,6 @@ async function pollOnce(): Promise<void> {
 
   console.log(`[poller] 🔍 ${snap.size} commande(s) active(s) à vérifier`);
 
-  // Traiter en parallèle (max 10 simultanément pour ne pas surcharger les APIs fournisseur)
   const CONCURRENCY = 10;
   for (let i = 0; i < snap.docs.length; i += CONCURRENCY) {
     const batch = snap.docs.slice(i, i + CONCURRENCY);
@@ -322,7 +310,6 @@ async function pollOnce(): Promise<void> {
   }
 }
 
-// ── Démarrage ─────────────────────────────────────────────────────────────
 let pollerTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startOrderPoller(): void {
@@ -330,7 +317,6 @@ export function startOrderPoller(): void {
 
   console.log(`[poller] ✅ Démarrage — cycle de ${POLL_INTERVAL_MS / 60_000} min, max ${MAX_ORDERS_PER_RUN} commandes/cycle`);
 
-  // Premier cycle 15 secondes après le démarrage
   setTimeout(() => {
     pollOnce().catch((e) => console.error("[poller] error:", e));
   }, 15_000);

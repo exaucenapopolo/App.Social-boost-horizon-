@@ -13,7 +13,8 @@ const MULTIPLIERS: Record<string, number> = {
   standard:           2,
   revendeur:          2,
   automatique_mtp:    3,
-  automatique_smmgen: 3.5,
+  automatique_smmwiz: 3.5, // remplace automatique_smmgen (continuité de marge)
+  automatique_smmgen: 3.5, // legacy — commandes historiques
   avancée:            1.82,
   avancee:            1.82,
   advanced:           1.82,
@@ -23,7 +24,9 @@ function getMultiplier(type: string, provider: string): number {
   const t = (type ?? "").toLowerCase();
   const p = (provider ?? "").toLowerCase();
   if (t === "automatique" || t === "auto") {
-    return p === "smmgen" ? MULTIPLIERS.automatique_smmgen : MULTIPLIERS.automatique_mtp;
+    if (p === "smmwiz") return MULTIPLIERS.automatique_smmwiz;
+    if (p === "smmgen") return MULTIPLIERS.automatique_smmgen;
+    return MULTIPLIERS.automatique_mtp;
   }
   return MULTIPLIERS[t] ?? 2;
 }
@@ -228,7 +231,7 @@ function buildFinanceSection(s: OrderStats): string {
   if (standard.count > 0)
     msg += `├─ 🔵 Standard (×2 → 50%) : ${standard.count} cmd — CA ${f(standard.revenue)} → Bén. ~${f(standard.profit)} FCFA\n`;
   if (automatique.count > 0)
-    msg += `├─ 🟣 Automatique (×3/3.5 → 67-71%) : ${automatique.count} cmd — CA ${f(automatique.revenue)} → Bén. ~${f(automatique.profit)} FCFA\n`;
+    msg += `├─ 🟣 Automatique MTP/SMMWiz (×3/3.5 → 67-71%) : ${automatique.count} cmd — CA ${f(automatique.revenue)} → Bén. ~${f(automatique.profit)} FCFA\n`;
   if (revendeur.count > 0)
     msg += `├─ 🟢 Revendeur (×2 → 50%) : ${revendeur.count} cmd — CA ${f(revendeur.revenue)} → Bén. ~${f(revendeur.profit)} FCFA\n`;
   if (avancee.count > 0)
@@ -473,7 +476,7 @@ export async function sendMonthlyReport(): Promise<void> {
   msg += `🆕 Nouveaux inscrits : ${newUsers}\n`;
   msg += `📈 *Marge globale estimée : ${s.overallMargin} %*\n\n`;
   msg += `💡 Bénéfice net = CA − (CA / multiplicateur fournisseur)\n`;
-  msg += `   ExoSupplier ×2 · MTP ×3 · SMMGen ×3.5 · AfriqueBoost ×1.82`;
+  msg += `   ExoSupplier ×2 · MTP ×3 · SMMWiz ×3.5 · AfriqueBoost ×1.82`;
 
   await sendWhatsApp(msg);
   console.log("[reports] ✅ Rapport mensuel terminé");

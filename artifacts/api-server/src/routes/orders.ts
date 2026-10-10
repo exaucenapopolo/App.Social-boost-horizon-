@@ -58,11 +58,11 @@ async function notifyAdminCancelRefund(
   const isRefund  = refundAmount > 0;
 
   const body =
-    `${isRefund ? "💸 *COMMANDE ANNULÉE & REMBOURSÉE*" : "❌ *COMMANDE ANNULÉE*"} — Social Boost Horizon\n` +
+    `${isRefund ? "💸 *COMMANDE ANNULÉE & REMBOURSÉE*" : "⏳ *DEMANDE D'ANNULATION TRANSMISE*"} — Social Boost Horizon\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📋 *ID:* ${orderId}\n` +
     `📦 *Type:* ${orderType}\n` +
-    `🕒 *Annulée le:* ${new Date().toLocaleString("fr-FR", { timeZone: "Africa/Douala" })}\n` +
+    `🕒 *Demandée le:* ${new Date().toLocaleString("fr-FR", { timeZone: "Africa/Douala" })}\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `👤 *Client:* ${userName}\n` +
     `📧 *Email:* ${userEmail}\n` +
@@ -73,9 +73,7 @@ async function notifyAdminCancelRefund(
     `📊 *Quantité:* ${qty.toLocaleString("fr-FR")}\n` +
     `🔗 *Lien:* ${link}\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    (isRefund
-      ? `💰 *Remboursement:* ${refundAmount.toLocaleString("fr-FR")} FCFA crédités sur le solde\n`
-      : `ℹ️ Aucun remboursement (montant nul)\n`);
+    `ℹ️ Demande d'annulation envoyée au fournisseur. Le remboursement sera automatique après confirmation (via le poller).\n`;
 
   try {
     const params = new URLSearchParams({
@@ -96,7 +94,7 @@ async function notifyAdminCancelRefund(
       }
     );
     if (!r.ok) console.error("[orders/cancel] WhatsApp erreur:", r.status);
-    else console.log(`[orders/cancel] Admin notifié — commande ${orderId} annulée`);
+    else console.log(`[orders/cancel] Admin notifié — commande ${orderId}`);
   } catch (e) {
     console.error("[orders/cancel] WhatsApp exception:", e);
   }
@@ -104,10 +102,12 @@ async function notifyAdminCancelRefund(
 
 const EXO_KEY    = process.env.EXOSUPPLIER_API_KEY       ?? "";
 const MTP_KEY    = process.env.MORETHANPANEL_API_KEY      ?? "";
+const SMMWIZ_KEY = process.env.SMMWIZ_API_KEY             ?? "";
 const SMMGEN_KEY = process.env.SMMGEN_API_KEY             ?? "";
 const AFB_KEY    = process.env.ADVANCED_PROVIDER_API_KEY  ?? "";
 const EXO_BASE    = "https://exosupplier.com/api/v2";
 const MTP_BASE    = "https://morethanpanel.com/api/v2";
+const SMMWIZ_BASE = "https://smmwiz.com/api/v2";
 const SMMGEN_BASE = "https://smmgen.com/api/v2";
 const AFB_BASE    = "https://afriqueboost.com/api/v2";
 
@@ -158,6 +158,64 @@ async function fetchProviderStatus(
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Appel générique de l'action "cancel" auprès d'un fournisseur.
+ * Utilise le paramètre "orders" (pluriel) — accepté par MTP, SMMWiz, AfriqueBoost.
+ * Retourne { ok, error? }.
+ */
+async function callProviderCancel(
+  base: string,
+  apiKey: string,
+  providerOrderId: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!apiKey) return { ok: false, error: "Clé API fournisseur manquante" };
+  if (!providerOrderId) return { ok: false, error: "Identifiant fournisseur manquant" };
+
+  try {
+    const params = new URLSearchParams({
+      key: apiKey,
+      action: "cancel",
+      orders: providerOrderId, // pluriel — standard SMM panel
+    });
+    const r: any = await fetch(base, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: params.toString(),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const ct = r.headers.get("content-type") ?? "";
+    let data: any;
+    try {
+      data = ct.includes("json") ? await r.json() : JSON.parse(await r.text());
+    } catch {
+      return { ok: false, error: `Réponse invalide (HTTP ${r.status})` };
+    }
+
+    if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+
+    // Erreur globale
+    if (data?.error) return { ok: false, error: String(data.error) };
+
+    // Réponse en tableau : plusieurs fournisseurs renvoient une entrée par commande
+    if (Array.isArray(data)) {
+      const entry = data.find(
+        (x: any) => parseInt(x?.order) === parseInt(providerOrderId)
+      );
+      if (entry?.cancel?.error) {
+        return { ok: false, error: String(entry.cancel.error) };
+      }
+    }
+
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Timeout fournisseur" };
   }
 }
 
@@ -511,16 +569,26 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
     providerStatus = await fetchProviderStatus(AFB_BASE, AFB_KEY, providerOrderId);
     usedProvider   = "afriqueboost";
   } else if (type === "automatique") {
-    if (storedProvider === "smmgen") {
+    if (storedProvider === "smmwiz") {
+      providerStatus = await fetchProviderStatus(SMMWIZ_BASE, SMMWIZ_KEY, providerOrderId);
+      usedProvider   = "smmwiz";
+    } else if (storedProvider === "mtp") {
+      providerStatus = await fetchProviderStatus(MTP_BASE, MTP_KEY, providerOrderId);
+      usedProvider   = "mtp";
+    } else if (storedProvider === "smmgen") {
+      if (!SMMGEN_KEY) {
+        res.status(410).json({
+          success: false,
+          error: "Cette commande provient d'un ancien fournisseur (SMMGen) qui n'est plus actif. Le suivi n'est plus disponible.",
+          legacy: true,
+        });
+        return;
+      }
       providerStatus = await fetchProviderStatus(SMMGEN_BASE, SMMGEN_KEY, providerOrderId);
       usedProvider   = "smmgen";
     } else {
-      providerStatus = await fetchProviderStatus(MTP_BASE, MTP_KEY, providerOrderId);
-      usedProvider   = "mtp";
-    }
-    if (!providerStatus) {
-      providerStatus = await fetchProviderStatus(SMMGEN_BASE, SMMGEN_KEY, providerOrderId);
-      usedProvider   = "smmgen";
+      res.status(400).json({ success: false, error: "Fournisseur inconnu pour cette commande automatique." });
+      return;
     }
   } else {
     providerStatus = await fetchProviderStatus(EXO_BASE, EXO_KEY, providerOrderId);
@@ -646,6 +714,12 @@ router.get("/orders/:id/refresh-status", requireAuth, async (req: AuthRequest, r
   });
 });
 
+// ═══════════════════════════════════════════════════════════════
+//  ANNULATION
+//  ⚠️ Ne touche PAS Firestore. Transmet la demande au fournisseur.
+//     Le poller détectera ensuite le statut "Canceled" et effectuera
+//     automatiquement le remboursement au prochain cycle.
+// ═══════════════════════════════════════════════════════════════
 router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
   const rawId = req.params.id;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -656,88 +730,121 @@ router.post("/orders/:id/cancel", requireAuth, async (req: AuthRequest, res: Exp
   getFirebaseAdmin();
   const db = getFirestore();
 
-  let price     = 0;
-  let existing: DocumentData | null = null;
+  // 1) Lire la commande
+  const orderDoc = await db.doc(`commandes/${id}`).get();
+  if (!orderDoc.exists) {
+    res.status(404).json({ success: false, error: "Commande introuvable" });
+    return;
+  }
 
-  try {
-    await db.runTransaction(async (t: Transaction) => {
-      const orderRef = db.doc(`commandes/${id}`);
-      const orderSnap = await t.get(orderRef);
+  const order = orderDoc.data()!;
+  if (asString(order.userId) !== uid) {
+    res.status(403).json({ success: false, error: "Non autorisé" });
+    return;
+  }
 
-      if (!orderSnap.exists) throw Object.assign(new Error("Commande introuvable"), { code: 404 });
+  // 2) Vérifier que la commande est encore annulable
+  if (order.refundProcessed === true) {
+    res.status(400).json({ success: false, error: "Cette commande a déjà été remboursée." });
+    return;
+  }
 
-      const order = orderSnap.data()!;
-      if (asString(order.userId) !== uid) throw Object.assign(new Error("Non autorisé"), { code: 403 });
-
-      const status = asString(order.status);
-      const cancelableStatuses = ["En attente", "pending", "en attente"];
-      if (!cancelableStatuses.includes(status) || order.refundProcessed === true) {
-        throw Object.assign(new Error("Cette commande ne peut plus être annulée"), { code: 400 });
-      }
-
-      existing = order;
-      price    = asNumber(order.price ?? order.amount);
-
-      t.update(orderRef, {
-        status:          "annulée",
-        progress:        0,
-        cancelledAt:     new Date().toISOString(),
-        refundAmount:    price,
-        refundProcessed: true,
-      });
-
-      if (price > 0) {
-        const userRef = db.doc(`users/${uid}`);
-        t.update(userRef, { balance: FieldValue.increment(price) });
-      }
+  const status = asString(order.status);
+  const cancelableStatuses = ["En attente", "pending", "en attente"];
+  if (!cancelableStatuses.includes(status)) {
+    res.status(400).json({
+      success: false,
+      error: "Cette commande ne peut plus être annulée (déjà en cours ou terminée)."
     });
-  } catch (e: unknown) {
-    const err  = e as { code?: number; message?: string };
-    const code = err.code ?? 500;
-    const msg  = err.message ?? "Erreur interne";
-    res.status(code).json({ success: false, error: msg });
     return;
   }
 
-  if (!existing) {
-    res.status(500).json({ success: false, error: "Transaction incomplète" });
+  const providerOrderId = asString(order.providerOrderId);
+  if (!providerOrderId) {
+    res.status(400).json({
+      success: false,
+      error: "Cette commande n'a pas d'identifiant fournisseur. Contactez le support."
+    });
     return;
   }
 
-  const ord      = existing as DocumentData;
-  const userName  = asString(ord.userName  ?? ord.name, "Inconnu");
-  const userEmail = asString(ord.userEmail ?? ord.email, "Non renseigné");
-  const userPhone = asString(ord.userPhone ?? ord.phone, "Non renseigné");
+  const provider  = asString(order.provider).toLowerCase();
+  const orderType = asString(order.type).toLowerCase();
 
-  if (price > 0) {
-    logActivity(uid, idToken, "remboursement",
-      `Remboursement commande ${asString(ord.orderId) || id}`,
-      price, "completed",
-      { orderId: ord.orderId, serviceId: ord.serviceId }
-    ).catch(() => {});
+  // 3) Router vers le bon fournisseur
+  let cancelResult: { ok: boolean; error?: string };
+
+  if (orderType === "avancée" || orderType === "avancee" || orderType === "advanced") {
+    cancelResult = await callProviderCancel(AFB_BASE, AFB_KEY, providerOrderId);
+  } else if (orderType === "automatique" || orderType === "auto") {
+    if (provider === "smmwiz") {
+      cancelResult = await callProviderCancel(SMMWIZ_BASE, SMMWIZ_KEY, providerOrderId);
+    } else if (provider === "mtp") {
+      cancelResult = await callProviderCancel(MTP_BASE, MTP_KEY, providerOrderId);
+    } else if (provider === "smmgen") {
+      res.status(410).json({
+        success: false,
+        error: "Cet ancien fournisseur n'est plus actif — impossible d'annuler via l'API. Contactez le support."
+      });
+      return;
+    } else {
+      res.status(400).json({
+        success: false,
+        error: `Fournisseur automatique inconnu : "${provider}". Contactez le support.`
+      });
+      return;
+    }
   } else {
-    logActivity(uid, idToken, "annulation",
-      `Annulation commande ${asString(ord.orderId) || id}`,
-      0, "completed",
-      { orderId: ord.orderId }
-    ).catch(() => {});
+    // Standard / Revendeur → Exo
+    cancelResult = await callProviderCancel(EXO_BASE, EXO_KEY, providerOrderId);
   }
 
-  notifyAdminCancelRefund(ord, id, price, userName, userEmail, userPhone).catch(() => {});
+  if (!cancelResult.ok) {
+    res.status(400).json({
+      success: false,
+      error: `Le fournisseur a refusé l'annulation : ${cancelResult.error ?? "raison inconnue"}.`
+    });
+    return;
+  }
 
+  // 4) Succès — NE PAS toucher Firestore, NE PAS rembourser maintenant.
+  //    Le poller détectera le passage à "Canceled" au prochain cycle (≈ 8 min)
+  //    et déclenchera automatiquement le remboursement via orders.ts/refresh-status
+  //    ou orderPoller.ts.
+
+  // Journal d'audit (non bloquant)
+  logActivity(uid, idToken, "annulation",
+    `Demande d'annulation transmise — ${asString(order.orderId) || id}`,
+    0, "pending",
+    { orderId: order.orderId, provider, providerOrderId }
+  ).catch(() => {});
+
+  // Notification WhatsApp admin (non bloquante)
+  notifyAdminCancelRefund(
+    order,
+    id,
+    0, // montant remboursé pas encore connu
+    asString(order.userName ?? order.name, "Inconnu"),
+    asString(order.userEmail ?? order.email, "Non renseigné"),
+    asString(order.userPhone ?? order.phone, "Non renseigné")
+  ).catch(() => {});
+
+  // Push au user pour l'informer de la demande
   getUserPushToken(uid).then((token) =>
     sendExpoPush(
       token,
-      price > 0 ? "Commande annulée & remboursée 💸" : "Commande annulée ❌",
-      price > 0
-        ? `${asString(ord.orderId) || "Votre commande"} a été annulée. ${price.toLocaleString("fr-FR")} FCFA remboursés sur votre solde.`
-        : `${asString(ord.orderId) || "Votre commande"} a été annulée.`,
-      { screen: "orders", orderId: asString(ord.orderId) },
+      "Annulation demandée ⏳",
+      `Votre demande d'annulation a été transmise au fournisseur. Le remboursement sera automatique dès confirmation (généralement 5 à 10 minutes).`,
+      { screen: "orders", orderId: asString(order.orderId) },
       "wallet"
     )
   ).catch(() => {});
 
-  res.json({ success: true, refundAmount: price });
+  res.json({
+    success: true,
+    message: "Demande d'annulation transmise au fournisseur. Le remboursement sera effectué automatiquement dès confirmation (généralement 5 à 10 minutes).",
+    refundPending: true,
+  });
 });
 
 export default router;
