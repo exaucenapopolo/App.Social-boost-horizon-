@@ -7,7 +7,6 @@ import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Easing,
   FlatList,
@@ -30,6 +29,21 @@ import { type Recharge, useWallet } from "@/context/WalletContext";
 import { apiClient, BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 import { COUNTRIES, Country, formatCurrency } from "@/lib/countries";
+
+// ─── Dépendances optionnelles (fallback silencieux si absentes) ───
+let AsyncStorageModule: any = null;
+try {
+  AsyncStorageModule = require("@react-native-async-storage/async-storage").default;
+} catch {
+  AsyncStorageModule = null;
+}
+
+let LocalizationModule: any = null;
+try {
+  LocalizationModule = require("expo-localization");
+} catch {
+  LocalizationModule = null;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  PALETTE
@@ -64,7 +78,7 @@ const DANGER  = "#EF4444";
 const PURPLE  = "#8B5CF6";
 
 // ═══════════════════════════════════════════════════════════════
-//  DATA
+//  DATA — Mobile Money (liste restreinte, sans France/Canada/Madagascar)
 // ═══════════════════════════════════════════════════════════════
 const AMOUNTS_FCFA = [500, 1000, 2000, 5000, 10000, 20000];
 
@@ -101,10 +115,7 @@ const INTL_COUNTRIES: PayCountry[] = [
   { code: "sl", name: "Sierra Leone",         flag: "🇸🇱", phoneCode: "+232", currency: "SLE", currencySymbol: "Le",   xafRate: 0.034,  operators: ["Orange Money"] },
   { code: "mr", name: "Mauritanie",           flag: "🇲🇷", phoneCode: "+222", currency: "MRU", currencySymbol: "UM",   xafRate: 0.056,  operators: ["Masrvi", "Bankily"] },
   { code: "gm", name: "Gambie",               flag: "🇬🇲", phoneCode: "+220", currency: "GMD", currencySymbol: "D",    xafRate: 0.097,  operators: ["QMoney", "Afrimoney"] },
-  { code: "mg", name: "Madagascar",           flag: "🇲🇬", phoneCode: "+261", currency: "MGA", currencySymbol: "Ar",   xafRate: 68,     operators: ["MVola", "Orange Money", "Airtel Money"] },
   { code: "mz", name: "Mozambique",           flag: "🇲🇿", phoneCode: "+258", currency: "MZN", currencySymbol: "MT",   xafRate: 0.099,  operators: ["M-Pesa", "Airtel Money"] },
-  { code: "ca", name: "Canada",               flag: "🇨🇦", phoneCode: "+1",   currency: "CAD", currencySymbol: "C$",   xafRate: 0.0021, operators: ["Interac"] },
-  { code: "fr", name: "France",               flag: "🇫🇷", phoneCode: "+33",  currency: "EUR", currencySymbol: "€",    xafRate: 0.00152,operators: ["Virement SEPA", "Lydia"] },
 ];
 
 function getEquivalentLocal(amountXAF: number, country: PayCountry): number {
@@ -116,35 +127,356 @@ function getEquivalentXAF(localAmount: number, country: PayCountry): number {
   return Math.round(localAmount / country.xafRate);
 }
 
-const STATUS_CONFIG = {
-  pending:   { label: "En attente", color: WARNING, bg: "rgba(245,158,11,0.12)" },
-  confirmed: { label: "Confirmé",   color: SUCCESS, bg: "rgba(16,185,129,0.12)" },
-  rejected:  { label: "Rejeté",     color: DANGER,  bg: "rgba(239,68,68,0.12)" },
+// ═══════════════════════════════════════════════════════════════
+//  DATA — Carte bancaire (TOUS LES PAYS DU MONDE, triés A→Z)
+// ═══════════════════════════════════════════════════════════════
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  XAF: "FCFA", XOF: "FCFA", USD: "$", EUR: "€", GBP: "£", CAD: "C$",
+  CHF: "CHF", JPY: "¥", CNY: "¥", INR: "₹", AED: "د.إ", SAR: "﷼",
+  TRY: "₺", RUB: "₽", ZAR: "R", MAD: "MAD", GHS: "GH₵", NGN: "₦",
+  KES: "KSh", UGX: "USh", TZS: "TSh", RWF: "FRw", ZMW: "ZK", CDF: "FC",
+  AOA: "Kz", MZN: "MT", BRL: "R$", MXN: "MX$", AUD: "A$", NZD: "NZ$",
+  KRW: "₩", SGD: "S$", THB: "฿", MYR: "RM", IDR: "Rp", PHP: "₱",
+  VND: "₫", PLN: "zł", SEK: "kr", NOK: "kr", DKK: "kr", CZK: "Kč",
+  HUF: "Ft", RON: "lei", BGN: "лв", HRK: "kn", UAH: "₴", ILS: "₪",
+  EGP: "E£", TND: "DT", DZD: "DA", LYD: "LD", QAR: "﷼", KWD: "KD",
+  BHD: "BD", OMR: "﷼", JOD: "JD", LBP: "ل.ل", PKR: "₨", BDT: "৳",
+  LKR: "Rs", NPR: "Rs", MUR: "Rs", SCR: "Rs", MGA: "Ar", MVR: "Rf",
+  AFN: "؋", IRR: "﷼", IQD: "ID", SYP: "£S", YER: "﷼", ETB: "Br",
+  GMD: "D", GNF: "FG", LRD: "L$", SLL: "Le", SOS: "Sh", SDG: "SDG",
+  SSP: "SSP", DJF: "Fdj", KMF: "CF", CVE: "$", STN: "Db", BIF: "FBu",
+  ERN: "Nfk", LSL: "L", SZL: "E", NAD: "N$", BWP: "P", MWK: "MK",
+  ZWG: "ZiG", ZWL: "Z$", ALL: "L", XCD: "EC$", AMD: "֏", AZN: "₼",
+  BSD: "B$", BBD: "Bds$", BZD: "BZ$", BTN: "Nu.", BYN: "Br", MMK: "K",
+  BOB: "Bs.", BAM: "KM", BND: "B$", KHR: "៛", KPW: "₩", CRC: "₡",
+  CUP: "₱", ANG: "ƒ", GIP: "£", GTQ: "Q", GYD: "G$", HTG: "G",
+  HNL: "L", ISK: "kr", JMD: "J$", KZT: "₸", KGS: "с", LAK: "₭",
+  MKD: "ден", MDL: "L", MNT: "₮", NIO: "C$", XPF: "₣", UZS: "soʻm",
+  PAB: "B/.", PGK: "K", PYG: "₲", HKD: "HK$", RSD: "дин", SRD: "$",
+  TJS: "SM", TWD: "NT$", TOP: "T$", TTD: "TT$", TMT: "m", WST: "T",
+  SBD: "SI$", MRU: "UM", PEN: "S/", CLP: "$", COP: "$", ARS: "$",
+  UYU: "$U", VES: "Bs.", GEL: "₾", FJD: "FJ$", VUV: "VT", BMD: "BD$",
+  FKP: "£", SHP: "£", TMT_M: "m",
 };
 
-const ACTIVITY_TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string; prefix: string }> = {
-  depot:         { icon: "arrow-down-circle", color: "#11998e", bg: "rgba(17,153,142,0.12)", prefix: "+" },
-  commande:      { icon: "shopping-cart",    color: INFO,      bg: "rgba(59,130,246,0.12)", prefix: "-" },
-  remboursement: { icon: "refresh-ccw",      color: SUCCESS,   bg: "rgba(16,185,129,0.12)", prefix: "+" },
-  annulation:    { icon: "x-circle",         color: "#FF5722", bg: "rgba(255,87,34,0.12)",  prefix: "" },
-  transfert:     { icon: "arrow-right-circle",color: GOLD,     bg: "rgba(212,175,55,0.12)", prefix: "" },
-  retrait:       { icon: "download",         color: PURPLE,    bg: "rgba(139,92,246,0.12)", prefix: "-" },
-  parrainage:    { icon: "gift",             color: GOLD,      bg: "rgba(212,175,55,0.12)", prefix: "+" },
+const CURRENCY_XAF: Record<string, number> = {
+  XAF: 1, XOF: 1, USD: 590, EUR: 690, GBP: 771.60, CAD: 408.95, CHF: 703.08,
+  JPY: 3.6921, CNY: 86.92, INR: 6.0616, AED: 158.68, SAR: 155.20, TRY: 11.86,
+  RUB: 6.9466, ZAR: 35.01, MAD: 58.68, GHS: 49.67, NGN: 0.4346, KES: 4.4919,
+  UGX: 0.1577, TZS: 0.2260, RWF: 0.4200, ZMW: 24.39, CDF: 0.2344, AOA: 0.6400,
+  MZN: 9.1200, BRL: 103.50, MXN: 29.60, AUD: 375.40, NZD: 340.20, KRW: 0.4233,
+  SGD: 432.10, THB: 16.90, MYR: 130.20, IDR: 0.0373, PHP: 10.35, VND: 0.0230,
+  PLN: 147.80, SEK: 54.20, NOK: 52.80, DKK: 92.60, CZK: 25.10, HUF: 1.5900,
+  RON: 138.70, BGN: 352.80, HRK: 91.50, UAH: 14.05, ILS: 158.30, EGP: 11.90,
+  TND: 187.60, DZD: 4.3500, LYD: 120.50, QAR: 159.80, KWD: 1898.00, BHD: 1545.00,
+  OMR: 1514.00, JOD: 822.00, LBP: 0.0065, PKR: 2.0800, BDT: 4.8300, LKR: 1.9800,
+  NPR: 3.7800, MUR: 12.60, SCR: 42.30, MGA: 0.1300, MVR: 37.80, AFN: 7.8000,
+  IRR: 0.0138, IQD: 0.4450, SYP: 0.0440, YER: 2.3800, ETB: 4.1500, GMD: 8.2000,
+  GNF: 0.0670, LRD: 3.0200, SLL: 0.0270, SOS: 1.0100, SDG: 0.9700, SSP: 0.4500,
+  DJF: 3.2800, KMF: 1.3800, CVE: 6.3100, STN: 28.20, BIF: 0.2000, ERN: 38.80,
+  LSL: 35.10, SZL: 35.10, NAD: 35.10, BWP: 44.50, MWK: 0.3350, ZWG: 22.10,
+  ZWL: 0.0020, ALL: 6.30, XCD: 215.80, AMD: 1.50, AZN: 347.00, BSD: 582.82,
+  BBD: 291.41, BZD: 291.41, BTN: 6.06, BYN: 178.00, MMK: 0.28, BOB: 84.50,
+  BAM: 352.80, BND: 432.10, KHR: 0.14, KPW: 0.65, CRC: 1.13, CUP: 24.28,
+  ANG: 325.60, GIP: 771.60, GTQ: 75.10, GYD: 2.79, HTG: 4.42, HNL: 23.50,
+  ISK: 4.20, JMD: 3.75, KZT: 1.20, KGS: 6.67, LAK: 0.027, MKD: 10.20,
+  MDL: 32.80, MNT: 0.17, NIO: 16.00, XPF: 5.78, UZS: 0.046, PAB: 582.82,
+  PGK: 155.00, PYG: 0.079, HKD: 74.60, RSD: 5.88, SRD: 16.50, TJS: 53.50,
+  TWD: 18.30, TOP: 245.00, TTD: 86.00, TMT: 166.50, WST: 210.00, SBD: 71.00,
+  MRU: 14.68, PEN: 155.00, CLP: 0.61, COP: 0.14, ARS: 1.40, UYU: 14.60,
+  VES: 16.00, GEL: 216.00, FJD: 258.00, VUV: 4.90,
 };
 
-const ACTIVITY_STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
-  confirmed:    { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
-  completed:    { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
-  success:      { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
-  pending:      { label: "En attente",  color: WARNING, bg: "rgba(245,158,11,0.15)" },
-  "En attente": { label: "En attente",  color: WARNING, bg: "rgba(245,158,11,0.15)" },
-  rejected:     { label: "Rejeté",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
-  failed:       { label: "Échoué",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
-  annulée:      { label: "Annulé",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
+export interface CardCountry {
+  code: string;
+  name: string;
+  flag: string;
+  currency: string;
+  currencySymbol: string;
+}
+
+const CARD_COUNTRIES_RAW: Array<[string, string, string]> = [
+  ["AF","Afghanistan","AFN"],["ZA","Afrique du Sud","ZAR"],["AL","Albanie","ALL"],
+  ["DZ","Algérie","DZD"],["DE","Allemagne","EUR"],["AD","Andorre","EUR"],
+  ["AO","Angola","AOA"],["AG","Antigua-et-Barbuda","XCD"],["SA","Arabie Saoudite","SAR"],
+  ["AR","Argentine","ARS"],["AM","Arménie","AMD"],["AU","Australie","AUD"],
+  ["AT","Autriche","EUR"],["AZ","Azerbaïdjan","AZN"],["BS","Bahamas","BSD"],
+  ["BH","Bahreïn","BHD"],["BD","Bangladesh","BDT"],["BB","Barbade","BBD"],
+  ["BE","Belgique","EUR"],["BZ","Belize","BZD"],["BJ","Bénin","XOF"],
+  ["BT","Bhoutan","BTN"],["BY","Biélorussie","BYN"],["MM","Birmanie","MMK"],
+  ["BO","Bolivie","BOB"],["BA","Bosnie-Herzégovine","BAM"],["BW","Botswana","BWP"],
+  ["BR","Brésil","BRL"],["BN","Brunei","BND"],["BG","Bulgarie","BGN"],
+  ["BF","Burkina Faso","XOF"],["BI","Burundi","BIF"],["KH","Cambodge","KHR"],
+  ["CM","Cameroun","XAF"],["CA","Canada","CAD"],["CV","Cap-Vert","CVE"],
+  ["CF","Centrafrique","XAF"],["CL","Chili","CLP"],["CN","Chine","CNY"],
+  ["CY","Chypre","EUR"],["CO","Colombie","COP"],["KM","Comores","KMF"],
+  ["CG","Congo Brazzaville","XAF"],["CD","Congo RDC","CDF"],["KR","Corée du Sud","KRW"],
+  ["KP","Corée du Nord","KPW"],["CR","Costa Rica","CRC"],["CI","Côte d'Ivoire","XOF"],
+  ["HR","Croatie","EUR"],["CU","Cuba","CUP"],["CW","Curaçao","ANG"],
+  ["DK","Danemark","DKK"],["DJ","Djibouti","DJF"],["DM","Dominique","XCD"],
+  ["EG","Égypte","EGP"],["AE","Émirats Arabes Unis","AED"],["EC","Équateur","USD"],
+  ["ER","Érythrée","ERN"],["ES","Espagne","EUR"],["EE","Estonie","EUR"],
+  ["SZ","Eswatini","SZL"],["US","États-Unis","USD"],["ET","Éthiopie","ETB"],
+  ["FJ","Fidji","FJD"],["FI","Finlande","EUR"],["FR","France","EUR"],
+  ["GA","Gabon","XAF"],["GM","Gambie","GMD"],["GE","Géorgie","GEL"],
+  ["GH","Ghana","GHS"],["GI","Gibraltar","GIP"],["GR","Grèce","EUR"],
+  ["GD","Grenade","XCD"],["GL","Groenland","DKK"],["GP","Guadeloupe","EUR"],
+  ["GT","Guatemala","GTQ"],["GN","Guinée","GNF"],["GQ","Guinée Équatoriale","XAF"],
+  ["GW","Guinée-Bissau","XOF"],["GY","Guyana","GYD"],["GF","Guyane française","EUR"],
+  ["HT","Haïti","HTG"],["HN","Honduras","HNL"],["HU","Hongrie","HUF"],
+  ["IN","Inde","INR"],["ID","Indonésie","IDR"],["IQ","Irak","IQD"],
+  ["IR","Iran","IRR"],["IE","Irlande","EUR"],["IS","Islande","ISK"],
+  ["IL","Israël","ILS"],["IT","Italie","EUR"],["JM","Jamaïque","JMD"],
+  ["JP","Japon","JPY"],["JO","Jordanie","JOD"],["KZ","Kazakhstan","KZT"],
+  ["KE","Kenya","KES"],["KG","Kirghizistan","KGS"],["KI","Kiribati","AUD"],
+  ["XK","Kosovo","EUR"],["KW","Koweït","KWD"],["LA","Laos","LAK"],
+  ["LS","Lesotho","LSL"],["LV","Lettonie","EUR"],["LB","Liban","LBP"],
+  ["LR","Liberia","LRD"],["LY","Libye","LYD"],["LI","Liechtenstein","CHF"],
+  ["LT","Lituanie","EUR"],["LU","Luxembourg","EUR"],["MK","Macédoine du Nord","MKD"],
+  ["MG","Madagascar","MGA"],["MY","Malaisie","MYR"],["MW","Malawi","MWK"],
+  ["MV","Maldives","MVR"],["ML","Mali","XOF"],["MT","Malte","EUR"],
+  ["MA","Maroc","MAD"],["MH","Îles Marshall","USD"],["MQ","Martinique","EUR"],
+  ["MU","Maurice","MUR"],["MR","Mauritanie","MRU"],["YT","Mayotte","EUR"],
+  ["MX","Mexique","MXN"],["FM","Micronésie","USD"],["MD","Moldavie","MDL"],
+  ["MC","Monaco","EUR"],["MN","Mongolie","MNT"],["ME","Monténégro","EUR"],
+  ["MS","Montserrat","XCD"],["MZ","Mozambique","MZN"],["NA","Namibie","NAD"],
+  ["NR","Nauru","AUD"],["NP","Népal","NPR"],["NI","Nicaragua","NIO"],
+  ["NE","Niger","XOF"],["NG","Nigeria","NGN"],["NU","Niue","NZD"],
+  ["NO","Norvège","NOK"],["NC","Nouvelle-Calédonie","XPF"],["NZ","Nouvelle-Zélande","NZD"],
+  ["OM","Oman","OMR"],["UG","Ouganda","UGX"],["UZ","Ouzbékistan","UZS"],
+  ["PK","Pakistan","PKR"],["PW","Palaos","USD"],["PS","Palestine","ILS"],
+  ["PA","Panama","PAB"],["PG","Papouasie-Nouvelle-Guinée","PGK"],["PY","Paraguay","PYG"],
+  ["NL","Pays-Bas","EUR"],["PE","Pérou","PEN"],["PH","Philippines","PHP"],
+  ["PL","Pologne","PLN"],["PF","Polynésie française","XPF"],["PR","Porto Rico","USD"],
+  ["PT","Portugal","EUR"],["QA","Qatar","QAR"],["HK","Hong Kong","HKD"],
+  ["RE","La Réunion","EUR"],["RO","Roumanie","RON"],["GB","Royaume-Uni","GBP"],
+  ["RU","Russie","RUB"],["RW","Rwanda","RWF"],["KN","Saint-Christophe-et-Niévès","XCD"],
+  ["SM","Saint-Marin","EUR"],["VC","Saint-Vincent-et-les-Grenadines","XCD"],["LC","Sainte-Lucie","XCD"],
+  ["SB","Îles Salomon","SBD"],["SV","Salvador","USD"],["WS","Samoa","WST"],
+  ["AS","Samoa américaines","USD"],["ST","Sao Tomé-et-Principe","STN"],["SN","Sénégal","XOF"],
+  ["RS","Serbie","RSD"],["SC","Seychelles","SCR"],["SL","Sierra Leone","SLL"],
+  ["SG","Singapour","SGD"],["SK","Slovaquie","EUR"],["SI","Slovénie","EUR"],
+  ["SO","Somalie","SOS"],["SD","Soudan","SDG"],["SS","Soudan du Sud","SSP"],
+  ["LK","Sri Lanka","LKR"],["SE","Suède","SEK"],["CH","Suisse","CHF"],
+  ["SR","Suriname","SRD"],["SY","Syrie","SYP"],["TJ","Tadjikistan","TJS"],
+  ["TW","Taïwan","TWD"],["TZ","Tanzanie","TZS"],["TD","Tchad","XAF"],
+  ["CZ","République Tchèque","CZK"],["TH","Thaïlande","THB"],["TL","Timor oriental","USD"],
+  ["TG","Togo","XOF"],["TO","Tonga","TOP"],["TT","Trinité-et-Tobago","TTD"],
+  ["TN","Tunisie","TND"],["TM","Turkménistan","TMT"],["TR","Turquie","TRY"],
+  ["TV","Tuvalu","AUD"],["UA","Ukraine","UAH"],["UY","Uruguay","UYU"],
+  ["VU","Vanuatu","VUV"],["VA","Vatican","EUR"],["VE","Venezuela","VES"],
+  ["VN","Vietnam","VND"],["YE","Yémen","YER"],["ZM","Zambie","ZMW"],
+  ["ZW","Zimbabwe","ZWL"],
+];
+
+function flagFromCode(code: string): string {
+  if (!code) return "🏳️";
+  try {
+    return code.toUpperCase().replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
+  } catch {
+    return "🏳️";
+  }
+}
+
+const CARD_COUNTRIES: CardCountry[] = CARD_COUNTRIES_RAW
+  .map(([code, name, currency]) => ({
+    code: code.toLowerCase(),
+    name,
+    flag: flagFromCode(code),
+    currency,
+    currencySymbol: CURRENCY_SYMBOLS[currency] ?? currency,
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+
+function cardConvertToXAF(localAmount: number, currency: string): number {
+  const rate = CURRENCY_XAF[currency.toUpperCase()] ?? 1;
+  return Math.round(localAmount * rate);
+}
+function cardConvertFromXAF(xafAmount: number, currency: string): number {
+  const rate = CURRENCY_XAF[currency.toUpperCase()] ?? 1;
+  if (rate === 0) return 0;
+  return Math.max(1, Math.round(xafAmount / rate));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+function normalizeStr(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function searchCountries<T extends { code: string; name: string }>(
+  list: T[],
+  query: string
+): T[] {
+  const q = normalizeStr(query.trim());
+  if (!q) return list;
+  const startsWith: T[] = [];
+  const contains: T[] = [];
+  for (const c of list) {
+    const n = normalizeStr(c.name);
+    const code = c.code.toLowerCase();
+    if (n.startsWith(q) || code.startsWith(q)) startsWith.push(c);
+    else if (n.includes(q) || code.includes(q)) contains.push(c);
+  }
+  return [...startsWith, ...contains];
+}
+
+// ─── Cache local ───────────────────────────────────────────────
+const CACHE_KEYS = {
+  intlPhone: "@sbh/wallet/intlPhone",
+  intlCountry: "@sbh/wallet/intlCountry",
+  cardCountry: "@sbh/wallet/cardCountry",
+} as const;
+
+async function cacheGet(key: string): Promise<string | null> {
+  if (!AsyncStorageModule) return null;
+  try {
+    return await AsyncStorageModule.getItem(key);
+  } catch {
+    return null;
+  }
+}
+async function cacheSet(key: string, value: string): Promise<void> {
+  if (!AsyncStorageModule) return;
+  try {
+    await AsyncStorageModule.setItem(key, value);
+  } catch {}
+}
+
+function detectDeviceRegion(): string | null {
+  if (!LocalizationModule) return null;
+  try {
+    const locales = LocalizationModule.getLocales?.();
+    const region = locales?.[0]?.regionCode;
+    return typeof region === "string" ? region.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODALE PERSONNALISÉE
+// ═══════════════════════════════════════════════════════════════
+type ModalKind = "info" | "success" | "warning" | "error";
+
+interface ModalButton {
+  label: string;
+  onPress?: () => void;
+  style?: "primary" | "danger" | "cancel";
+}
+
+interface ModalConfig {
+  kind: ModalKind;
+  title: string;
+  message?: string;
+  buttons?: ModalButton[];
+}
+
+const MODAL_META: Record<ModalKind, { icon: any; color: string; bg: string }> = {
+  info:    { icon: "info",           color: INFO,    bg: "rgba(59,130,246,0.14)"  },
+  success: { icon: "check-circle",   color: SUCCESS, bg: "rgba(16,185,129,0.14)"  },
+  warning: { icon: "alert-triangle", color: WARNING, bg: "rgba(245,158,11,0.14)"  },
+  error:   { icon: "x-circle",       color: DANGER,  bg: "rgba(239,68,68,0.14)"   },
 };
 
-function getActivityStatusCfg(status: string) {
-  return ACTIVITY_STATUS_LABEL[status] ?? { label: status ?? "—", color: LIGHT_TEXT_2, bg: "rgba(158,158,158,0.1)" };
+function AppModal({
+  config,
+  onClose,
+}: {
+  config: ModalConfig | null;
+  onClose: () => void;
+}) {
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const visible = !!config;
+  const [rendered, setRendered] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setRendered(true);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.9, duration: 150, useNativeDriver: true }),
+      ]).start(() => setRendered(false));
+    }
+  }, [visible]);
+
+  if (!rendered || !config) return null;
+
+  const meta = MODAL_META[config.kind] ?? MODAL_META.info;
+  const buttons: ModalButton[] =
+    config.buttons && config.buttons.length > 0
+      ? config.buttons
+      : [{ label: "OK", style: "primary" }];
+
+  const stacked = buttons.length > 2;
+
+  const handlePress = (btn: ModalButton) => {
+    Haptics.selectionAsync();
+    onClose();
+    if (btn.onPress) setTimeout(btn.onPress, 180);
+  };
+
+  return (
+    <Modal transparent visible={rendered} animationType="none" onRequestClose={onClose}>
+      <Animated.View style={[mStyles.backdrop, { opacity: fadeAnim }]}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <Animated.View style={[mStyles.card, { transform: [{ scale: scaleAnim }] }]}>
+          <View style={[mStyles.iconWrap, { backgroundColor: meta.bg }]}>
+            <Feather name={meta.icon} size={30} color={meta.color} />
+          </View>
+          <Text style={mStyles.title}>{config.title}</Text>
+          {config.message ? <Text style={mStyles.message}>{config.message}</Text> : null}
+          <View style={[mStyles.actions, stacked && { flexDirection: "column" }]}>
+            {buttons.map((btn, i) => {
+              const st = btn.style ?? (buttons.length === 1 ? "primary" : i === 0 ? "primary" : "cancel");
+              const bg =
+                st === "primary" ? GOLD :
+                st === "danger"  ? DANGER :
+                "rgba(255,255,255,0.10)";
+              const fg = st === "cancel" ? "#E2E8F0" : "#080E1A";
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => handlePress(btn)}
+                  style={({ pressed }) => [
+                    mStyles.btn,
+                    stacked ? { width: "100%" } : { flex: 1 },
+                    { backgroundColor: bg },
+                    pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+                  ]}
+                >
+                  <Text style={[mStyles.btnText, { color: fg }]} numberOfLines={1}>
+                    {btn.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+function useAppModal() {
+  const [config, setConfig] = useState<ModalConfig | null>(null);
+  const show = useCallback((c: ModalConfig) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setConfig(c);
+  }, []);
+  const hide = useCallback(() => setConfig(null), []);
+  const modalEl = <AppModal config={config} onClose={hide} />;
+  return { show, hide, modalEl };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -172,9 +504,42 @@ function useEntry(delay = 0, duration = 420) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  STATUS
+// ═══════════════════════════════════════════════════════════════
+const STATUS_CONFIG = {
+  pending:   { label: "En attente", color: WARNING, bg: "rgba(245,158,11,0.12)" },
+  confirmed: { label: "Confirmé",   color: SUCCESS, bg: "rgba(16,185,129,0.12)" },
+  rejected:  { label: "Rejeté",     color: DANGER,  bg: "rgba(239,68,68,0.12)" },
+};
+
+const ACTIVITY_TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string; prefix: string }> = {
+  depot:         { icon: "arrow-down-circle",  color: "#11998e", bg: "rgba(17,153,142,0.12)", prefix: "+" },
+  commande:      { icon: "shopping-cart",      color: INFO,      bg: "rgba(59,130,246,0.12)", prefix: "-" },
+  remboursement: { icon: "refresh-ccw",        color: SUCCESS,   bg: "rgba(16,185,129,0.12)", prefix: "+" },
+  annulation:    { icon: "x-circle",           color: "#FF5722", bg: "rgba(255,87,34,0.12)",  prefix: "" },
+  transfert:     { icon: "arrow-right-circle", color: GOLD,      bg: "rgba(212,175,55,0.12)", prefix: "" },
+  retrait:       { icon: "download",           color: PURPLE,    bg: "rgba(139,92,246,0.12)", prefix: "-" },
+  parrainage:    { icon: "gift",               color: GOLD,      bg: "rgba(212,175,55,0.12)", prefix: "+" },
+};
+
+const ACTIVITY_STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
+  confirmed:    { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
+  completed:    { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
+  success:      { label: "Effectué",    color: SUCCESS, bg: "rgba(16,185,129,0.15)" },
+  pending:      { label: "En attente",  color: WARNING, bg: "rgba(245,158,11,0.15)" },
+  "En attente": { label: "En attente",  color: WARNING, bg: "rgba(245,158,11,0.15)" },
+  rejected:     { label: "Rejeté",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
+  failed:       { label: "Échoué",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
+  annulée:      { label: "Annulé",      color: DANGER,  bg: "rgba(239,68,68,0.15)" },
+};
+
+function getActivityStatusCfg(status: string) {
+  return ACTIVITY_STATUS_LABEL[status] ?? { label: status ?? "—", color: LIGHT_TEXT_2, bg: "rgba(158,158,158,0.1)" };
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  SUB COMPONENTS
 // ═══════════════════════════════════════════════════════════════
-
 function RechargeItem({ item, C, userCountry }: { item: Recharge; C: any; userCountry?: Country | null }) {
   const cfg = STATUS_CONFIG[item.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending;
   const date = new Date(item.createdAt);
@@ -278,9 +643,9 @@ function BalanceCard({
 
 function ModeSegmented({ payMode, setPayMode, C, isDark }: any) {
   const tabs = [
-    { key: "cameroun",      icon: "smartphone" as const, label: "Cameroun",     sub: "MTN · Orange", color: "#11998e" },
+    { key: "cameroun",      icon: "smartphone" as const, label: "Cameroun",     sub: "MTN · Orange",          color: "#11998e" },
     { key: "international", icon: "globe" as const,      label: "International", sub: "Mobile Money · Carte",  color: INFO },
-    { key: "historique",    icon: "list" as const,       label: "Historique",    sub: "Transactions",  color: PURPLE },
+    { key: "historique",    icon: "list" as const,       label: "Historique",    sub: "Transactions",          color: PURPLE },
   ];
   return (
     <View style={[styles.segment, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -332,6 +697,8 @@ export default function WalletScreen() {
   const { isDark: ctxIsDark, toggleTheme } = useTheme();
   const isDark = ctxIsDark === true;
 
+  const { show: showModal, modalEl: appModal } = useAppModal();
+
   const C = useMemo(() => ({
     bg:          isDark ? DARK_BG         : LIGHT_BG,
     surface:     isDark ? DARK_SURFACE    : LIGHT_SURFACE,
@@ -356,27 +723,31 @@ export default function WalletScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
-  const [pendingTransId, setPendingTransId] = useState<string | null>(null);
-  const [pendingAmount, setPendingAmount] = useState(0);
   const [isPolling, setIsPolling] = useState(false);
-  const [pollingAttempt, setPollingAttempt] = useState(0);
 
   const [fapshiAmount, setFapshiAmount] = useState("");
   const [fapshiDesc, setFapshiDesc] = useState("Rechargement SBH");
 
-  // ── International : Mobile Money (par défaut) ou Carte ──
+  // ── International ──
   const [intlMethod, setIntlMethod] = useState<IntlMethod>("mobilemoney");
-  const [intlCountry, setIntlCountry] = useState<PayCountry>(INTL_COUNTRIES[0]);
+  const [intlCountry, setIntlCountry] = useState<PayCountry>(
+    INTL_COUNTRIES.find((c) => c.code === "cm") ?? INTL_COUNTRIES[0]
+  );
   const [intlPhone, setIntlPhone] = useState("");
   const [intlAmount, setIntlAmount] = useState("");
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
 
-  // ── Carte bancaire (NelsiusPay) ──
+  // ── Carte bancaire ──
+  const [cardCountry, setCardCountry] = useState<CardCountry>(
+    CARD_COUNTRIES.find((c) => c.code === "cm") ?? CARD_COUNTRIES[0]
+  );
+  const [showCardCountryModal, setShowCardCountryModal] = useState(false);
+  const [cardCountrySearch, setCardCountrySearch] = useState("");
   const [cardAmount, setCardAmount] = useState("");
-  const [nelsiusRef, setNelsiusRef] = useState<string | null>(null);
   const [nelsiusPolling, setNelsiusPolling] = useState(false);
 
+  // ── Transfert / Retrait ──
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferTarget, setTransferTarget] = useState<"main" | "withdrawal" | null>(null);
   const [transferring, setTransferring] = useState(false);
@@ -398,11 +769,67 @@ export default function WalletScreen() {
   const entry1 = useEntry(140);
   const entry2 = useEntry(220);
 
-  // ═══ Handlers transfert / retrait (inchangés) ═══
+  // ─────────────────────────────────────────────────────────────
+  // Cache : restaurer numéro / pays au démarrage
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [cachedPhone, cachedIntlCountry, cachedCardCountry] = await Promise.all([
+        cacheGet(CACHE_KEYS.intlPhone),
+        cacheGet(CACHE_KEYS.intlCountry),
+        cacheGet(CACHE_KEYS.cardCountry),
+      ]);
+      if (cancelled) return;
+
+      if (cachedPhone) setIntlPhone(cachedPhone);
+
+      if (cachedIntlCountry) {
+        const match = INTL_COUNTRIES.find((c) => c.code === cachedIntlCountry);
+        if (match) setIntlCountry(match);
+      } else {
+        const detect = detectDeviceRegion() ?? (user?.country ? String(user.country).toLowerCase() : null);
+        if (detect) {
+          const match = INTL_COUNTRIES.find((c) => c.code === detect);
+          if (match) setIntlCountry(match);
+        }
+      }
+
+      if (cachedCardCountry) {
+        const match = CARD_COUNTRIES.find((c) => c.code === cachedCardCountry);
+        if (match) setCardCountry(match);
+      } else {
+        const detect = detectDeviceRegion() ?? (user?.country ? String(user.country).toLowerCase() : null);
+        if (detect) {
+          const match = CARD_COUNTRIES.find((c) => c.code === detect);
+          if (match) setCardCountry(match);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.country]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Handlers transfert / retrait
+  // ─────────────────────────────────────────────────────────────
   const handleTransfer = async () => {
     const ref = user?.referralBalance ?? 0;
-    if (ref <= 0) { Alert.alert("Solde insuffisant", "Vous n'avez aucun solde parrainage à transférer."); return; }
-    if (!transferTarget) { Alert.alert("Destination requise", "Choisissez vers quel solde transférer."); return; }
+    if (ref <= 0) {
+      showModal({
+        kind: "warning",
+        title: "Solde insuffisant",
+        message: "Vous n'avez aucun solde parrainage à transférer.",
+      });
+      return;
+    }
+    if (!transferTarget) {
+      showModal({
+        kind: "warning",
+        title: "Destination requise",
+        message: "Choisissez vers quel solde vous souhaitez transférer.",
+      });
+      return;
+    }
     setTransferring(true);
     try {
       const res = await apiClient.wallet.transfer(transferTarget);
@@ -410,14 +837,20 @@ export default function WalletScreen() {
         await refreshUser();
         setShowTransferModal(false);
         setTransferTarget(null);
-        Alert.alert("Transfert réussi !", `${ref.toLocaleString()} FCFA transférés vers votre solde ${transferTarget === "main" ? "principal" : "de retrait"}.`);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showModal({
+          kind: "success",
+          title: "Transfert réussi",
+          message: `${ref.toLocaleString("fr-FR")} FCFA transférés vers votre solde ${transferTarget === "main" ? "principal" : "de retrait"}.`,
+        });
       } else {
-        Alert.alert("Erreur", res.error ?? "Le transfert a échoué.");
+        showModal({ kind: "error", title: "Transfert impossible", message: res.error ?? "Veuillez réessayer." });
       }
     } catch (e: any) {
-      Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
-    } finally { setTransferring(false); }
+      showModal({ kind: "error", title: "Erreur de connexion", message: e?.message ?? "Vérifiez votre connexion." });
+    } finally {
+      setTransferring(false);
+    }
   };
 
   const WITHDRAWAL_FEE = 455;
@@ -440,21 +873,44 @@ export default function WalletScreen() {
         setShowWithdrawModal(false);
         setWdAmount(""); setWdPhone("");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Retrait soumis", `Votre demande de retrait de ${amt.toLocaleString()} FCFA a été enregistrée.\n\nNotre équipe va traiter votre demande sous 24h ouvrables.`);
+        showModal({
+          kind: "success",
+          title: "Retrait soumis",
+          message: `Votre demande de retrait de ${amt.toLocaleString("fr-FR")} FCFA a été enregistrée.`,
+        });
       } else {
-        Alert.alert("Erreur", res.error ?? "Le retrait a échoué.");
+        showModal({ kind: "error", title: "Retrait impossible", message: res.error ?? "Veuillez réessayer." });
       }
     } catch (e: any) {
-      Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
-    } finally { setWdSubmitting(false); }
+      showModal({ kind: "error", title: "Erreur de connexion", message: e?.message ?? "Vérifiez votre connexion." });
+    } finally {
+      setWdSubmitting(false);
+    }
   };
 
   const handleWithdraw = () => {
     const MIN = 1500;
     const amt = parseInt(wdAmount, 10);
-    if (!amt || amt < MIN) { Alert.alert("Montant invalide", `Le retrait minimum est ${MIN.toLocaleString()} FCFA.`); return; }
-    if (amt > withdrawal) { Alert.alert("Solde insuffisant", `Votre solde retrait est de ${withdrawal.toLocaleString()} FCFA.`); return; }
-    if (!wdPhone.trim()) { Alert.alert("Numéro requis", "Entrez votre numéro de téléphone Mobile Money."); return; }
+    if (!amt || amt < MIN) {
+      showModal({
+        kind: "warning",
+        title: "Montant invalide",
+        message: `Le retrait minimum est de ${MIN.toLocaleString("fr-FR")} FCFA.`,
+      });
+      return;
+    }
+    if (amt > withdrawal) {
+      showModal({
+        kind: "warning",
+        title: "Solde insuffisant",
+        message: `Votre solde retrait est de ${withdrawal.toLocaleString("fr-FR")} FCFA.`,
+      });
+      return;
+    }
+    if (!wdPhone.trim()) {
+      showModal({ kind: "warning", title: "Numéro requis", message: "Entrez votre numéro Mobile Money." });
+      return;
+    }
 
     const fee = amt < WITHDRAWAL_FEE_THRESHOLD ? WITHDRAWAL_FEE : 0;
     if (fee === 0) { doWithdraw(undefined); return; }
@@ -464,32 +920,52 @@ export default function WalletScreen() {
     const canPayFromWithdrawal = withdrawal >= amt + fee;
 
     if (!canPayFromMain && !canPayFromWithdrawal) {
-      Alert.alert("Frais de retrait requis", `Des frais de ${fee} FCFA s'appliquent car votre retrait est inférieur à ${WITHDRAWAL_FEE_THRESHOLD.toLocaleString()} FCFA.\n\nVous n'avez pas suffisamment de fonds pour payer ces frais.\n\n• Solde principal : ${mainBal.toLocaleString()} FCFA\n• Solde retrait après retrait : ${(withdrawal - amt).toLocaleString()} FCFA\n\nVeuillez recharger votre solde ou augmenter le montant du retrait.`);
+      showModal({
+        kind: "warning",
+        title: "Fonds insuffisants",
+        message: `Des frais de ${fee} FCFA s'appliquent aux retraits inférieurs à ${WITHDRAWAL_FEE_THRESHOLD.toLocaleString("fr-FR")} FCFA.\n\nSolde principal : ${mainBal.toLocaleString("fr-FR")} FCFA\nSolde retrait : ${withdrawal.toLocaleString("fr-FR")} FCFA`,
+      });
       return;
     }
 
-    const buttons: any[] = [];
-    if (canPayFromMain) buttons.push({ text: `Solde principal (${mainBal.toLocaleString()} FCFA)`, onPress: () => doWithdraw("main") });
-    if (canPayFromWithdrawal) buttons.push({ text: `Solde retrait (${(withdrawal - amt).toLocaleString()} FCFA restant)`, onPress: () => doWithdraw("withdrawal") });
-    buttons.push({ text: "Annuler", style: "cancel" });
+    const buttons: ModalButton[] = [];
+    if (canPayFromMain) {
+      buttons.push({
+        label: `Solde principal (${mainBal.toLocaleString("fr-FR")} FCFA)`,
+        onPress: () => doWithdraw("main"),
+        style: "primary",
+      });
+    }
+    if (canPayFromWithdrawal) {
+      buttons.push({
+        label: `Solde retrait (${(withdrawal - amt).toLocaleString("fr-FR")} FCFA)`,
+        onPress: () => doWithdraw("withdrawal"),
+        style: "primary",
+      });
+    }
+    buttons.push({ label: "Annuler", style: "cancel" });
 
-    Alert.alert(
-      `Frais de retrait : ${fee} FCFA`,
-      `Des frais de ${fee} FCFA s'appliquent aux retraits inférieurs à ${WITHDRAWAL_FEE_THRESHOLD.toLocaleString()} FCFA.\n\nDepuis quel solde souhaitez-vous payer ces frais ?`,
-      buttons
-    );
+    showModal({
+      kind: "info",
+      title: `Frais de retrait : ${fee} FCFA`,
+      message: `Des frais de ${fee} FCFA s'appliquent aux retraits inférieurs à ${WITHDRAWAL_FEE_THRESHOLD.toLocaleString("fr-FR")} FCFA.\n\nDepuis quel solde souhaitez-vous payer ces frais ?`,
+      buttons,
+    });
   };
 
-  const filteredWdCountries = INTL_COUNTRIES.filter(
-    (c) => !wdCountrySearch || c.name.toLowerCase().includes(wdCountrySearch.toLowerCase())
-  );
-  const filteredCountries = INTL_COUNTRIES.filter(
-    (c) => !countrySearch || c.name.toLowerCase().includes(countrySearch.toLowerCase())
-  );
+  const filteredWdCountries = searchCountries(INTL_COUNTRIES, wdCountrySearch);
+  const filteredCountries = searchCountries(INTL_COUNTRIES, countrySearch);
+  const filteredCardCountries = searchCountries(CARD_COUNTRIES, cardCountrySearch);
 
   const amountPresets = AMOUNTS_FCFA.map((a) => ({
     xaf: a,
     local: getEquivalentLocal(a, intlCountry),
+  }));
+
+  const CARD_PRESETS_XAF = [2000, 5000, 10000, 20000, 50000, 100000];
+  const cardPresets = CARD_PRESETS_XAF.map((xaf) => ({
+    xaf,
+    local: cardConvertFromXAF(xaf, cardCountry.currency),
   }));
 
   const PAYMENT_TYPES = new Set(["depot", "parrainage", "transfert", "retrait"]);
@@ -538,22 +1014,24 @@ export default function WalletScreen() {
       setActivities(fallback.sort(
         (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ));
-    } finally { setLoadingActivities(false); }
+    } finally {
+      setLoadingActivities(false);
+    }
   }, [recharges]);
 
   useEffect(() => {
     if (payMode === "historique") loadActivities();
   }, [payMode, loadActivities]);
 
-  // ═══ Fapshi (Cameroun) — inchangé ═══
+  // ─────────────────────────────────────────────────────────────
+  // Fapshi (Cameroun)
+  // ─────────────────────────────────────────────────────────────
   const confirmFapshiPayment = async (transId: string, amount: number) => {
     const MAX_ATTEMPTS = 3;
     const DELAY_MS = 5000;
     setIsPolling(true);
-    setPollingAttempt(0);
     let credited = false;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      setPollingAttempt(attempt);
       try {
         const res = await apiClient.wallet.fapshiConfirm(transId, amount);
         if (res.success && (res.data?.credited || (res as any).alreadyCredited)) {
@@ -562,7 +1040,11 @@ export default function WalletScreen() {
           loadActivities();
           setIsPolling(false);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert("Paiement confirmé !", `${(res.data?.credited ?? amount).toLocaleString()} FCFA ont été crédités sur votre solde.`);
+          showModal({
+            kind: "success",
+            title: "Paiement confirmé",
+            message: `${(res.data?.credited ?? amount).toLocaleString("fr-FR")} FCFA ont été crédités sur votre solde.`,
+          });
           return;
         }
       } catch {}
@@ -574,17 +1056,20 @@ export default function WalletScreen() {
     if (!credited) {
       await refreshUser();
       loadActivities();
-      Alert.alert(
-        "Paiement en cours de traitement",
-        "Votre paiement est en cours de validation par l'opérateur Mobile Money.\n\nNotre serveur vérifie automatiquement toutes les 2 minutes et créditera votre solde dès confirmation — même si vous fermez l'application.\n\nVous recevrez une notification push dès que c'est fait.",
-        [{ text: "OK" }]
-      );
+      showModal({
+        kind: "info",
+        title: "Paiement en cours de traitement",
+        message: "Votre paiement est en cours de validation.\n\nVotre solde sera mis à jour automatiquement dès confirmation. Vous pouvez consulter l'historique pour vérifier.",
+      });
     }
   };
 
   const handleFapshiPay = async () => {
     const amount = parseInt(fapshiAmount, 10);
-    if (!amount || amount < 100) { Alert.alert("Montant invalide", "Le montant minimum est 100 FCFA."); return; }
+    if (!amount || amount < 100) {
+      showModal({ kind: "warning", title: "Montant invalide", message: "Le montant minimum est de 100 FCFA." });
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
     try {
@@ -599,8 +1084,6 @@ export default function WalletScreen() {
       });
       const data = await res.json();
       if (data.checkoutUrl) {
-        setPendingTransId(data.transId ?? null);
-        setPendingAmount(amount);
         try {
           const token = await getFreshToken();
           await fetch(`${BASE_URL}api/wallet/record-pending-recharge`, {
@@ -614,28 +1097,46 @@ export default function WalletScreen() {
         await WebBrowser.openBrowserAsync(data.checkoutUrl);
         if (data.transId) await confirmFapshiPayment(data.transId, amount);
       } else {
-        Alert.alert("Erreur paiement", data.error ?? data.message ?? "Impossible d'initier le paiement.");
+        showModal({
+          kind: "error",
+          title: "Paiement impossible",
+          message: data.error ?? data.message ?? "Veuillez réessayer.",
+        });
       }
     } catch (e: any) {
-      Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
+      showModal({ kind: "error", title: "Erreur de connexion", message: e?.message ?? "Vérifiez votre connexion." });
     } finally {
       setSubmitting(false);
-      setPendingTransId(null);
     }
   };
 
-  // ═══ Mobile Money International (AccountPe — via apiClient) ═══
+  // ─────────────────────────────────────────────────────────────
+  // Mobile Money International
+  // ─────────────────────────────────────────────────────────────
   const handleIntlPay = async () => {
     const amountLocal = parseInt(intlAmount, 10);
     const minLocal = getEquivalentLocal(500, intlCountry);
     if (!amountLocal || amountLocal < minLocal) {
-      Alert.alert("Montant invalide", `Le minimum est ${minLocal.toLocaleString()} ${intlCountry.currencySymbol}.`);
+      showModal({
+        kind: "warning",
+        title: "Montant invalide",
+        message: `Le minimum est de ${minLocal.toLocaleString("fr-FR")} ${intlCountry.currencySymbol}.`,
+      });
       return;
     }
-    if (!intlPhone.trim()) { Alert.alert("Numéro requis", "Entrez votre numéro Mobile Money."); return; }
+    if (!intlPhone.trim()) {
+      showModal({ kind: "warning", title: "Numéro requis", message: "Entrez votre numéro Mobile Money." });
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
     try {
+      // Cache : mémoriser le numéro et le pays choisis
+      await Promise.all([
+        cacheSet(CACHE_KEYS.intlPhone, intlPhone.trim()),
+        cacheSet(CACHE_KEYS.intlCountry, intlCountry.code),
+      ]);
+
       const amountXAF = getEquivalentXAF(amountLocal, intlCountry);
       const res = await apiClient.wallet.createIntlPayment({
         amount: amountLocal,
@@ -648,42 +1149,49 @@ export default function WalletScreen() {
       });
       if (res && (res as any).success && (res as any).checkoutUrl) {
         const checkoutUrl = (res as any).checkoutUrl as string;
-        const ref = (res as any).transId as string | undefined;
         await WebBrowser.openBrowserAsync(checkoutUrl);
         await refreshUser();
         loadActivities();
-        Alert.alert(
-          "Paiement initié",
-          "Votre solde sera crédité automatiquement après confirmation de l'opérateur.\n\n" +
-          (ref ? `Référence : ${ref}\n\n` : "") +
-          "Si votre solde n'est pas mis à jour dans 5 minutes, ouvrez l'historique pour vérifier.",
-          [{ text: "OK" }]
-        );
+        showModal({
+          kind: "info",
+          title: "Paiement initié",
+          message: "Votre solde sera mis à jour automatiquement dès confirmation. Vous pouvez consulter l'historique pour suivre l'opération.",
+        });
       } else {
-        Alert.alert("Erreur paiement", (res as any)?.error ?? "Impossible d'initier le paiement.");
+        showModal({
+          kind: "error",
+          title: "Paiement impossible",
+          message: (res as any)?.error ?? "Veuillez réessayer.",
+        });
       }
     } catch (e: any) {
-      Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
-    } finally { setSubmitting(false); }
+      showModal({ kind: "error", title: "Erreur de connexion", message: e?.message ?? "Vérifiez votre connexion." });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  // ═══ Carte bancaire NelsiusPay ═══
+  // ─────────────────────────────────────────────────────────────
+  // Carte bancaire NelsiusPay
+  // ─────────────────────────────────────────────────────────────
   const handleNelsiusPay = async () => {
     const amount = parseInt(cardAmount, 10);
     if (!amount || amount < 1) {
-      Alert.alert("Montant invalide", "Entrez un montant valide.");
+      showModal({ kind: "warning", title: "Montant invalide", message: "Entrez un montant valide." });
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
     try {
+      // Cache : mémoriser le pays choisi
+      await cacheSet(CACHE_KEYS.cardCountry, cardCountry.code);
+
       const res = await apiClient.wallet.nelsiuspayCheckout({
         amount,
-        currency: intlCountry.currency,
+        currency: cardCountry.currency,
       });
       if (res && (res as any).success && (res as any).checkoutUrl) {
         const reference = (res as any).reference as string;
-        setNelsiusRef(reference);
         const checkoutUrl = (res as any).checkoutUrl as string;
 
         await WebBrowser.openBrowserAsync(checkoutUrl);
@@ -702,40 +1210,48 @@ export default function WalletScreen() {
                 loadActivities();
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 const creditedXAF = (statusRes as any).creditedAmountXAF;
-                Alert.alert(
-                  "Paiement confirmé !",
-                  creditedXAF
-                    ? `${creditedXAF.toLocaleString("fr-FR")} FCFA ont été crédités.`
-                    : "Votre paiement a été confirmé."
-                );
+                showModal({
+                  kind: "success",
+                  title: "Paiement confirmé",
+                  message: creditedXAF
+                    ? `${Number(creditedXAF).toLocaleString("fr-FR")} FCFA ont été crédités sur votre solde.`
+                    : "Votre solde a été mis à jour.",
+                });
                 break;
               }
               if (st === "FAILED") {
-                Alert.alert("Paiement non confirmé", "Le paiement a échoué. Aucun montant n'a été débité.");
+                showModal({
+                  kind: "error",
+                  title: "Paiement non confirmé",
+                  message: "Le paiement n'a pas abouti. Aucun montant n'a été débité.",
+                });
                 break;
               }
             }
-          } catch {
-            // on continue le polling
-          }
+          } catch {}
         }
         setNelsiusPolling(false);
         if (!credited) {
           await refreshUser();
           loadActivities();
-          Alert.alert(
-            "Paiement en cours",
-            `Votre paiement est en cours de traitement.\nRéférence : ${reference}\n\n` +
-            "Il sera crédité automatiquement dès confirmation. Vous pouvez vérifier plus tard.",
-            [{ text: "OK" }]
-          );
+          showModal({
+            kind: "info",
+            title: "Paiement en cours de traitement",
+            message: "Votre paiement est en cours de validation.\n\nVotre solde sera mis à jour automatiquement dès confirmation.",
+          });
         }
       } else {
-        Alert.alert("Erreur paiement", (res as any)?.error ?? "Impossible d'initier le paiement par carte.");
+        showModal({
+          kind: "error",
+          title: "Paiement impossible",
+          message: (res as any)?.error ?? "Veuillez réessayer.",
+        });
       }
     } catch (e: any) {
-      Alert.alert("Erreur connexion", e?.message ?? "Vérifiez votre connexion.");
-    } finally { setSubmitting(false); }
+      showModal({ kind: "error", title: "Erreur de connexion", message: e?.message ?? "Vérifiez votre connexion." });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const goBack = () => {
@@ -749,7 +1265,9 @@ export default function WalletScreen() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <StarBackground dark={isDark} />
 
-      {/* Polling overlay (Fapshi) */}
+      {appModal}
+
+      {/* Polling overlay Fapshi */}
       <Modal visible={isPolling} transparent animationType="fade">
         <View style={styles.pollingOverlay}>
           <View style={[styles.pollingCard, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -758,28 +1276,22 @@ export default function WalletScreen() {
             </View>
             <Text style={[styles.pollingTitle, { color: C.text }]}>Vérification du paiement</Text>
             <Text style={[styles.pollingDesc, { color: C.textMuted }]}>
-              En attente de confirmation par l'opérateur...
-            </Text>
-            <View style={[styles.pollingProgress, { backgroundColor: C.inputBg }]}>
-              <View style={[styles.pollingBar, { width: `${Math.min((pollingAttempt / 8) * 100, 100)}%`, backgroundColor: "#11998e" }]} />
-            </View>
-            <Text style={[styles.pollingAttemptText, { color: C.textMuted }]}>
-              Tentative {pollingAttempt}/8
+              Merci de patienter quelques instants…
             </Text>
           </View>
         </View>
       </Modal>
 
-      {/* Polling overlay (NelsiusPay) */}
+      {/* Polling overlay NelsiusPay */}
       <Modal visible={nelsiusPolling} transparent animationType="fade">
         <View style={styles.pollingOverlay}>
           <View style={[styles.pollingCard, { backgroundColor: C.surface, borderColor: C.border }]}>
             <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: GOLD + "22", alignItems: "center", justifyContent: "center" }}>
               <ActivityIndicator size="large" color={GOLD} />
             </View>
-            <Text style={[styles.pollingTitle, { color: C.text }]}>Vérification du paiement carte</Text>
+            <Text style={[styles.pollingTitle, { color: C.text }]}>Vérification du paiement</Text>
             <Text style={[styles.pollingDesc, { color: C.textMuted }]}>
-              Nous interrogeons le prestataire pour confirmer votre paiement...
+              Merci de patienter quelques instants…
             </Text>
           </View>
         </View>
@@ -838,7 +1350,7 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ═══ BALANCE CARDS ═══ */}
+        {/* ═══ BALANCES ═══ */}
         <Animated.View
           style={{
             opacity: entry0,
@@ -889,18 +1401,6 @@ export default function WalletScreen() {
                   <Feather name="wallet" size={26} color={isDark ? GOLD : GOLD_SOFT} />
                 </View>
               </View>
-
-              <View style={[styles.mainBalanceDivider, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(10,28,58,0.08)" }]} />
-
-              <View style={styles.mainBalanceBottom}>
-                <Text style={[styles.mainBalanceHint, { color: isDark ? "rgba(255,255,255,0.55)" : LIGHT_TEXT_2 }]}>
-                  Utilisez ce solde pour passer vos commandes
-                </Text>
-                <View style={[styles.secureChip, { backgroundColor: isDark ? "rgba(16,185,129,0.12)" : "rgba(16,185,129,0.10)" }]}>
-                  <Feather name="shield" size={10} color={SUCCESS} />
-                  <Text style={[styles.secureChipText, { color: SUCCESS }]}>Sécurisé</Text>
-                </View>
-              </View>
             </LinearGradient>
           </View>
 
@@ -934,7 +1434,7 @@ export default function WalletScreen() {
           </View>
         </Animated.View>
 
-        {/* ═══ SEGMENTED TABS ═══ */}
+        {/* ═══ TABS ═══ */}
         <Animated.View
           style={{
             opacity: entry1,
@@ -944,7 +1444,7 @@ export default function WalletScreen() {
           <ModeSegmented payMode={payMode} setPayMode={setPayMode} C={C} isDark={isDark} />
         </Animated.View>
 
-        {/* ═══ CAMEROUN FORM (inchangé) ═══ */}
+        {/* ═══ CAMEROUN ═══ */}
         {payMode === "cameroun" && (
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <Animated.View
@@ -1001,20 +1501,13 @@ export default function WalletScreen() {
                   <Feather name="edit-3" size={16} color={C.textMuted} />
                   <TextInput
                     style={[styles.input, { color: C.text }]}
-                    placeholder="Montant personnalisé..."
+                    placeholder="Montant personnalisé…"
                     placeholderTextColor={C.textMuted}
                     keyboardType="numeric"
                     value={fapshiAmount}
                     onChangeText={setFapshiAmount}
                   />
                   <Text style={[styles.inputSuffix, { color: C.textMuted }]}>FCFA</Text>
-                </View>
-
-                <View style={[styles.infoBanner, { backgroundColor: "rgba(16,185,129,0.08)", borderColor: "rgba(16,185,129,0.20)" }]}>
-                  <Feather name="shield" size={14} color={SUCCESS} />
-                  <Text style={[styles.infoBannerText, { color: SUCCESS }]}>
-                    Paiement sécurisé · Crédit instantané après confirmation opérateur
-                  </Text>
                 </View>
 
                 <Pressable
@@ -1024,7 +1517,7 @@ export default function WalletScreen() {
                 >
                   <LinearGradient colors={["#11998e", "#38ef7d"]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                     {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="smartphone" size={18} color="#fff" />}
-                    <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Payer maintenant"}</Text>
+                    <Text style={styles.payBtnText}>{submitting ? "Traitement…" : "Payer maintenant"}</Text>
                     {!submitting && <Feather name="arrow-right" size={18} color="#fff" />}
                   </LinearGradient>
                 </Pressable>
@@ -1042,7 +1535,7 @@ export default function WalletScreen() {
           </KeyboardAvoidingView>
         )}
 
-        {/* ═══ INTERNATIONAL FORM ═══ */}
+        {/* ═══ INTERNATIONAL ═══ */}
         {payMode === "international" && (
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <Animated.View
@@ -1062,11 +1555,11 @@ export default function WalletScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.formTitle, { color: C.text }]}>Dépôt International</Text>
-                  <Text style={[styles.formSub, { color: C.textMuted }]}>{INTL_COUNTRIES.length} pays disponibles</Text>
+                  <Text style={[styles.formSub, { color: C.textMuted }]}>Mobile Money ou carte bancaire</Text>
                 </View>
               </View>
 
-              {/* Sous-toggle : Mobile Money / Carte */}
+              {/* Sous-toggle */}
               <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 14 }}>
                 <Pressable
                   onPress={() => { setIntlMethod("mobilemoney"); Haptics.selectionAsync(); }}
@@ -1087,10 +1580,7 @@ export default function WalletScreen() {
                 >
                   <Feather name="smartphone" size={14} color={intlMethod === "mobilemoney" ? INFO : C.textMuted} />
                   <Text
-                    style={[
-                      styles.methodBtnText,
-                      { color: intlMethod === "mobilemoney" ? INFO : C.text, marginLeft: 6 },
-                    ]}
+                    style={[styles.methodBtnText, { color: intlMethod === "mobilemoney" ? INFO : C.text, marginLeft: 6 }]}
                     numberOfLines={1}
                   >
                     Mobile Money
@@ -1115,10 +1605,7 @@ export default function WalletScreen() {
                 >
                   <Feather name="credit-card" size={14} color={intlMethod === "card" ? GOLD : C.textMuted} />
                   <Text
-                    style={[
-                      styles.methodBtnText,
-                      { color: intlMethod === "card" ? GOLD : C.text, marginLeft: 6 },
-                    ]}
+                    style={[styles.methodBtnText, { color: intlMethod === "card" ? GOLD : C.text, marginLeft: 6 }]}
                     numberOfLines={1}
                   >
                     Carte bancaire
@@ -1126,7 +1613,7 @@ export default function WalletScreen() {
                 </Pressable>
               </View>
 
-              {/* ── CONTENU MOBILE MONEY ── */}
+              {/* Mobile Money */}
               {intlMethod === "mobilemoney" && (
                 <View style={styles.formBody}>
                   <View>
@@ -1206,27 +1693,14 @@ export default function WalletScreen() {
                       <Text style={[styles.inputSuffix, { color: C.textMuted }]}>{intlCountry.currencySymbol}</Text>
                     </View>
 
-                    {intlAmount && (
+                    {intlAmount ? (
                       <View style={[styles.conversionRow, { backgroundColor: INFO + "10", borderColor: INFO + "30" }]}>
                         <Feather name="refresh-cw" size={12} color={INFO} />
                         <Text style={[styles.conversionText, { color: INFO }]}>
                           ≈ {getEquivalentXAF(parseInt(intlAmount) || 0, intlCountry).toLocaleString("fr-FR")} FCFA
                         </Text>
                       </View>
-                    )}
-                  </View>
-
-                  <View style={[styles.infoBanner, { backgroundColor: INFO + "0D", borderColor: INFO + "25" }]}>
-                    <Feather name="shield" size={14} color={INFO} />
-                    <Text style={[styles.infoBannerText, { color: INFO }]}>
-                      Paiement sécurisé · Solde crédité automatiquement après confirmation
-                    </Text>
-                  </View>
-                  <View style={[styles.infoBanner, { backgroundColor: WARNING + "10", borderColor: WARNING + "25" }]}>
-                    <Feather name="clock" size={14} color={WARNING} />
-                    <Text style={[styles.infoBannerText, { color: WARNING }]}>
-                      Délai de crédit : 5 à 30 minutes selon l'opérateur choisi
-                    </Text>
+                    ) : null}
                   </View>
 
                   <Pressable
@@ -1236,29 +1710,29 @@ export default function WalletScreen() {
                   >
                     <LinearGradient colors={isDark ? [NAVY_LIGHT, NAVY] : [INFO, "#2563EB"]} style={styles.payBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                       {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="credit-card" size={18} color="#fff" />}
-                      <Text style={styles.payBtnText}>{submitting ? "Traitement..." : "Procéder au paiement"}</Text>
+                      <Text style={styles.payBtnText}>{submitting ? "Traitement…" : "Procéder au paiement"}</Text>
                       {!submitting && <Feather name="arrow-right" size={18} color={isDark ? GOLD : "#fff"} />}
                     </LinearGradient>
                   </Pressable>
                 </View>
               )}
 
-              {/* ── CONTENU CARTE BANCAIRE ── */}
+              {/* Carte bancaire */}
               {intlMethod === "card" && (
                 <View style={styles.formBody}>
                   <View>
-                    <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Pays / devise</Text>
+                    <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Pays</Text>
                     <Pressable
                       style={[styles.countryBtn, { backgroundColor: C.inputBg, borderColor: GOLD + "40" }]}
-                      onPress={() => { setShowCountryModal(true); setCountrySearch(""); }}
+                      onPress={() => { setShowCardCountryModal(true); setCardCountrySearch(""); }}
                     >
-                      <Text style={styles.countryFlag}>{intlCountry.flag}</Text>
+                      <Text style={styles.countryFlag}>{cardCountry.flag}</Text>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.countryName, { color: C.text }]} numberOfLines={1}>
-                          {intlCountry.name}
+                          {cardCountry.name}
                         </Text>
                         <Text style={[styles.countrySub, { color: C.textMuted }]} numberOfLines={1}>
-                          {intlCountry.currencySymbol} · {intlCountry.currency}
+                          {cardCountry.currency} · {cardCountry.currencySymbol}
                         </Text>
                       </View>
                       <Feather name="chevron-down" size={16} color={GOLD} />
@@ -1267,15 +1741,14 @@ export default function WalletScreen() {
 
                   <View>
                     <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>
-                      Montant ({intlCountry.currencySymbol})
+                      Montant ({cardCountry.currencySymbol})
                     </Text>
                     <View style={styles.presetsWrap}>
-                      {[2000, 5000, 10000, 20000, 50000, 100000].map((xaf) => {
-                        const local = getEquivalentLocal(xaf, intlCountry);
-                        const isActive = cardAmount === String(local);
+                      {cardPresets.map((p) => {
+                        const isActive = cardAmount === String(p.local);
                         return (
                           <Pressable
-                            key={xaf}
+                            key={p.xaf}
                             style={({ pressed }) => [
                               styles.presetChip,
                               {
@@ -1284,13 +1757,13 @@ export default function WalletScreen() {
                               },
                               pressed && { opacity: 0.85 },
                             ]}
-                            onPress={() => { setCardAmount(String(local)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                            onPress={() => { setCardAmount(String(p.local)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                           >
                             <Text style={[styles.presetChipText, { color: isActive ? "#000" : C.text }]}>
-                              {local.toLocaleString()}
+                              {p.local.toLocaleString()}
                             </Text>
                             <Text style={[styles.presetChipSub, { color: isActive ? "rgba(0,0,0,0.65)" : C.textMuted }]}>
-                              {intlCountry.currencySymbol}
+                              {cardCountry.currencySymbol}
                             </Text>
                           </Pressable>
                         );
@@ -1300,31 +1773,24 @@ export default function WalletScreen() {
                       <Feather name="credit-card" size={16} color={C.textMuted} />
                       <TextInput
                         style={[styles.input, { color: C.text }]}
-                        placeholder={`Montant en ${intlCountry.currencySymbol}`}
+                        placeholder={`Montant en ${cardCountry.currencySymbol}`}
                         placeholderTextColor={C.textMuted}
                         keyboardType="numeric"
                         value={cardAmount}
                         onChangeText={setCardAmount}
                       />
                       <Text style={[styles.inputSuffix, { color: C.textMuted }]}>
-                        {intlCountry.currencySymbol}
+                        {cardCountry.currencySymbol}
                       </Text>
                     </View>
-                    {cardAmount && (
+                    {cardAmount ? (
                       <View style={[styles.conversionRow, { backgroundColor: GOLD + "10", borderColor: GOLD + "30" }]}>
                         <Feather name="refresh-cw" size={12} color={GOLD} />
                         <Text style={[styles.conversionText, { color: GOLD }]}>
-                          ≈ {getEquivalentXAF(parseInt(cardAmount) || 0, intlCountry).toLocaleString("fr-FR")} FCFA
+                          ≈ {cardConvertToXAF(parseInt(cardAmount) || 0, cardCountry.currency).toLocaleString("fr-FR")} FCFA
                         </Text>
                       </View>
-                    )}
-                  </View>
-
-                  <View style={[styles.infoBanner, { backgroundColor: GOLD + "10", borderColor: GOLD + "25" }]}>
-                    <Feather name="shield" size={14} color={GOLD} />
-                    <Text style={[styles.infoBannerText, { color: GOLD }]}>
-                      Paiement 100% sécurisé · Visa / Mastercard · Crédit automatique après confirmation
-                    </Text>
+                    ) : null}
                   </View>
 
                   <Pressable
@@ -1344,7 +1810,7 @@ export default function WalletScreen() {
                         <Feather name="credit-card" size={18} color="#000" />
                       )}
                       <Text style={[styles.payBtnText, { color: "#000" }]}>
-                        {submitting ? "Traitement..." : "Payer par carte"}
+                        {submitting ? "Traitement…" : "Payer par carte"}
                       </Text>
                       {!submitting && <Feather name="arrow-right" size={18} color="#000" />}
                     </LinearGradient>
@@ -1494,7 +1960,7 @@ export default function WalletScreen() {
                   <Feather name="arrow-right-circle" size={16} color={transferTarget ? (isDark ? "#000" : "#fff") : C.textMuted} />
                 )}
                 <Text style={[styles.transferConfirmText, { color: transferTarget ? (isDark ? "#000" : "#fff") : C.textMuted }]}>
-                  {transferring ? "Transfert en cours..." : "Confirmer le transfert"}
+                  {transferring ? "Transfert en cours…" : "Confirmer le transfert"}
                 </Text>
               </Pressable>
             </View>
@@ -1603,27 +2069,6 @@ export default function WalletScreen() {
                 </View>
               </View>
 
-              {(() => {
-                const parsedAmt = parseInt(wdAmount, 10);
-                if (!parsedAmt || parsedAmt <= 0) return null;
-                if (parsedAmt >= WITHDRAWAL_FEE_THRESHOLD) return (
-                  <View style={[styles.infoBanner, { backgroundColor: SUCCESS + "12", borderColor: SUCCESS + "30" }]}>
-                    <Feather name="check-circle" size={14} color={SUCCESS} />
-                    <Text style={[styles.infoBannerText, { color: SUCCESS }]}>
-                      Aucun frais — retraits ≥ 10 000 FCFA sont gratuits.
-                    </Text>
-                  </View>
-                );
-                return (
-                  <View style={[styles.infoBanner, { backgroundColor: WARNING + "12", borderColor: WARNING + "30", alignItems: "flex-start" }]}>
-                    <Feather name="alert-circle" size={14} color={WARNING} style={{ marginTop: 1 }} />
-                    <Text style={[styles.infoBannerText, { color: WARNING }]}>
-                      <Text style={{ fontFamily: "Inter_700Bold" }}>Frais de 455 FCFA</Text> s'appliquent aux retraits inférieurs à 10 000 FCFA. Vous choisirez le solde à débiter lors de la confirmation.
-                    </Text>
-                  </View>
-                );
-              })()}
-
               <Pressable
                 style={({ pressed }) => [
                   styles.withdrawSubmit,
@@ -1635,13 +2080,9 @@ export default function WalletScreen() {
               >
                 {wdSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="send" size={16} color="#fff" />}
                 <Text style={styles.withdrawSubmitText}>
-                  {wdSubmitting ? "Traitement..." : "Soumettre le retrait"}
+                  {wdSubmitting ? "Traitement…" : "Soumettre le retrait"}
                 </Text>
               </Pressable>
-
-              <Text style={[styles.withdrawHint, { color: C.textMuted }]}>
-                Traitement sous 24h ouvrables. L'administrateur sera notifié automatiquement.
-              </Text>
             </ScrollView>
           </View>
         </View>
@@ -1662,10 +2103,11 @@ export default function WalletScreen() {
               <Feather name="search" size={16} color={C.textMuted} />
               <TextInput
                 style={[styles.searchInput, { color: C.text }]}
-                placeholder="Rechercher un pays..."
+                placeholder="Rechercher un pays…"
                 placeholderTextColor={C.textMuted}
                 value={wdCountrySearch}
                 onChangeText={setWdCountrySearch}
+                autoCorrect={false}
               />
             </View>
             <FlatList
@@ -1709,7 +2151,7 @@ export default function WalletScreen() {
         </View>
       </Modal>
 
-      {/* ═══ COUNTRY PICKER (International) ═══ */}
+      {/* ═══ COUNTRY PICKER (Mobile Money) ═══ */}
       <Modal visible={showCountryModal} animationType="slide" transparent onRequestClose={() => setShowCountryModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: C.surface, maxHeight: "90%" }]}>
@@ -1724,10 +2166,11 @@ export default function WalletScreen() {
               <Feather name="search" size={16} color={C.textMuted} />
               <TextInput
                 style={[styles.searchInput, { color: C.text }]}
-                placeholder="Rechercher un pays..."
+                placeholder="Rechercher un pays…"
                 placeholderTextColor={C.textMuted}
                 value={countrySearch}
                 onChangeText={setCountrySearch}
+                autoCorrect={false}
               />
             </View>
             <FlatList
@@ -1749,7 +2192,6 @@ export default function WalletScreen() {
                     onPress={() => {
                       setIntlCountry(item);
                       setIntlAmount("");
-                      setCardAmount("");
                       setShowCountryModal(false);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
@@ -1770,12 +2212,164 @@ export default function WalletScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ═══ COUNTRY PICKER (Carte bancaire) — tous les pays du monde ═══ */}
+      <Modal visible={showCardCountryModal} animationType="slide" transparent onRequestClose={() => setShowCardCountryModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: C.surface, maxHeight: "90%" }]}>
+            <View style={styles.modalGrabber} />
+            <View style={[styles.modalHeader, { borderBottomColor: C.separator }]}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Choisir un pays</Text>
+              <Pressable onPress={() => setShowCardCountryModal(false)} style={[styles.modalClose, { backgroundColor: C.inputBg }]}>
+                <Feather name="x" size={18} color={C.text} />
+              </Pressable>
+            </View>
+            <View style={[styles.searchBar, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+              <Feather name="search" size={16} color={C.textMuted} />
+              <TextInput
+                style={[styles.searchInput, { color: C.text }]}
+                placeholder="Rechercher un pays…"
+                placeholderTextColor={C.textMuted}
+                value={cardCountrySearch}
+                onChangeText={setCardCountrySearch}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {cardCountrySearch.length > 0 && (
+                <Pressable onPress={() => setCardCountrySearch("")} hitSlop={8}>
+                  <Feather name="x-circle" size={16} color={C.textMuted} />
+                </Pressable>
+              )}
+            </View>
+            <FlatList
+              data={filteredCardCountries}
+              keyExtractor={(c) => c.code}
+              initialNumToRender={20}
+              windowSize={10}
+              removeClippedSubviews
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 30, gap: 6 }}
+              ListEmptyComponent={
+                <View style={{ padding: 30, alignItems: "center" }}>
+                  <Feather name="search" size={24} color={C.textMuted} />
+                  <Text style={{ marginTop: 10, color: C.textMuted, fontFamily: "Inter_400Regular", fontSize: 13 }}>
+                    Aucun pays trouvé
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => {
+                const isSelected = cardCountry.code === item.code;
+                return (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.countryOption,
+                      {
+                        backgroundColor: isSelected ? GOLD + "15" : C.inputBg,
+                        borderColor: isSelected ? GOLD : C.border,
+                      },
+                      pressed && { opacity: 0.9 },
+                    ]}
+                    onPress={() => {
+                      setCardCountry(item);
+                      setCardAmount("");
+                      setCardCountrySearch("");
+                      setShowCardCountryModal(false);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Text style={styles.countryOptionFlag}>{item.flag}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.countryOptionName, { color: C.text }]}>{item.name}</Text>
+                      <Text style={[styles.countryOptionSub, { color: C.textMuted }]} numberOfLines={1}>
+                        {item.currency} · {item.currencySymbol}
+                      </Text>
+                    </View>
+                    {isSelected && <Feather name="check-circle" size={18} color={GOLD} />}
+                  </Pressable>
+                );
+              }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  STYLES
+//  MODAL STYLES
+// ═══════════════════════════════════════════════════════════════
+const mStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(4,10,22,0.72)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 400,
+    backgroundColor: "#0F1B33",
+    borderRadius: 24,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(212,175,55,0.22)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  iconWrap: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  title: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    color: "#FFFFFF",
+    textAlign: "center",
+    letterSpacing: -0.2,
+    marginBottom: 8,
+  },
+  message: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    color: "rgba(255,255,255,0.75)",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 22,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    marginTop: 4,
+  },
+  btn: {
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    letterSpacing: 0.1,
+  },
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  STYLES (écran)
 // ═══════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -1828,14 +2422,6 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     borderWidth: 1,
   },
-  mainBalanceDivider: { height: 1, marginVertical: 16 },
-  mainBalanceBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  mainBalanceHint: { fontFamily: "Inter_400Regular", fontSize: 12, flex: 1 },
-  secureChip: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
-  },
-  secureChipText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.3 },
 
   balanceRow: { flexDirection: "row", gap: 10 },
   balanceCard: {
@@ -1930,12 +2516,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   conversionText: { fontFamily: "Inter_600SemiBold", fontSize: 12.5 },
-
-  infoBanner: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 12, borderWidth: 1, padding: 10,
-  },
-  infoBannerText: { fontFamily: "Inter_500Medium", fontSize: 11.5, flex: 1, lineHeight: 16 },
 
   payBtn: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
   payBtnGradient: {
@@ -2046,7 +2626,6 @@ const styles = StyleSheet.create({
     gap: 8, padding: 15, borderRadius: 13,
   },
   withdrawSubmitText: { fontFamily: "Inter_700Bold", fontSize: 14.5, color: "#fff", letterSpacing: 0.1 },
-  withdrawHint: { fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center", lineHeight: 16 },
 
   searchBar: {
     flexDirection: "row", alignItems: "center", gap: 10,
@@ -2075,7 +2654,4 @@ const styles = StyleSheet.create({
   },
   pollingTitle: { fontFamily: "Inter_700Bold", fontSize: 17, textAlign: "center", marginTop: 6, letterSpacing: -0.2 },
   pollingDesc: { fontFamily: "Inter_400Regular", fontSize: 13.5, textAlign: "center", lineHeight: 20 },
-  pollingProgress: { width: "100%", height: 6, borderRadius: 3, overflow: "hidden", marginTop: 10 },
-  pollingBar: { height: "100%", borderRadius: 3 },
-  pollingAttemptText: { fontFamily: "Inter_500Medium", fontSize: 12 },
 });
