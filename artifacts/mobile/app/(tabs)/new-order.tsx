@@ -30,7 +30,6 @@ import { COUNTRIES, formatCurrency } from "@/lib/countries";
 import { BASE_URL } from "@/services/api";
 import { getFreshToken } from "@/services/tokenStore";
 
-// ─── AsyncStorage (fallback silencieux si absent) ───
 let AsyncStorageModule: any = null;
 try {
   AsyncStorageModule = require("@react-native-async-storage/async-storage").default;
@@ -45,7 +44,6 @@ const NAVY        = "#0A1C3A";
 const NAVY_LIGHT  = "#152E54";
 const GOLD        = "#D4AF37";
 const GOLD_SOFT   = "#C6A15B";
-const GOLD_BG     = "rgba(212,175,55,0.10)";
 const GOLD_BORDER = "rgba(212,175,55,0.32)";
 
 const LIGHT_BG        = "#F7F5F0";
@@ -79,7 +77,10 @@ const STORAGE_KEYS = {
   favorites: "@sbh/order/favorites",
   recentServices: "@sbh/order/recentServices",
   platformHistory: "@sbh/order/platformHistory",
+  serviceCounts: "@sbh/order/serviceCounts",
 } as const;
+
+const COUNTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 heures
 
 async function storageGet<T>(key: string, fallback: T): Promise<T> {
   if (!AsyncStorageModule) return fallback;
@@ -151,8 +152,15 @@ interface PlatformHistory {
   [platformKey: string]: { count: number; lastUsedAt: number };
 }
 
+interface ServiceCounts {
+  standard?: number;
+  automatique?: number;
+  avancee?: number;
+  revendeur?: number;
+}
+
 // ═══════════════════════════════════════════════════════════════
-//  Helpers
+//  Helpers métier
 // ═══════════════════════════════════════════════════════════════
 function isCustomCommentsService(svc: ExoService): boolean {
   if (svc.isCustomComments) return true;
@@ -194,7 +202,58 @@ function isAccountSaleService(svc: ExoService): boolean {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Traduction FR — dictionnaire des termes SMM courants
+//  Détection de plateforme à partir d'une URL
+// ═══════════════════════════════════════════════════════════════
+const PLATFORM_DOMAINS: Record<string, string[]> = {
+  instagram: ["instagram.com", "instagr.am"],
+  tiktok: ["tiktok.com"],
+  youtube: ["youtube.com", "youtu.be"],
+  facebook: ["facebook.com", "fb.watch", "fb.com", "m.facebook.com"],
+  twitter: ["twitter.com", "x.com", "t.co"],
+  telegram: ["t.me", "telegram.me", "telegram.org"],
+  whatsapp: ["wa.me", "whatsapp.com", "chat.whatsapp.com"],
+  threads: ["threads.net", "threads.com"],
+  snapchat: ["snapchat.com"],
+  linkedin: ["linkedin.com"],
+  pinterest: ["pinterest.com", "pin.it"],
+  reddit: ["reddit.com", "redd.it"],
+  tumblr: ["tumblr.com"],
+  discord: ["discord.gg", "discord.com"],
+  spotify: ["spotify.com", "open.spotify.com"],
+  soundcloud: ["soundcloud.com"],
+  deezer: ["deezer.com"],
+  twitch: ["twitch.tv"],
+  kick: ["kick.com"],
+  vimeo: ["vimeo.com"],
+};
+
+function detectLinkPlatform(url: string): string | null {
+  const u = url.trim().toLowerCase();
+  if (!u || u.length < 4) return null;
+  for (const [plat, domains] of Object.entries(PLATFORM_DOMAINS)) {
+    for (const dom of domains) {
+      if (u.includes(dom)) return plat;
+    }
+  }
+  return null;
+}
+
+function sumServicesCount(data: any): number {
+  if (!data) return 0;
+  if (Array.isArray(data.services)) return data.services.length;
+  if (data.platforms && typeof data.platforms === "object") {
+    let total = 0;
+    for (const k of Object.keys(data.platforms)) {
+      const arr = data.platforms[k];
+      if (Array.isArray(arr)) total += arr.length;
+    }
+    return total;
+  }
+  return 0;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Traduction FR
 // ═══════════════════════════════════════════════════════════════
 const TRANSLATION_MAP: Array<[RegExp, string]> = [
   [/\bFollowers?\b/gi, "Abonnés"],
@@ -204,7 +263,7 @@ const TRANSLATION_MAP: Array<[RegExp, string]> = [
   [/\bViews?\b/gi, "Vues"],
   [/\bComments?\b/gi, "Commentaires"],
   [/\bShares?\b/gi, "Partages"],
-  [/\bSaves?\b/gi, "Sauvegardes"],
+  [/\bSaves?\b/gi, "Enregistrements"],
   [/\bRetweets?\b/gi, "Retweets"],
   [/\bReposts?\b/gi, "Reposts"],
   [/\bStory Views?\b/gi, "Vues story"],
@@ -269,7 +328,6 @@ const TRANSLATION_MAP: Array<[RegExp, string]> = [
   [/\bNew Post\b/gi, "Nouvelle publication"],
   [/\bCheapest\b/gi, "Moins cher"],
   [/\bWorking\b/gi, "Fonctionnel"],
-  [/\bWorking Guaranteed\b/gi, "Garanti fonctionnel"],
 ];
 
 function translateServiceName(name: string): string {
@@ -280,14 +338,8 @@ function translateServiceName(name: string): string {
   return result;
 }
 
-function hasEnglishTerms(name: string): boolean {
-  const l = name.toLowerCase();
-  const englishWords = ["followers", "likes", "views", "comments", "shares", "subscribers", "premium", "instant", "fast", "quality", "guaranteed", "refill", "automatic", "accounts", "daily", "worldwide", "cheapest"];
-  return englishWords.some((w) => l.includes(w));
-}
-
 // ═══════════════════════════════════════════════════════════════
-//  Order types — NOUVEAU : descriptions corrigées & badges neutralisés
+//  Order types
 // ═══════════════════════════════════════════════════════════════
 const ORDER_TYPES = [
   {
@@ -307,10 +359,10 @@ const ORDER_TYPES = [
     shortLabel: "Automatique",
     icon: "zap" as const,
     description:
-      "Plus de 12 000 services disponibles. Un choix immense : vous trouverez forcément le service exact qu'il vous faut.",
+      "Un catalogue très large. Un choix immense : vous trouverez forcément le service exact qu'il vous faut.",
     color: "#00C853",
     gradient: ["#00C853", "#009624"] as [string, string],
-    tagline: "Plus de 12 000 services au choix",
+    tagline: "Catalogue étendu · Le plus de choix",
   },
   {
     key: "revendeur",
@@ -511,7 +563,6 @@ function extractCategory(name: string): string {
   return "other";
 }
 
-// Filtre & tri puissants
 function normalizeSearch(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -563,7 +614,7 @@ function useEntry(delay = 0, duration = 420) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Composant : Skeleton loader élégant
+//  ServiceSkeleton
 // ═══════════════════════════════════════════════════════════════
 function ServiceSkeleton({ C, isDark, rows = 5 }: { C: any; isDark: boolean; rows?: number }) {
   const shimmer = useRef(new Animated.Value(0.35)).current;
@@ -611,7 +662,7 @@ function ServiceSkeleton({ C, isDark, rows = 5 }: { C: any; isDark: boolean; row
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Composant : Loader plein écran avec messages rotatifs
+//  FullScreenLoader
 // ═══════════════════════════════════════════════════════════════
 const LOADING_MESSAGES = [
   "Chargement de nos meilleurs services pour vous…",
@@ -625,17 +676,9 @@ const LOADING_MESSAGES = [
 ];
 
 function FullScreenLoader({
-  visible,
-  C,
-  isDark,
-  count,
-  platform,
+  visible, C, isDark, count, platform,
 }: {
-  visible: boolean;
-  C: any;
-  isDark: boolean;
-  count?: number;
-  platform?: string;
+  visible: boolean; C: any; isDark: boolean; count?: number; platform?: string;
 }) {
   const [msgIdx, setMsgIdx] = useState(0);
   const rotate = useRef(new Animated.Value(0)).current;
@@ -712,72 +755,251 @@ function FullScreenLoader({
 }
 
 const loaderStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(4,10,22,0.72)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 30,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 340,
-    borderRadius: 24,
-    padding: 26,
-    alignItems: "center",
-    gap: 14,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 12,
-  },
-  iconWrap: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  title: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
-    letterSpacing: -0.2,
-    textAlign: "center",
-  },
-  msg: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    textAlign: "center",
-    lineHeight: 19,
-    minHeight: 38,
-  },
-  countPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  countText: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 12,
-    letterSpacing: 0.2,
-  },
-  dots: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 4,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
+  overlay: { flex: 1, backgroundColor: "rgba(4,10,22,0.72)", alignItems: "center", justifyContent: "center", padding: 30 },
+  card: { width: "100%", maxWidth: 340, borderRadius: 24, padding: 26, alignItems: "center", gap: 14, borderWidth: 1,
+    shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 30, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
+  iconWrap: { width: 76, height: 76, borderRadius: 38, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  title: { fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: -0.2, textAlign: "center" },
+  msg: { fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center", lineHeight: 19, minHeight: 38 },
+  countPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
+  countText: { fontFamily: "Inter_700Bold", fontSize: 12, letterSpacing: 0.2 },
+  dots: { flexDirection: "row", gap: 6, marginTop: 4 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  FavoriteStarButton
+// ═══════════════════════════════════════════════════════════════
+function FavoriteStarButton({
+  active, onPress, size = "md", C,
+}: {
+  active: boolean;
+  onPress: () => void;
+  size?: "sm" | "md" | "lg";
+  C: any;
+}) {
+  const dims = size === "lg" ? 44 : size === "md" ? 36 : 30;
+  const iconSize = size === "lg" ? 20 : size === "md" ? 16 : 14;
+  const { scale, onPressIn, onPressOut } = usePressSpring(0.85);
+
+  return (
+    <View onStartShouldSetResponder={() => true} onMoveShouldSetResponder={() => true} style={{ alignItems: "center", justifyContent: "center" }}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Pressable
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
+          onPress={onPress}
+          hitSlop={12}
+          style={{
+            width: dims, height: dims, borderRadius: dims / 2,
+            alignItems: "center", justifyContent: "center",
+            backgroundColor: active ? GOLD + "28" : C.inputBg,
+            borderWidth: 1.5,
+            borderColor: active ? GOLD : C.border,
+          }}
+        >
+          <Feather name="star" size={iconSize} color={active ? GOLD : C.textMuted} fill={active ? GOLD : "transparent"} />
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ConfusedPersonIllustration
+// ═══════════════════════════════════════════════════════════════
+function ConfusedPersonIllustration() {
+  const float1 = useRef(new Animated.Value(0)).current;
+  const float2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop1 = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float1, { toValue: 1, duration: 1400, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(float1, { toValue: 0, duration: 1400, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    );
+    const loop2 = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float2, { toValue: 1, duration: 1800, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(float2, { toValue: 0, duration: 1800, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    );
+    loop1.start();
+    loop2.start();
+    return () => { loop1.stop(); loop2.stop(); };
+  }, []);
+
+  const y1 = float1.interpolate({ inputRange: [0, 1], outputRange: [0, -5] });
+  const y2 = float2.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
+
+  return (
+    <View style={{ width: 74, height: 74, alignItems: "center", justifyContent: "center" }}>
+      <Animated.View
+        style={{
+          position: "absolute", top: 0, right: 2,
+          width: 24, height: 24, borderRadius: 12,
+          backgroundColor: GOLD + "30",
+          alignItems: "center", justifyContent: "center",
+          borderWidth: 1, borderColor: GOLD + "60",
+          transform: [{ translateY: y1 }],
+        }}
+      >
+        <Text style={{ fontFamily: "Inter_800ExtraBold", fontSize: 12, color: GOLD }}>?</Text>
+      </Animated.View>
+      <Animated.View
+        style={{
+          position: "absolute", top: 6, left: 0,
+          width: 20, height: 20, borderRadius: 10,
+          backgroundColor: WARNING + "35",
+          alignItems: "center", justifyContent: "center",
+          borderWidth: 1, borderColor: WARNING + "60",
+          transform: [{ translateY: y2 }],
+        }}
+      >
+        <Text style={{ fontFamily: "Inter_800ExtraBold", fontSize: 10, color: WARNING }}>?</Text>
+      </Animated.View>
+      <View
+        style={{
+          width: 56, height: 56, borderRadius: 28,
+          backgroundColor: GOLD + "20",
+          borderWidth: 2, borderColor: GOLD + "45",
+          alignItems: "center", justifyContent: "center",
+        }}
+      >
+        <Text style={{ fontSize: 30 }}>🤔</Text>
+      </View>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ServiceActionSheet
+// ═══════════════════════════════════════════════════════════════
+function ServiceActionSheet({
+  visible, service, platform, isFavorite, onClose, onToggleFavorite, onSelect, C, isDark, fmt,
+}: {
+  visible: boolean;
+  service: ExoService | null;
+  platform: PlatformData | null;
+  isFavorite: boolean;
+  onClose: () => void;
+  onToggleFavorite: () => void;
+  onSelect: () => void;
+  C: any;
+  isDark: boolean;
+  fmt: (n: number) => string;
+}) {
+  const slide = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slide, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 6 }).start();
+    } else {
+      Animated.timing(slide, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+    }
+  }, [visible]);
+
+  if (!service) return null;
+
+  const translateY = slide.interpolate({ inputRange: [0, 1], outputRange: [400, 0] });
+  const bg = isDark ? "#0F1B33" : "#FFFFFF";
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Animated.View style={[sheetStyles.sheet, { backgroundColor: bg, transform: [{ translateY }] }]}>
+          <View style={sheetStyles.grabber} />
+
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            {platform && (
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: platform.color + "18", alignItems: "center", justifyContent: "center", padding: 8 }}>
+                <Image source={{ uri: platform.iconUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text, lineHeight: 19 }} numberOfLines={2}>
+                {service.name}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: SUCCESS }}>
+                  {fmt(service.priceXAF)}
+                </Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted }}>
+                  · Min {service.min.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); onSelect(); }}
+            style={({ pressed }) => [
+              sheetStyles.actionBtn,
+              { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(10,28,58,0.03)", borderColor: C.border },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={[sheetStyles.actionIcon, { backgroundColor: INFO + "18" }]}>
+              <Feather name="check-circle" size={18} color={INFO} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text }}>Sélectionner ce service</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11.5, color: C.textMuted, marginTop: 2 }}>
+                Continuer vers le formulaire de commande
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={C.textMuted} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); onToggleFavorite(); }}
+            style={({ pressed }) => [
+              sheetStyles.actionBtn,
+              {
+                backgroundColor: isFavorite ? GOLD + "12" : (isDark ? "rgba(255,255,255,0.05)" : "rgba(10,28,58,0.03)"),
+                borderColor: isFavorite ? GOLD : C.border,
+              },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={[sheetStyles.actionIcon, { backgroundColor: GOLD + "18" }]}>
+              <Feather name="star" size={18} color={GOLD} fill={isFavorite ? GOLD : "transparent"} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: isFavorite ? GOLD : C.text }}>
+                {isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+              </Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11.5, color: C.textMuted, marginTop: 2 }}>
+                {isFavorite ? "Ne plus apparaître dans votre liste" : "Retrouvez-le en haut de l'écran d'accueil"}
+              </Text>
+            </View>
+            <Feather name={isFavorite ? "x" : "plus"} size={18} color={isFavorite ? GOLD : C.textMuted} />
+          </Pressable>
+
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [
+              { marginTop: 10, paddingVertical: 12, borderRadius: 12, alignItems: "center",
+                backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(10,28,58,0.03)" },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13.5, color: C.textMuted }}>Annuler</Text>
+          </Pressable>
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(4,10,22,0.65)", justifyContent: "flex-end" },
+  sheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 26, gap: 10,
+    shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 30, shadowOffset: { width: 0, height: -12 }, elevation: 12 },
+  grabber: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(128,128,128,0.3)", marginBottom: 14 },
+  actionBtn: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1.5 },
+  actionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -854,22 +1076,30 @@ export default function NewOrderScreen() {
     recommendations: ExoService[];
   } | null>(null);
 
-  // ─── Favoris & historique ───
   const [favorites, setFavorites] = useState<FavoriteEntry[]>([]);
   const [recentServices, setRecentServices] = useState<RecentEntry[]>([]);
   const [platformHistory, setPlatformHistory] = useState<PlatformHistory>({});
+  const [serviceCounts, setServiceCounts] = useState<ServiceCounts | null>(null);
 
-  // ─── Loader modal plein écran ───
+  const [actionTarget, setActionTarget] = useState<{
+    service: ExoService;
+    platform: PlatformData | null;
+  } | null>(null);
+
   const [fullLoader, setFullLoader] = useState<{
     visible: boolean;
     count?: number;
     platform?: string;
   }>({ visible: false });
 
+  // Recherche plateforme dépliable
+  const [showPlatformSearch, setShowPlatformSearch] = useState(false);
+  const [platformSearch, setPlatformSearch] = useState("");
+
   const topPad = Platform.OS === "web" ? insets.top + 64 : insets.top;
 
   // ═══════════════════════════════════════════════════════════════
-  //  CHARGEMENT FAVORIS / HISTORIQUE AU DÉMARRAGE
+  //  CHARGEMENT FAVORIS / HISTORIQUE
   // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     let cancelled = false;
@@ -886,6 +1116,60 @@ export default function NewOrderScreen() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // ═══════════════════════════════════════════════════════════════
+  //  CHARGEMENT DES COMPTEURS RÉELS DE SERVICES
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // 1) Cache d'abord (TTL 6h)
+      const cached = await storageGet<{ data: ServiceCounts; ts: number } | null>(
+        STORAGE_KEYS.serviceCounts, null
+      );
+      if (cached && cached.data && Date.now() - cached.ts < COUNTS_CACHE_TTL_MS) {
+        if (!cancelled) setServiceCounts(cached.data);
+        return;
+      }
+
+      // 2) Sinon on fetch en arrière-plan
+      try {
+        const [stdRes, autoRes, avRes] = await Promise.allSettled([
+          fetch(`${BASE_URL}api/exo-services`),
+          fetch(`${BASE_URL}api/services/auto`),
+          fetch(`${BASE_URL}api/afriqueboost/services`),
+        ]);
+
+        const counts: ServiceCounts = {};
+
+        if (stdRes.status === "fulfilled" && stdRes.value.ok) {
+          try { counts.standard = sumServicesCount(await stdRes.value.json()); } catch {}
+        }
+        if (autoRes.status === "fulfilled" && autoRes.value.ok) {
+          try { counts.automatique = sumServicesCount(await autoRes.value.json()); } catch {}
+        }
+        if (avRes.status === "fulfilled" && avRes.value.ok) {
+          try { counts.avancee = sumServicesCount(await avRes.value.json()); } catch {}
+        }
+        if (counts.standard) counts.revendeur = counts.standard;
+
+        if (!cancelled && Object.keys(counts).length > 0) {
+          setServiceCounts(counts);
+          await storageSet(STORAGE_KEYS.serviceCounts, { data: counts, ts: Date.now() });
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Total réel = standard + automatique + avancée (revendeur = standard → pas de double comptage)
+  const trueTotalServices = useMemo(() => {
+    if (!serviceCounts) return 0;
+    const std = serviceCounts.standard ?? 0;
+    const auto = serviceCounts.automatique ?? 0;
+    const av = serviceCounts.avancee ?? 0;
+    return std + auto + av;
+  }, [serviceCounts]);
 
   const persistFavorites = useCallback(async (list: FavoriteEntry[]) => {
     setFavorites(list);
@@ -906,30 +1190,34 @@ export default function NewOrderScreen() {
     return favorites.some((f) => String(f.service.id) === String(serviceId));
   }
 
-  async function toggleFavorite(svc: ExoService) {
-    if (!selectedPlatform) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  async function toggleFavorite(svc: ExoService, platformOverride?: PlatformData | null) {
+    const pf = platformOverride ?? selectedPlatform;
+    if (!pf) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const exists = favorites.some((f) => String(f.service.id) === String(svc.id));
+
     if (exists) {
       const next = favorites.filter((f) => String(f.service.id) !== String(svc.id));
       await persistFavorites(next);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
     } else {
       const entry: FavoriteEntry = {
         service: svc,
-        platformKey: selectedPlatform.key,
-        platformLabel: selectedPlatform.label,
-        platformIconUrl: selectedPlatform.iconUrl,
-        platformColor: selectedPlatform.color,
+        platformKey: pf.key,
+        platformLabel: pf.label,
+        platformIconUrl: pf.iconUrl,
+        platformColor: pf.color,
         orderTypeKey: selectedOrderType ?? "standard",
         addedAt: Date.now(),
       };
       const next = [entry, ...favorites].slice(0, 30);
       await persistFavorites(next);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
   }
 
   async function recordOrderedService(svc: ExoService, platform: PlatformData) {
-    // Mise à jour des services récents
     const key = String(svc.id);
     const existing = recentServices.find((r) => String(r.service.id) === key);
     let next: RecentEntry[];
@@ -958,16 +1246,12 @@ export default function NewOrderScreen() {
     next = next.slice(0, 20);
     await persistRecentServices(next);
 
-    // Mise à jour du compteur de plateforme
     const hist = { ...platformHistory };
     const ph = hist[platform.key] ?? { count: 0, lastUsedAt: 0 };
     hist[platform.key] = { count: ph.count + 1, lastUsedAt: Date.now() };
     await persistPlatformHistory(hist);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  TRI DES PLATEFORMES PAR FRÉQUENCE D'USAGE
-  // ═══════════════════════════════════════════════════════════════
   function sortPlatformsByUsage(list: PlatformData[]): PlatformData[] {
     return [...list].sort((a, b) => {
       const ha = platformHistory[a.key];
@@ -979,9 +1263,6 @@ export default function NewOrderScreen() {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  CHARGEMENT SERVICES
-  // ═══════════════════════════════════════════════════════════════
   function getServiceEndpoint(typeKey: string): string {
     switch (typeKey) {
       case "automatique": return `${BASE_URL}api/services/auto`;
@@ -1063,7 +1344,6 @@ export default function NewOrderScreen() {
     setPlatforms([]);
     setTotalServices(0);
 
-    // On garde le loader visible au moins 600ms pour éviter le flash
     const startedAt = Date.now();
     try {
       const endpoint = getServiceEndpoint(typeKey);
@@ -1105,9 +1385,21 @@ export default function NewOrderScreen() {
       });
       setPlatforms(list);
       setTotalServices(total);
-
-      // Update loader count info
       setFullLoader({ visible: true, count: total });
+
+      // Mise à jour opportuniste du compteur de la catégorie visitée
+      setServiceCounts((prev) => {
+        if (!prev) return prev;
+        const key = typeKey === "revendeur" ? "revendeur" : typeKey;
+        if (key === "standard" || key === "automatique" || key === "avancee" || key === "revendeur") {
+          if (prev[key] === total) return prev;
+          const next = { ...prev, [key]: total };
+          if (key === "standard") next.revendeur = total;
+          storageSet(STORAGE_KEYS.serviceCounts, { data: next, ts: Date.now() });
+          return next;
+        }
+        return prev;
+      });
     } catch {
       setServicesError("Impossible de charger les services. Vérifiez votre connexion.");
     } finally {
@@ -1133,6 +1425,8 @@ export default function NewOrderScreen() {
     setCategoryServices([]);
     setLink("");
     setQuantity("");
+    setShowPlatformSearch(false);
+    setPlatformSearch("");
     loadServices(typeKey);
   };
 
@@ -1155,7 +1449,6 @@ export default function NewOrderScreen() {
     Object.keys(cat).forEach((k) => { if (!sorted[k]) sorted[k] = cat[k]; });
     setCategorized(sorted);
 
-    // Track platform usage (en mémoire, pas persisté tant que pas de commande)
     const hist = { ...platformHistory };
     if (!hist[p.key]) hist[p.key] = { count: 0, lastUsedAt: Date.now() };
     hist[p.key] = { ...hist[p.key], lastUsedAt: Date.now() };
@@ -1168,7 +1461,6 @@ export default function NewOrderScreen() {
     setSelectedService(null);
     const svcs = categorized[cat] ?? [];
     setCategoryServices(svcs);
-    // Affiche un loader si la catégorie est grande (>200 services)
     if (svcs.length > 200) {
       setFullLoader({ visible: true, count: svcs.length, platform: selectedPlatform?.label });
       setTimeout(() => {
@@ -1178,6 +1470,11 @@ export default function NewOrderScreen() {
     } else {
       setShowServiceModal(true);
     }
+  };
+
+  const handleLongPressService = (svc: ExoService, platform: PlatformData | null) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setActionTarget({ service: svc, platform });
   };
 
   const currentOrderType = ORDER_TYPES.find((t) => t.key === selectedOrderType);
@@ -1221,8 +1518,28 @@ export default function NewOrderScreen() {
     if (!selectedService) { Alert.alert("Service requis", "Sélectionnez un service."); return; }
     if (!link.trim()) { Alert.alert("Lien requis", "Entrez le lien de votre page/post."); return; }
 
-    const isCustom = isCustomCommentsService(selectedService);
+    // ─── Détection automatique du lien vs plateforme ───
     const isAccountSale = isAccountSaleService(selectedService);
+    if (!isAccountSale) {
+      const detected = detectLinkPlatform(link);
+      if (detected && selectedPlatform && detected !== selectedPlatform.key) {
+        const expected = selectedPlatform.label;
+        const detectedLabel = PLATFORM_META[detected]?.label ?? detected;
+        await new Promise<void>((resolve) => {
+          Alert.alert(
+            "Lien possiblement incorrect",
+            `Le lien que vous avez saisi semble appartenir à ${detectedLabel}, mais le service que vous avez choisi concerne ${expected}.\n\n` +
+            `Si c'est une erreur, corrigez le lien ou changez de service. Sinon, vous pouvez continuer.`,
+            [
+              { text: "Corriger", style: "cancel", onPress: () => resolve() },
+              { text: "Continuer", onPress: () => resolve() },
+            ]
+          );
+        });
+      }
+    }
+
+    const isCustom = isCustomCommentsService(selectedService);
     let qty: number;
     let comments: string | undefined;
 
@@ -1334,7 +1651,6 @@ export default function NewOrderScreen() {
 
       refreshUser().catch(() => {});
 
-      // Enregistrer pour le système de recommandations
       if (selectedPlatform) {
         recordOrderedService(selectedService, selectedPlatform).catch(() => {});
       }
@@ -1369,7 +1685,6 @@ export default function NewOrderScreen() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <StarBackground dark={isDark} />
 
-      {/* ═══ HEADER ═══ */}
       <LinearGradient
         colors={isDark ? ["#132C57", "#0A1C3A"] : ["#FFFFFF", "#FBF8F1"]}
         style={[styles.header, { paddingTop: topPad + 14 }]}
@@ -1384,8 +1699,8 @@ export default function NewOrderScreen() {
           <Text style={[styles.headerSub, { color: isDark ? "rgba(255,255,255,0.7)" : LIGHT_TEXT_2 }]}>
             {selectedOrderType
               ? currentOrderType?.label ?? "Choisissez votre plateforme"
-              : totalServices > 0
-              ? `${totalServices.toLocaleString()} services disponibles`
+              : trueTotalServices > 0
+              ? `${trueTotalServices.toLocaleString()} services disponibles`
               : "Choisissez votre type de commande"}
           </Text>
         </View>
@@ -1433,10 +1748,8 @@ export default function NewOrderScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ═══ STEP 1 — Order types + Favoris + Récents ═══ */}
           {!selectedOrderType && (
             <>
-              {/* Favoris de l'utilisateur */}
               {favorites.length > 0 && (
                 <FavoritesSection
                   favorites={favorites}
@@ -1450,12 +1763,12 @@ export default function NewOrderScreen() {
                     setLink("");
                     setQuantity("");
                     setCustomComments("");
-                    // Charger les plateformes pour retrouver la plateforme
                     loadServices(typeKey);
                   }}
                   onRemove={async (favId) => {
                     const next = favorites.filter((f) => String(f.service.id) !== String(favId));
                     await persistFavorites(next);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
                   }}
                   C={C}
                   isDark={isDark}
@@ -1463,7 +1776,6 @@ export default function NewOrderScreen() {
                 />
               )}
 
-              {/* Services récemment commandés */}
               {recentServices.length > 0 && (
                 <RecentServicesSection
                   recents={recentServices.slice(0, 5)}
@@ -1488,19 +1800,20 @@ export default function NewOrderScreen() {
                 loading={loadingServices}
                 onSelect={handleSelectOrderType}
                 onOpenHelp={() => setShowCategoriesHelp(true)}
+                counts={serviceCounts}
                 C={C}
                 isDark={isDark}
               />
             </>
           )}
 
-          {/* ═══ Back button ═══ */}
           {selectedOrderType && (
             <Pressable
               style={[styles.backTypeBtn, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() => {
                 setSelectedOrderType(null); setSelectedPlatform(null);
                 setSelectedCategory(null); setSelectedService(null);
+                setShowPlatformSearch(false); setPlatformSearch("");
               }}
             >
               <LinearGradient
@@ -1522,7 +1835,6 @@ export default function NewOrderScreen() {
             </Pressable>
           )}
 
-          {/* ═══ Reseller panel ═══ */}
           {selectedOrderType === "revendeur" && (
             <ResellerPanel
               currentLevel={currentLevel}
@@ -1536,7 +1848,6 @@ export default function NewOrderScreen() {
             />
           )}
 
-          {/* ═══ STEP 2 — Platforms ═══ */}
           {selectedOrderType && (
             <PlatformSection
               platforms={sortPlatformsByUsage(platforms)}
@@ -1548,10 +1859,13 @@ export default function NewOrderScreen() {
               orderType={selectedOrderType}
               C={C}
               isDark={isDark}
+              showSearch={showPlatformSearch}
+              setShowSearch={setShowPlatformSearch}
+              search={platformSearch}
+              setSearch={setPlatformSearch}
             />
           )}
 
-          {/* ═══ STEP 3 — Categories ═══ */}
           {selectedPlatform && Object.keys(categorized).length > 0 && (
             <CategorySection
               categorized={categorized}
@@ -1563,7 +1877,6 @@ export default function NewOrderScreen() {
             />
           )}
 
-          {/* ═══ STEP 4 — Selected service + form ═══ */}
           {selectedService && (
             <SelectedServiceForm
               selectedService={selectedService}
@@ -1587,7 +1900,6 @@ export default function NewOrderScreen() {
             />
           )}
 
-          {/* Hints */}
           {selectedPlatform && !selectedService && !loadingServices && (
             <View style={[styles.hintCard, { backgroundColor: C.surface, borderColor: C.border }]}>
               <View style={[styles.hintIconBox, { backgroundColor: C.iconBg, borderColor: C.iconBorder }]}>
@@ -1612,7 +1924,6 @@ export default function NewOrderScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ═══ Service Modal (grid/list + recherche + tri + favoris + traduction) ═══ */}
       <ServiceModal
         visible={showServiceModal}
         onClose={() => setShowServiceModal(false)}
@@ -1623,6 +1934,7 @@ export default function NewOrderScreen() {
           setSelectedService(svc);
           setShowServiceModal(false);
         }}
+        onLongPressService={(svc) => handleLongPressService(svc, selectedPlatform)}
         orderType={selectedOrderType}
         catMeta={catMeta}
         fmt={fmt}
@@ -1633,7 +1945,29 @@ export default function NewOrderScreen() {
         onToggleFavorite={toggleFavorite}
       />
 
-      {/* ═══ Insufficient balance ═══ */}
+      <ServiceActionSheet
+        visible={!!actionTarget}
+        service={actionTarget?.service ?? null}
+        platform={actionTarget?.platform ?? null}
+        isFavorite={actionTarget ? isFavorite(actionTarget.service.id) : false}
+        onClose={() => setActionTarget(null)}
+        onToggleFavorite={() => {
+          if (actionTarget) toggleFavorite(actionTarget.service, actionTarget.platform);
+          setActionTarget(null);
+        }}
+        onSelect={() => {
+          if (actionTarget) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setSelectedService(actionTarget.service);
+          }
+          setActionTarget(null);
+          setShowServiceModal(false);
+        }}
+        C={C}
+        isDark={isDark}
+        fmt={fmt}
+      />
+
       <InsufficientBalanceModal
         visible={showInsufficientBalance}
         onClose={() => setShowInsufficientBalance(false)}
@@ -1647,7 +1981,6 @@ export default function NewOrderScreen() {
         C={C}
       />
 
-      {/* ═══ Reseller space ═══ */}
       <ResellerSpaceModal
         visible={showResellerSpace}
         onClose={() => setShowResellerSpace(false)}
@@ -1658,22 +1991,22 @@ export default function NewOrderScreen() {
         isDark={isDark}
       />
 
-      {/* ═══ Success Modal with recommendations ═══ */}
       <SuccessOrderModal
         data={successData}
         onClose={() => setSuccessData(null)}
         onViewOrders={() => { setSuccessData(null); router.push("/(tabs)/orders"); }}
         onOrderRecommended={(svc) => {
           setSuccessData(null);
-          if (selectedPlatform) {
-            setSelectedService(svc);
-          }
+          if (selectedPlatform) setSelectedService(svc);
         }}
+        onToggleFavorite={(svc) => {
+          if (selectedPlatform) toggleFavorite(svc, selectedPlatform);
+        }}
+        isFavorite={isFavorite}
         fmt={fmt}
         isDark={isDark}
       />
 
-      {/* ═══ Boost Info Modal ═══ */}
       <BoostInfoModal
         visible={showBoostInfo}
         onClose={() => setShowBoostInfo(false)}
@@ -1685,7 +2018,6 @@ export default function NewOrderScreen() {
         isDark={isDark}
       />
 
-      {/* ═══ Categories Help Modal ═══ */}
       <CategoriesHelpModal
         visible={showCategoriesHelp}
         onClose={() => setShowCategoriesHelp(false)}
@@ -1693,7 +2025,6 @@ export default function NewOrderScreen() {
         isDark={isDark}
       />
 
-      {/* ═══ Full screen loader ═══ */}
       <FullScreenLoader
         visible={fullLoader.visible}
         C={C}
@@ -1706,9 +2037,8 @@ export default function NewOrderScreen() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SUB-COMPONENTS
+//  FavoritesSection
 // ═══════════════════════════════════════════════════════════════
-
 function FavoritesSection({
   favorites, onSelect, onRemove, C, isDark, fmt,
 }: {
@@ -1730,65 +2060,50 @@ function FavoritesSection({
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <View style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: GOLD }} />
-        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text }}>
-          Vos favoris
-        </Text>
+        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text }}>Vos favoris</Text>
         <View style={{ backgroundColor: GOLD + "22", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 }}>
-          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: GOLD }}>
-            {favorites.length}
-          </Text>
+          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: GOLD }}>{favorites.length}</Text>
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 10, paddingRight: 4 }}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
         {favorites.map((fav) => (
           <Pressable
             key={String(fav.service.id)}
             onPress={() => onSelect(fav)}
             style={({ pressed }) => [
               {
-                width: 220,
-                borderRadius: 16,
-                borderWidth: 1,
+                width: 220, borderRadius: 16, borderWidth: 1,
                 borderColor: GOLD + "35",
                 backgroundColor: isDark ? "rgba(212,175,55,0.06)" : "rgba(212,175,55,0.05)",
-                padding: 12,
-                gap: 8,
+                padding: 12, gap: 8,
               },
               pressed && { opacity: 0.85 },
             ]}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Image
-                source={{ uri: fav.platformIconUrl }}
-                style={{ width: 28, height: 28, borderRadius: 8 }}
-                contentFit="contain"
-              />
+              <Image source={{ uri: fav.platformIconUrl }} style={{ width: 28, height: 28, borderRadius: 8 }} contentFit="contain" />
               <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: fav.platformColor }} numberOfLines={1}>
                 {fav.platformLabel}
               </Text>
-              <Pressable
-                onPress={() => onRemove(fav.service.id)}
-                hitSlop={8}
-                style={{ marginLeft: "auto" }}
-              >
-                <Feather name="star" size={14} color={GOLD} />
-              </Pressable>
+              <View onStartShouldSetResponder={() => true} style={{ marginLeft: "auto" }}>
+                <Pressable onPress={() => onRemove(fav.service.id)} hitSlop={12}>
+                  <View style={{
+                    width: 26, height: 26, borderRadius: 13,
+                    backgroundColor: GOLD + "25",
+                    borderWidth: 1, borderColor: GOLD,
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Feather name="x" size={13} color={GOLD} />
+                  </View>
+                </Pressable>
+              </View>
             </View>
-            <Text
-              style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: C.text, lineHeight: 17, minHeight: 34 }}
-              numberOfLines={2}
-            >
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: C.text, lineHeight: 17, minHeight: 34 }} numberOfLines={2}>
               {fav.service.name}
             </Text>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: SUCCESS }}>
-                {fmt(fav.service.priceXAF)}
-              </Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: SUCCESS }}>{fmt(fav.service.priceXAF)}</Text>
               <View style={{ backgroundColor: C.inputBg, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
                 <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: C.textMuted }}>
                   Min {fav.service.min.toLocaleString()}
@@ -1802,6 +2117,9 @@ function FavoritesSection({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  RecentServicesSection
+// ═══════════════════════════════════════════════════════════════
 function RecentServicesSection({
   recents, onSelect, C, isDark, fmt,
 }: {
@@ -1822,53 +2140,34 @@ function RecentServicesSection({
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <View style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: INFO }} />
-        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text }}>
-          Commandés récemment
-        </Text>
+        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text }}>Commandés récemment</Text>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 10, paddingRight: 4 }}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
         {recents.map((r) => (
           <Pressable
             key={String(r.service.id)}
             onPress={() => onSelect(r)}
             style={({ pressed }) => [
               {
-                width: 200,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: C.border,
-                backgroundColor: C.surface,
-                padding: 12,
-                gap: 8,
+                width: 200, borderRadius: 14, borderWidth: 1,
+                borderColor: C.border, backgroundColor: C.surface,
+                padding: 12, gap: 8,
               },
               pressed && { opacity: 0.85 },
             ]}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Image
-                source={{ uri: r.platformIconUrl }}
-                style={{ width: 24, height: 24, borderRadius: 6 }}
-                contentFit="contain"
-              />
+              <Image source={{ uri: r.platformIconUrl }} style={{ width: 24, height: 24, borderRadius: 6 }} contentFit="contain" />
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10.5, color: r.platformColor }} numberOfLines={1}>
                 {r.platformLabel}
               </Text>
               {r.count > 1 && (
                 <View style={{ marginLeft: "auto", backgroundColor: INFO + "20", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: INFO }}>
-                    x{r.count}
-                  </Text>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: INFO }}>x{r.count}</Text>
                 </View>
               )}
             </View>
-            <Text
-              style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: C.text, lineHeight: 16, minHeight: 32 }}
-              numberOfLines={2}
-            >
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: C.text, lineHeight: 16, minHeight: 32 }} numberOfLines={2}>
               {r.service.name}
             </Text>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: SUCCESS }}>
@@ -1881,12 +2180,16 @@ function RecentServicesSection({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  OrderTypeSelector — avec compteurs réels + illustration confuse
+// ═══════════════════════════════════════════════════════════════
 function OrderTypeSelector({
-  loading, onSelect, onOpenHelp, C, isDark,
+  loading, onSelect, onOpenHelp, counts, C, isDark,
 }: {
   loading: boolean;
   onSelect: (key: string) => void;
   onOpenHelp: () => void;
+  counts: ServiceCounts | null;
   C: any;
   isDark: boolean;
 }) {
@@ -1911,19 +2214,24 @@ function OrderTypeSelector({
       {loading && (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={C.accent} />
-          <Text style={[styles.loadingText, { color: C.textSecondary }]}>
-            Chargement des services...
-          </Text>
+          <Text style={[styles.loadingText, { color: C.textSecondary }]}>Chargement des services...</Text>
         </View>
       )}
 
       <View style={{ gap: 12 }}>
         {ORDER_TYPES.map((ot, i) => (
-          <OrderTypeRow key={ot.key} ot={ot} onPress={() => onSelect(ot.key)} C={C} isDark={isDark} index={i} />
+          <OrderTypeRow
+            key={ot.key}
+            ot={ot}
+            onPress={() => onSelect(ot.key)}
+            count={counts?.[ot.key as keyof ServiceCounts]}
+            C={C}
+            isDark={isDark}
+            index={i}
+          />
         ))}
       </View>
 
-      {/* Carte d'aide pour choisir */}
       <Pressable
         onPress={onOpenHelp}
         style={({ pressed }) => [
@@ -1940,9 +2248,7 @@ function OrderTypeSelector({
           pressed && { opacity: 0.88 },
         ]}
       >
-        <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: GOLD + "20", alignItems: "center", justifyContent: "center" }}>
-          <Feather name="help-circle" size={20} color={GOLD} />
-        </View>
+        <ConfusedPersonIllustration />
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13.5, color: isDark ? GOLD : NAVY }}>
             Vous hésitez entre les catégories ?
@@ -1957,11 +2263,15 @@ function OrderTypeSelector({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  OrderTypeRow — avec badge de compteur
+// ═══════════════════════════════════════════════════════════════
 function OrderTypeRow({
-  ot, onPress, C, isDark, index,
+  ot, onPress, count, C, isDark, index,
 }: {
   ot: typeof ORDER_TYPES[0];
   onPress: () => void;
+  count?: number;
   C: any;
   isDark: boolean;
   index: number;
@@ -2006,9 +2316,18 @@ function OrderTypeRow({
           <Text style={[styles.orderTypeDesc, { color: C.textMuted }]} numberOfLines={3}>
             {ot.description}
           </Text>
-          <Text style={[styles.orderTypeTagline, { color: ot.color }]} numberOfLines={1}>
-            {ot.tagline}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 }}>
+            <Text style={[styles.orderTypeTagline, { color: ot.color }]} numberOfLines={1}>
+              {ot.tagline}
+            </Text>
+            {count && count > 0 ? (
+              <View style={{ backgroundColor: ot.color + "22", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9.5, color: ot.color }}>
+                  {count.toLocaleString()} services
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         <View
@@ -2024,17 +2343,15 @@ function OrderTypeRow({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  ResellerPanel
+// ═══════════════════════════════════════════════════════════════
 function ResellerPanel({
   currentLevel, nextLevel, resellerOrdersCount,
   showResellerInfo, setShowResellerInfo, setShowResellerSpace, C, isDark,
 }: any) {
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: C.surface, borderColor: "rgba(212,175,55,0.35)" },
-      ]}
-    >
+    <View style={[styles.card, { backgroundColor: C.surface, borderColor: "rgba(212,175,55,0.35)" }]}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
         <View
           style={{
@@ -2130,16 +2447,81 @@ function ResellerPanel({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  PlatformSection — avec recherche dépliable
+// ═══════════════════════════════════════════════════════════════
 function PlatformSection({
   platforms, selectedPlatform, onSelect, loading, error, onRetry, orderType, C, isDark,
+  showSearch, setShowSearch, search, setSearch,
 }: any) {
   const accent = ORDER_TYPES.find((o) => o.key === orderType)?.color ?? "#1E90FF";
+
+  const filteredPlatforms = useMemo(() => {
+    if (!search.trim()) return platforms;
+    const q = normalizeSearch(search.trim());
+    return platforms.filter((p: PlatformData) =>
+      normalizeSearch(p.label).includes(q)
+    );
+  }, [platforms, search]);
+
   return (
     <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
       <View style={styles.sectionHeaderRow}>
         <View style={[styles.accentBar, { backgroundColor: accent }]} />
         <Text style={[styles.sectionLabel, { color: C.text }]}>Choisissez une plateforme</Text>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            setShowSearch(!showSearch);
+            if (showSearch) setSearch("");
+          }}
+          hitSlop={10}
+          style={{
+            marginLeft: "auto",
+            width: 32, height: 32, borderRadius: 10,
+            backgroundColor: showSearch ? accent + "22" : C.inputBg,
+            borderWidth: 1,
+            borderColor: showSearch ? accent + "55" : C.border,
+            alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <Feather name={showSearch ? "x" : "search"} size={15} color={showSearch ? accent : C.textMuted} />
+        </Pressable>
       </View>
+
+      {showSearch && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            borderWidth: 1,
+            borderRadius: 12,
+            backgroundColor: C.inputBg,
+            borderColor: accent + "55",
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            marginBottom: 8,
+          }}
+        >
+          <Feather name="search" size={14} color={accent} />
+          <TextInput
+            style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13.5, color: C.text }}
+            placeholder="Rechercher une plateforme (ex: Instagram, TikTok...)"
+            placeholderTextColor={C.textMuted}
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+            autoCapitalize="none"
+            autoFocus
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => setSearch("")} hitSlop={8}>
+              <Feather name="x-circle" size={15} color={C.textMuted} />
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {error ? (
         <View style={styles.errorRow}>
@@ -2151,9 +2533,9 @@ function PlatformSection({
         </View>
       ) : null}
 
-      {platforms.length > 0 && (
+      {filteredPlatforms.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.platformScroll}>
-          {platforms.map((p: PlatformData) => {
+          {filteredPlatforms.map((p: PlatformData) => {
             const isActive = selectedPlatform?.key === p.key;
             return (
               <Pressable
@@ -2183,6 +2565,15 @@ function PlatformSection({
         </ScrollView>
       )}
 
+      {showSearch && filteredPlatforms.length === 0 && platforms.length > 0 && (
+        <View style={{ paddingVertical: 16, alignItems: "center", gap: 6 }}>
+          <Feather name="search" size={22} color={C.textMuted} />
+          <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: C.textMuted, textAlign: "center" }}>
+            Aucune plateforme ne correspond à « {search} »
+          </Text>
+        </View>
+      )}
+
       {loading && (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={C.accent} size="small" />
@@ -2193,6 +2584,9 @@ function PlatformSection({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  CategorySection
+// ═══════════════════════════════════════════════════════════════
 function CategorySection({
   categorized, selectedCategory, onSelect, platformLabel, C, isDark,
 }: any) {
@@ -2200,9 +2594,7 @@ function CategorySection({
     <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
       <View style={styles.sectionHeaderRow}>
         <View style={[styles.accentBar, { backgroundColor: GOLD }]} />
-        <Text style={[styles.sectionLabel, { color: C.text }]}>
-          Catégorie — {platformLabel}
-        </Text>
+        <Text style={[styles.sectionLabel, { color: C.text }]}>Catégorie — {platformLabel}</Text>
       </View>
       <View style={styles.categoryGrid}>
         {Object.entries(categorized).map(([cat, svcs]: any) => {
@@ -2243,6 +2635,9 @@ function CategorySection({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  SelectedServiceForm — avec détection de lien
+// ═══════════════════════════════════════════════════════════════
 function SelectedServiceForm({
   selectedService, selectedPlatform, selectedOrderType, catMeta,
   link, setLink, quantity, setQuantity, customComments, setCustomComments,
@@ -2266,6 +2661,19 @@ function SelectedServiceForm({
   const origPrice = selectedService.originalPriceXAF;
   const origComputedPrice = origPrice && qty > 0 ? Math.ceil((pricePerUnit ? origPrice : origPrice / 1000) * qty * autoMargin) : 0;
   const savings = origComputedPrice > 0 && liveComputedPrice > 0 ? origComputedPrice - liveComputedPrice : 0;
+
+  // ─── Détection automatique du lien ───
+  const detectedLinkPlatform = useMemo(() => {
+    if (isAccountSale) return null;
+    return detectLinkPlatform(link);
+  }, [link, isAccountSale]);
+
+  const linkMismatch = useMemo(() => {
+    if (isAccountSale) return false;
+    if (!detectedLinkPlatform) return false;
+    if (!selectedPlatform) return false;
+    return detectedLinkPlatform !== selectedPlatform.key;
+  }, [detectedLinkPlatform, selectedPlatform, isAccountSale]);
 
   const entry1 = useEntry(60);
   const entry2 = useEntry(140);
@@ -2303,11 +2711,18 @@ function SelectedServiceForm({
           </View>
           <View style={{ flexDirection: "row", gap: 6 }}>
             <Pressable
-              style={[styles.changeBtn, { borderColor: GOLD, backgroundColor: GOLD + "15", paddingHorizontal: 8 }]}
+              style={[styles.changeBtn, {
+                borderColor: isFavorite ? GOLD : C.border,
+                backgroundColor: isFavorite ? GOLD + "25" : C.inputBg,
+                flexDirection: "row", alignItems: "center", gap: 4,
+              }]}
               onPress={onToggleFavorite}
-              hitSlop={4}
+              hitSlop={6}
             >
-              <Feather name="star" size={14} color={GOLD} fill={isFavorite ? GOLD : "transparent"} />
+              <Feather name="star" size={13} color={isFavorite ? GOLD : C.textMuted} fill={isFavorite ? GOLD : "transparent"} />
+              <Text style={[styles.changeBtnText, { color: isFavorite ? GOLD : C.textMuted, fontSize: 11 }]}>
+                {isFavorite ? "Favori" : "Suivre"}
+              </Text>
             </Pressable>
             <Pressable
               style={[styles.changeBtn, { borderColor: C.accent, backgroundColor: C.accent + "15" }]}
@@ -2402,8 +2817,21 @@ function SelectedServiceForm({
           <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>
             {isAccountSale ? "Votre adresse email *" : "Lien (URL de votre page ou post) *"}
           </Text>
-          <View style={[styles.inputRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
-            <Feather name={isAccountSale ? "mail" : "link-2"} size={16} color={C.textMuted} />
+          <View
+            style={[
+              styles.inputRow,
+              {
+                backgroundColor: C.inputBg,
+                borderColor: linkMismatch ? WARNING : C.inputBorder,
+                borderWidth: linkMismatch ? 1.5 : 1,
+              },
+            ]}
+          >
+            <Feather
+              name={isAccountSale ? "mail" : "link-2"}
+              size={16}
+              color={linkMismatch ? WARNING : C.textMuted}
+            />
             <TextInput
               style={[styles.input, { color: C.text }]}
               placeholder={isAccountSale ? "exemple@email.com" : "https://..."}
@@ -2412,7 +2840,59 @@ function SelectedServiceForm({
               keyboardType={isAccountSale ? "email-address" : "url"}
               autoCapitalize="none" autoCorrect={false}
             />
+            {link.length > 5 && !isAccountSale && !linkMismatch && detectedLinkPlatform && (
+              <Feather name="check-circle" size={16} color={SUCCESS} />
+            )}
           </View>
+
+          {linkMismatch && selectedPlatform && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "flex-start",
+                gap: 8,
+                backgroundColor: WARNING + "15",
+                borderRadius: 10,
+                padding: 10,
+                borderWidth: 1,
+                borderColor: WARNING + "40",
+                marginTop: 4,
+              }}
+            >
+              <Feather name="alert-triangle" size={14} color={WARNING} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: WARNING }}>
+                  Lien possiblement incorrect
+                </Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11.5, color: WARNING, lineHeight: 16 }}>
+                  Ce lien semble appartenir à{" "}
+                  <Text style={{ fontFamily: "Inter_700Bold" }}>
+                    {PLATFORM_META[detectedLinkPlatform]?.label ?? detectedLinkPlatform}
+                  </Text>
+                  {", "}mais ce service concerne{" "}
+                  <Text style={{ fontFamily: "Inter_700Bold" }}>{selectedPlatform.label}</Text>.
+                  {"\n"}Vérifiez votre lien ou changez de service pour éviter un échec de livraison.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {!isAccountSale && link.length > 10 && !linkMismatch && detectedLinkPlatform && selectedPlatform && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 4,
+                paddingHorizontal: 4,
+              }}
+            >
+              <Feather name="check-circle" size={12} color={SUCCESS} />
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11.5, color: SUCCESS }}>
+                Lien {PLATFORM_META[detectedLinkPlatform]?.label ?? detectedLinkPlatform} détecté — compatible avec ce service
+              </Text>
+            </View>
+          )}
         </View>
 
         {!isCustom && (
@@ -2577,15 +3057,11 @@ function SelectedServiceForm({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Service Modal — version upgradée :
-//  • Barre de recherche temps réel
-//  • Tri par prix (asc par défaut)
-//  • Traduction FR toggle
-//  • Favoris par service
-//  • Skeleton loader
+//  ServiceModal
 // ═══════════════════════════════════════════════════════════════
 function ServiceModal({
   visible, onClose, services, selectedService, onSelect,
+  onLongPressService,
   orderType, catMeta, fmt, C, isDark, platform,
   isFavorite, onToggleFavorite,
 }: any) {
@@ -2598,7 +3074,6 @@ function ServiceModal({
   const [translateFR, setTranslateFR] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
 
-  // Reset à l'ouverture + skeleton pour grosses listes
   useEffect(() => {
     if (visible) {
       setSearch("");
@@ -2638,25 +3113,21 @@ function ServiceModal({
                   ? `${services.length} service${services.length > 1 ? "s" : ""} disponible${services.length > 1 ? "s" : ""}`
                   : `${totalFiltered} résultat${totalFiltered > 1 ? "s" : ""} sur ${services.length}`}
               </Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: C.textMuted, marginTop: 4 }}>
+                💡 Astuce : appui long sur un service pour les options rapides
+              </Text>
             </View>
             <Pressable style={[styles.modalClose, { backgroundColor: C.inputBg }]} onPress={onClose}>
               <Feather name="x" size={18} color={C.textMuted} />
             </Pressable>
           </View>
 
-          {/* Barre de recherche */}
           <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
             <View
               style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-                borderWidth: 1,
-                borderRadius: 12,
-                backgroundColor: C.inputBg,
-                borderColor: C.inputBorder,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
+                flexDirection: "row", alignItems: "center", gap: 10,
+                borderWidth: 1, borderRadius: 12, backgroundColor: C.inputBg,
+                borderColor: C.inputBorder, paddingHorizontal: 12, paddingVertical: 10,
               }}
             >
               <Feather name="search" size={16} color={C.textMuted} />
@@ -2676,21 +3147,13 @@ function ServiceModal({
               )}
             </View>
 
-            {/* Tri + Traduction */}
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Pressable
                 onPress={() => { Haptics.selectionAsync(); setSortAsc(!sortAsc); }}
                 style={{
-                  flex: 1,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: C.border,
-                  backgroundColor: C.inputBg,
-                  paddingVertical: 9,
+                  flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+                  gap: 6, borderRadius: 10, borderWidth: 1, borderColor: C.border,
+                  backgroundColor: C.inputBg, paddingVertical: 9,
                 }}
               >
                 <Feather name={sortAsc ? "arrow-up" : "arrow-down"} size={12} color={C.textMuted} />
@@ -2701,16 +3164,10 @@ function ServiceModal({
               <Pressable
                 onPress={() => { Haptics.selectionAsync(); setTranslateFR(!translateFR); }}
                 style={{
-                  flex: 1,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  borderRadius: 10,
-                  borderWidth: 1.5,
+                  flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+                  gap: 6, borderRadius: 10, borderWidth: 1.5,
                   borderColor: translateFR ? INFO : C.border,
-                  backgroundColor: translateFR ? INFO + "18" : C.inputBg,
-                  paddingVertical: 9,
+                  backgroundColor: translateFR ? INFO + "18" : C.inputBg, paddingVertical: 9,
                 }}
               >
                 <Feather name="type" size={12} color={translateFR ? INFO : C.textMuted} />
@@ -2759,13 +3216,11 @@ function ServiceModal({
                         <Pressable
                           key={svc.id}
                           onPress={() => onSelect(svc)}
+                          onLongPress={() => onLongPressService(svc)}
+                          delayLongPress={450}
                           style={({ pressed }) => [
                             {
-                              width: "48.5%",
-                              borderRadius: 12,
-                              borderWidth: 1.5,
-                              padding: 12,
-                              gap: 6,
+                              width: "48.5%", borderRadius: 12, borderWidth: 1.5, padding: 12, gap: 6,
                               backgroundColor: isSelected ? SUCCESS + "15" : C.inputBg,
                               borderColor: isSelected ? SUCCESS : C.border,
                             },
@@ -2783,9 +3238,9 @@ function ServiceModal({
                                 </Text>
                               </View>
                             )}
-                            <Pressable onPress={() => onToggleFavorite(svc)} hitSlop={6} style={{ marginLeft: "auto" }}>
-                              <Feather name="star" size={13} color={GOLD} fill={fav ? GOLD : "transparent"} />
-                            </Pressable>
+                            <View style={{ marginLeft: "auto" }}>
+                              <FavoriteStarButton active={fav} onPress={() => onToggleFavorite(svc, platform)} size="sm" C={C} />
+                            </View>
                           </View>
                           <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: C.text, lineHeight: 17 }} numberOfLines={3}>
                             {displayN}
@@ -2799,9 +3254,7 @@ function ServiceModal({
                             Min {svc.min.toLocaleString()} · Max {svc.max.toLocaleString()}
                           </Text>
                           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
-                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: SUCCESS }}>
-                              {fmt(svc.priceXAF)}
-                            </Text>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: SUCCESS }}>{fmt(svc.priceXAF)}</Text>
                             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
                               {svc.isPerOne || svc.isPackage ? "/u" : "/1k"}
                             </Text>
@@ -2820,12 +3273,11 @@ function ServiceModal({
                         <Pressable
                           key={svc.id}
                           onPress={() => onSelect(svc)}
+                          onLongPress={() => onLongPressService(svc)}
+                          delayLongPress={450}
                           style={({ pressed }) => [
                             {
-                              borderRadius: 14,
-                              borderWidth: 1.5,
-                              padding: 14,
-                              gap: 8,
+                              borderRadius: 14, borderWidth: 1.5, padding: 14, gap: 8,
                               backgroundColor: isSelected ? "#FF6B35" + "15" : C.inputBg,
                               borderColor: isSelected ? "#FF6B35" : C.border,
                             },
@@ -2835,30 +3287,24 @@ function ServiceModal({
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FF6B3522", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
                               <Feather name="star" size={10} color="#FF6B35" />
-                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9.5, color: "#FF6B35", letterSpacing: 0.3 }}>
-                                AVANCÉ
-                              </Text>
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9.5, color: "#FF6B35", letterSpacing: 0.3 }}>AVANCÉ</Text>
                             </View>
                             {svc.averageTime && (
                               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted }}>
                                 {svc.averageTime}
                               </Text>
                             )}
-                            <Pressable onPress={() => onToggleFavorite(svc)} hitSlop={6} style={{ marginLeft: "auto" }}>
-                              <Feather name="star" size={15} color={GOLD} fill={fav ? GOLD : "transparent"} />
-                            </Pressable>
+                            <View style={{ marginLeft: "auto" }}>
+                              <FavoriteStarButton active={fav} onPress={() => onToggleFavorite(svc, platform)} size="md" C={C} />
+                            </View>
                           </View>
                           <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: C.text, lineHeight: 19 }} numberOfLines={3}>
                             {displayN}
                           </Text>
                           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
                             <View style={{ flexDirection: "row", gap: 10 }}>
-                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted }}>
-                                Min {svc.min.toLocaleString()}
-                              </Text>
-                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted }}>
-                                Max {svc.max.toLocaleString()}
-                              </Text>
+                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted }}>Min {svc.min.toLocaleString()}</Text>
+                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted }}>Max {svc.max.toLocaleString()}</Text>
                             </View>
                             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FF6B35" }}>
                               {fmt(svc.priceXAF)}
@@ -2879,45 +3325,44 @@ function ServiceModal({
                       const accentColor = isReseller ? GOLD : NAVY;
                       const displayN = displayName(svc.name);
                       return (
-                        <Pressable
+                        <View
                           key={svc.id}
-                          onPress={() => onSelect(svc)}
-                          style={({ pressed }) => [
-                            {
-                              flexDirection: "row",
-                              alignItems: "center",
-                              borderWidth: 1,
-                              borderRadius: 12,
-                              padding: 12,
-                              marginBottom: 8,
-                              backgroundColor: isSelected ? accentColor + "15" : C.inputBg,
-                              borderColor: isSelected ? accentColor : C.border,
-                              gap: 10,
-                            },
-                            pressed && { opacity: 0.85 },
-                          ]}
+                          style={{
+                            flexDirection: "row", alignItems: "center",
+                            borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8,
+                            backgroundColor: isSelected ? accentColor + "15" : C.inputBg,
+                            borderColor: isSelected ? accentColor : C.border,
+                            gap: 10,
+                          }}
                         >
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 18, color: C.text }} numberOfLines={3}>
-                              {displayN}
-                            </Text>
-                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 3, color: C.textMuted }}>
-                              Min {svc.min.toLocaleString()} · Max {svc.max.toLocaleString()}
-                              {svc.averageTime ? ` · ${svc.averageTime}` : ""}
-                            </Text>
-                          </View>
-                          <View style={{ alignItems: "flex-end", gap: 3 }}>
-                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: SUCCESS }}>
-                              {fmt(svc.priceXAF)}
-                            </Text>
-                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
-                              {svc.isPerOne || svc.isPackage ? "/unité" : "/1000"}
-                            </Text>
-                          </View>
-                          <Pressable onPress={() => onToggleFavorite(svc)} hitSlop={6}>
-                            <Feather name="star" size={16} color={GOLD} fill={fav ? GOLD : "transparent"} />
+                          <Pressable
+                            onPress={() => onSelect(svc)}
+                            onLongPress={() => onLongPressService(svc)}
+                            delayLongPress={450}
+                            style={({ pressed }) => [
+                              { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+                              pressed && { opacity: 0.85 },
+                            ]}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 18, color: C.text }} numberOfLines={3}>
+                                {displayN}
+                              </Text>
+                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 3, color: C.textMuted }}>
+                                Min {svc.min.toLocaleString()} · Max {svc.max.toLocaleString()}
+                                {svc.averageTime ? ` · ${svc.averageTime}` : ""}
+                              </Text>
+                            </View>
+                            <View style={{ alignItems: "flex-end", gap: 3 }}>
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: SUCCESS }}>{fmt(svc.priceXAF)}</Text>
+                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
+                                {svc.isPerOne || svc.isPackage ? "/unité" : "/1000"}
+                              </Text>
+                            </View>
                           </Pressable>
-                        </Pressable>
+
+                          <FavoriteStarButton active={fav} onPress={() => onToggleFavorite(svc, platform)} size="md" C={C} />
+                        </View>
                       );
                     })}
                   </View>
@@ -2931,6 +3376,9 @@ function ServiceModal({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  InsufficientBalanceModal
+// ═══════════════════════════════════════════════════════════════
 function InsufficientBalanceModal({
   visible, onClose, missingAmount, balance, fmt, onRecharge, C,
 }: any) {
@@ -2978,6 +3426,9 @@ function InsufficientBalanceModal({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  ResellerSpaceModal
+// ═══════════════════════════════════════════════════════════════
 function ResellerSpaceModal({
   visible, onClose, currentLevel, nextLevel, resellerOrdersCount, C, isDark,
 }: any) {
@@ -2997,16 +3448,11 @@ function ResellerSpaceModal({
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }} showsVerticalScrollIndicator={false}>
             <View style={{
-              backgroundColor: currentLevel.color + "15",
-              borderRadius: 18, padding: 16,
+              backgroundColor: currentLevel.color + "15", borderRadius: 18, padding: 16,
               borderWidth: 1.5, borderColor: currentLevel.color + "60", gap: 10,
             }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                <View style={{
-                  width: 56, height: 56, borderRadius: 16,
-                  backgroundColor: currentLevel.color + "20",
-                  alignItems: "center", justifyContent: "center",
-                }}>
+                <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: currentLevel.color + "20", alignItems: "center", justifyContent: "center" }}>
                   <Feather name={currentLevel.icon} size={26} color={currentLevel.color} />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -3018,9 +3464,7 @@ function ResellerSpaceModal({
                   </Text>
                 </View>
                 <View style={{ backgroundColor: currentLevel.color + "20", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10 }}>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: currentLevel.color }}>
-                    -{currentLevel.discount}%
-                  </Text>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: currentLevel.color }}>-{currentLevel.discount}%</Text>
                 </View>
               </View>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: C.textSecondary }}>
@@ -3105,10 +3549,9 @@ function ResellerSpaceModal({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Categories Help Modal — Nouvelle explication honnête
+//  CategoriesHelpModal
 // ═══════════════════════════════════════════════════════════════
 function CategoriesHelpModal({ visible, onClose, C, isDark }: any) {
-  const entry = useEntry(60);
   const CATEGORY_INFOS = [
     {
       key: "standard",
@@ -3128,7 +3571,7 @@ function CategoriesHelpModal({ visible, onClose, C, isDark }: any) {
       icon: "zap" as const,
       color: "#00C853",
       points: [
-        "Plus de 12 000 services au choix dans un seul endroit.",
+        "Un catalogue très large, bien plus étendu que les autres catégories.",
         "« Automatique » veut dire : le traitement démarre tout seul dès la commande.",
         "Ce n'est pas la même chose qu'« instantané » (réservé à Telegram/WhatsApp).",
         "Si vous ne trouvez pas votre bonheur ailleurs, vous le trouverez ici.",
@@ -3179,9 +3622,7 @@ function CategoriesHelpModal({ visible, onClose, C, isDark }: any) {
             <View style={{ backgroundColor: WARNING + "12", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: WARNING + "30" }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <Feather name="alert-circle" size={14} color={WARNING} />
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: WARNING }}>
-                  Bon à savoir
-                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12.5, color: WARNING }}>Bon à savoir</Text>
               </View>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
                 Les noms « Standard », « Automatique », « Revendeur » et « Avancée » sont avant tout des
@@ -3190,16 +3631,14 @@ function CategoriesHelpModal({ visible, onClose, C, isDark }: any) {
               </Text>
             </View>
 
-            {CATEGORY_INFOS.map((cat, i) => (
+            {CATEGORY_INFOS.map((cat) => (
               <View
                 key={cat.key}
                 style={{
-                  borderRadius: 14,
-                  borderWidth: 1,
+                  borderRadius: 14, borderWidth: 1,
                   borderColor: cat.color + "35",
                   backgroundColor: cat.color + "08",
-                  padding: 14,
-                  gap: 10,
+                  padding: 14, gap: 10,
                 }}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -3254,8 +3693,11 @@ function CategoriesHelpModal({ visible, onClose, C, isDark }: any) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  SuccessOrderModal — avec étoile favori sur recommandations
+// ═══════════════════════════════════════════════════════════════
 function SuccessOrderModal({
-  data, onClose, onViewOrders, onOrderRecommended, fmt, isDark,
+  data, onClose, onViewOrders, onOrderRecommended, onToggleFavorite, isFavorite, fmt, isDark,
 }: any) {
   const scale = useRef(new Animated.Value(0.5)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -3306,9 +3748,7 @@ function SuccessOrderModal({
             <Feather name="check" size={38} color={SUCCESS} />
           </Animated.View>
 
-          <Text style={[styles.successTitle, { color: isDark ? "#fff" : LIGHT_TEXT }]}>
-            Commande lancée !
-          </Text>
+          <Text style={[styles.successTitle, { color: isDark ? "#fff" : LIGHT_TEXT }]}>Commande lancée !</Text>
           <Text style={[styles.successSub, { color: isDark ? "rgba(255,255,255,0.65)" : LIGHT_TEXT_2 }]}>
             Vos résultats arrivent dans quelques instants.
           </Text>
@@ -3321,18 +3761,14 @@ function SuccessOrderModal({
               <Text style={[styles.successRowLabel, { color: isDark ? "rgba(255,255,255,0.55)" : LIGHT_TEXT_2 }]}>
                 Montant débité
               </Text>
-              <Text style={[styles.successRowValue, { color: "#FF6B6B" }]}>
-                -{fmt(data.price)}
-              </Text>
+              <Text style={[styles.successRowValue, { color: "#FF6B6B" }]}>-{fmt(data.price)}</Text>
             </View>
             <View style={[styles.successDivider, { backgroundColor: isDark ? DARK_BORDER : LIGHT_BORDER }]} />
             <View style={styles.successRow}>
               <Text style={[styles.successRowLabel, { color: isDark ? "rgba(255,255,255,0.55)" : LIGHT_TEXT_2 }]}>
                 Solde restant
               </Text>
-              <Text style={[styles.successRowValue, { color: isDark ? GOLD : NAVY }]}>
-                {fmt(data.balance)}
-              </Text>
+              <Text style={[styles.successRowValue, { color: isDark ? GOLD : NAVY }]}>{fmt(data.balance)}</Text>
             </View>
           </View>
 
@@ -3355,30 +3791,59 @@ function SuccessOrderModal({
                 </View>
               </View>
 
-              {recos.map((svc: ExoService) => (
-                <Pressable
-                  key={svc.id}
-                  onPress={() => onOrderRecommended?.(svc)}
-                  style={({ pressed }) => [
-                    styles.recoItem,
-                    {
-                      backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#FFFFFF",
-                      borderColor: isDark ? DARK_BORDER : LIGHT_BORDER,
-                    },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: isDark ? "#fff" : LIGHT_TEXT, lineHeight: 17 }} numberOfLines={2}>
-                      {svc.name}
-                    </Text>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: isDark ? "rgba(255,255,255,0.5)" : LIGHT_TEXT_2, marginTop: 2 }}>
-                      Dès {fmt(svc.priceXAF)} · Min {svc.min.toLocaleString()}
-                    </Text>
+              {recos.map((svc: ExoService) => {
+                const fav = isFavorite(svc.id);
+                return (
+                  <View
+                    key={svc.id}
+                    style={[
+                      styles.recoItem,
+                      {
+                        backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#FFFFFF",
+                        borderColor: isDark ? DARK_BORDER : LIGHT_BORDER,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: 10,
+                      },
+                    ]}
+                  >
+                    <Pressable
+                      onPress={() => onOrderRecommended?.(svc)}
+                      style={({ pressed }) => [
+                        { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12.5, color: isDark ? "#fff" : LIGHT_TEXT, lineHeight: 17 }} numberOfLines={2}>
+                          {svc.name}
+                        </Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: isDark ? "rgba(255,255,255,0.5)" : LIGHT_TEXT_2, marginTop: 2 }}>
+                          Dès {fmt(svc.priceXAF)} · Min {svc.min.toLocaleString()}
+                        </Text>
+                      </View>
+                      <Feather name="arrow-up-right" size={16} color={isDark ? GOLD : GOLD_SOFT} />
+                    </Pressable>
+
+                    <View onStartShouldSetResponder={() => true} style={{ marginLeft: 4 }}>
+                      <Pressable
+                        onPress={() => onToggleFavorite?.(svc)}
+                        hitSlop={10}
+                        style={{
+                          width: 34, height: 34, borderRadius: 17,
+                          alignItems: "center", justifyContent: "center",
+                          backgroundColor: fav ? GOLD + "25" : (isDark ? "rgba(255,255,255,0.05)" : "rgba(10,28,58,0.05)"),
+                          borderWidth: 1.5,
+                          borderColor: fav ? GOLD : (isDark ? DARK_BORDER : LIGHT_BORDER),
+                        }}
+                      >
+                        <Feather name="star" size={15} color={fav ? GOLD : (isDark ? "rgba(255,255,255,0.5)" : LIGHT_TEXT_2)} fill={fav ? GOLD : "transparent"} />
+                      </Pressable>
+                    </View>
                   </View>
-                  <Feather name="arrow-up-right" size={16} color={isDark ? GOLD : GOLD_SOFT} />
-                </Pressable>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -3388,10 +3853,7 @@ function SuccessOrderModal({
           </Pressable>
 
           <Pressable
-            style={[
-              styles.successBtnSecondary,
-              { borderColor: isDark ? "rgba(255,255,255,0.18)" : LIGHT_BORDER },
-            ]}
+            style={[styles.successBtnSecondary, { borderColor: isDark ? "rgba(255,255,255,0.18)" : LIGHT_BORDER }]}
             onPress={onClose}
           >
             <Text style={[styles.successBtnSecondaryText, { color: isDark ? "rgba(255,255,255,0.7)" : LIGHT_TEXT_2 }]}>
@@ -3404,6 +3866,9 @@ function SuccessOrderModal({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  BoostInfoModal
+// ═══════════════════════════════════════════════════════════════
 function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -3421,7 +3886,6 @@ function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24, gap: 14 }}>
-
             <View style={{ backgroundColor: "#10A37F12", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#10A37F35" }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <Feather name="info" size={18} color="#10A37F" />
@@ -3447,9 +3911,7 @@ function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
             <View style={{ backgroundColor: C.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 }}>
                 <Feather name="layers" size={18} color={INFO} />
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text }}>
-                  Code couleur qualité
-                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: C.text }}>Code couleur qualité</Text>
               </View>
               {[
                 { color: GOLD, label: "BASIQUE", badge: "Entrée de gamme", desc: "Services accessibles, livraison rapide. Idéal pour une première présence sociale. Résultats variables selon plateformes." },
@@ -3478,7 +3940,6 @@ function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
                 <Feather name="zap" size={18} color="#10A37F" />
                 <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: "#10A37F" }}>Booster intelligemment</Text>
               </View>
-
               <View style={{ backgroundColor: "#10A37F20", borderRadius: 10, padding: 10, marginBottom: 12, flexDirection: "row", gap: 8 }}>
                 <Feather name="bar-chart-2" size={16} color="#10A37F" style={{ marginTop: 1 }} />
                 <Text style={{ flex: 1, fontFamily: "Inter_500Medium", fontSize: 12, color: C.text, lineHeight: 18 }}>
@@ -3486,10 +3947,7 @@ function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
                   Pour 1M de vues, minimum 500K likes + commentaires + partages. La moitié des vues en likes est le minimum naturel.
                 </Text>
               </View>
-
-              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: C.textMuted, marginBottom: 8, letterSpacing: 0.5 }}>
-                À FAIRE
-              </Text>
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: C.textMuted, marginBottom: 8, letterSpacing: 0.5 }}>À FAIRE</Text>
               {[
                 { icon: "video" as const, tip: "LIVE : lancez la diffusion AVANT, puis copiez le lien du live en cours." },
                 { icon: "trending-up" as const, tip: "Progressivité : commencez par 100K–200K vues, attendez, puis continuez." },
@@ -3503,10 +3961,7 @@ function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
                   <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: C.text, lineHeight: 19 }}>{c.tip}</Text>
                 </View>
               ))}
-
-              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: C.textMuted, marginTop: 4, marginBottom: 8, letterSpacing: 0.5 }}>
-                À ÉVITER
-              </Text>
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: C.textMuted, marginTop: 4, marginBottom: 8, letterSpacing: 0.5 }}>À ÉVITER</Text>
               {[
                 "Ne boostez pas en grande quantité d'un coup sur le même lien",
                 "Ne dupliquez pas le même service sur le même lien simultanément",
@@ -3572,9 +4027,7 @@ function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
                 style={{ paddingVertical: 15, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 }}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               >
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" }}>
-                  J'ai compris, allons-y
-                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" }}>J'ai compris, allons-y</Text>
                 <Feather name="chevron-right" size={16} color={GOLD} />
               </LinearGradient>
             </Pressable>
@@ -3584,9 +4037,7 @@ function BoostInfoModal({ visible, onClose, onReclamation, C, isDark }: any) {
               onPress={onReclamation}
             >
               <Feather name="refresh-cw" size={16} color="#FF5722" />
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: "#FF5722" }}>
-                Faire une réclamation
-              </Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: "#FF5722" }}>Faire une réclamation</Text>
             </Pressable>
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 16 }}>
               Réservé aux commandes Élite / HQ / Premium · Délai 30 jours
@@ -3617,14 +4068,10 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 22, letterSpacing: -0.3 },
   headerSub: { fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 3 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 12,
-    alignItems: "center", justifyContent: "center",
-  },
+  headerBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   balancePill: {
     flexDirection: "row", alignItems: "center", gap: 5,
-    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8,
-    borderWidth: 1,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, borderWidth: 1,
   },
   balanceText: { fontFamily: "Inter_700Bold", fontSize: 12 },
 
@@ -3641,17 +4088,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12, elevation: 2,
   },
-  orderTypeIconLarge: {
-    width: 54, height: 54, borderRadius: 16,
-    alignItems: "center", justifyContent: "center",
-  },
+  orderTypeIconLarge: { width: 54, height: 54, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   orderTypeTitle: { fontFamily: "Inter_700Bold", fontSize: 16, letterSpacing: -0.15 },
   orderTypeDesc: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 16 },
-  orderTypeTagline: { fontFamily: "Inter_600SemiBold", fontSize: 11, letterSpacing: 0.2, marginTop: 2 },
-  orderTypeChevron: {
-    width: 34, height: 34, borderRadius: 11,
-    alignItems: "center", justifyContent: "center", borderWidth: 1,
-  },
+  orderTypeTagline: { fontFamily: "Inter_600SemiBold", fontSize: 11, letterSpacing: 0.2 },
+  orderTypeChevron: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", borderWidth: 1 },
 
   card: { borderRadius: 18, borderWidth: 1, padding: 14, gap: 12 },
   sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -3671,10 +4112,7 @@ const styles = StyleSheet.create({
   backTypeBtnSub: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 2 },
 
   platformScroll: { paddingBottom: 4, gap: 10 },
-  platformBtn: {
-    alignItems: "center", gap: 6, borderWidth: 1.5,
-    borderRadius: 14, padding: 10, width: 82,
-  },
+  platformBtn: { alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 14, padding: 10, width: 82 },
   platformIcon: { width: 40, height: 40, borderRadius: 12 },
   platformLabel: { fontFamily: "Inter_500Medium", fontSize: 10.5, textAlign: "center" },
   platformCountPill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginTop: 2 },
@@ -3734,25 +4172,17 @@ const styles = StyleSheet.create({
   modalSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
   modalClose: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 
-  successOverlay: {
-    flex: 1, backgroundColor: "rgba(10,28,58,0.65)",
-    justifyContent: "center", alignItems: "center", padding: 20,
-  },
+  successOverlay: { flex: 1, backgroundColor: "rgba(10,28,58,0.65)", justifyContent: "center", alignItems: "center", padding: 20 },
   successSheet: {
     borderRadius: 24, padding: 24, width: "100%",
     alignItems: "center", gap: 14, borderWidth: 1,
     shadowColor: "#000", shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.30, shadowRadius: 24, elevation: 14,
   },
-  successIconWrap: {
-    width: 80, height: 80, borderRadius: 40,
-    alignItems: "center", justifyContent: "center", borderWidth: 2,
-  },
+  successIconWrap: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   successTitle: { fontFamily: "Inter_700Bold", fontSize: 19, textAlign: "center", letterSpacing: -0.2 },
   successSub: { fontFamily: "Inter_400Regular", fontSize: 13.5, textAlign: "center", lineHeight: 19 },
-  successSummary: {
-    width: "100%", borderRadius: 14, padding: 14, gap: 10, borderWidth: 1,
-  },
+  successSummary: { width: "100%", borderRadius: 14, padding: 14, gap: 10, borderWidth: 1 },
   successRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   successRowLabel: { fontFamily: "Inter_500Medium", fontSize: 12.5, letterSpacing: 0.1 },
   successRowValue: { fontFamily: "Inter_700Bold", fontSize: 15 },
@@ -3764,16 +4194,9 @@ const styles = StyleSheet.create({
     justifyContent: "center", gap: 10,
   },
   successBtnPrimaryText: { fontFamily: "Inter_700Bold", fontSize: 15.5, color: "#fff" },
-  successBtnSecondary: {
-    width: "100%", borderRadius: 14, paddingVertical: 13, alignItems: "center", borderWidth: 1,
-  },
+  successBtnSecondary: { width: "100%", borderRadius: 14, paddingVertical: 13, alignItems: "center", borderWidth: 1 },
   successBtnSecondaryText: { fontFamily: "Inter_500Medium", fontSize: 14.5 },
 
-  recosBox: {
-    width: "100%", borderRadius: 14, padding: 12, gap: 10, borderWidth: 1,
-  },
-  recoItem: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    padding: 10, borderRadius: 10, borderWidth: 1,
-  },
+  recosBox: { width: "100%", borderRadius: 14, padding: 12, gap: 10, borderWidth: 1 },
+  recoItem: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 10, borderWidth: 1 },
 });
