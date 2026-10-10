@@ -34,8 +34,6 @@ const NAVY        = "#0A1C3A";
 const NAVY_LIGHT  = "#152E54";
 const GOLD        = "#D4AF37";
 const GOLD_SOFT   = "#C6A15B";
-const GOLD_BG     = "rgba(212,175,55,0.10)";
-const GOLD_BORDER = "rgba(212,175,55,0.32)";
 
 const LIGHT_SURFACE   = "#FFFFFF";
 const LIGHT_TEXT      = "#1A202C";
@@ -163,7 +161,7 @@ const FEATURED_EXTERNAL = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
-//  ABONNEMENTS À VIE — Achat direct avec débit du solde
+//  ABONNEMENTS À VIE — Textes nettoyés, plus de détails techniques
 // ═══════════════════════════════════════════════════════════════
 interface LifetimeSubscription {
   id: string;
@@ -191,17 +189,17 @@ const LIFETIME_SUBSCRIPTIONS: LifetimeSubscription[] = [
     fcfa: 3600,
     accent: "#E11D48",
     info: {
-      title: "Canal+ à vie — Toutes les chaînes",
+      title: "Canal+ à vie",
       description:
-        "Recevez une application à installer sur votre téléphone, votre ordinateur ou directement sur votre télévision. Vous pourrez visionner toutes les chaînes disponibles sur Canal+ ainsi que celles de Netflix et bien d'autres fournisseurs.",
+        "Profitez de toutes les chaînes Canal+ ainsi que Netflix, séries et films. À installer sur votre téléphone, votre ordinateur ou votre télévision.",
       bullets: [
         "Installable sur téléphone, ordinateur et télévision",
         "Toutes les chaînes Canal+ incluses",
         "Netflix, séries, films et bien plus encore",
         "Accès à vie, aucun renouvellement à payer",
-        "Livraison de l'accès via WhatsApp après votre achat",
       ],
-      note: "Le solde de votre compte doit être suffisant pour valider votre commande. Sinon, vous serez invité à recharger.",
+      note:
+        "Votre solde doit être suffisant pour lancer la commande. Le montant ne sera débité qu'à la réception de votre accès.",
     },
   },
   {
@@ -213,18 +211,18 @@ const LIFETIME_SUBSCRIPTIONS: LifetimeSubscription[] = [
     fcfa: 2500,
     accent: "#E50914",
     info: {
-      title: "Netflix à vie — Sur Android",
+      title: "Netflix à vie",
       description:
-        "Une application à installer directement sur votre téléphone Android. Vous pourrez regarder toutes les chaînes Canal+, Netflix, séries et films, sans aucune déconnexion. Sur ordinateur ou télévision, vous pourrez utiliser le site web pour visionner vos contenus avec le même compte.",
+        "Regardez toutes les chaînes Canal+, Netflix, séries et films sans aucune déconnexion. À installer directement sur votre téléphone Android.",
       bullets: [
-        "Application Android uniquement (téléphone)",
-        "Sur ordinateur et TV : accès via le site web",
+        "Disponible sur Android (téléphone)",
         "Toutes les chaînes Canal+ et Netflix incluses",
         "Séries, films, contenus exclusifs",
         "Aucune déconnexion pendant le visionnage",
         "Accès à vie, aucun renouvellement à payer",
       ],
-      note: "Le solde de votre compte doit être suffisant pour valider votre commande. Sinon, vous serez invité à recharger.",
+      note:
+        "Votre solde doit être suffisant pour lancer la commande. Le montant ne sera débité qu'à la réception de votre accès.",
     },
   },
 ];
@@ -269,7 +267,7 @@ type ModalBaseProps = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  AppModal — Modale personnalisée premium (remplace Alert)
+//  AppModal — Modale personnalisée premium
 // ═══════════════════════════════════════════════════════════════
 type ModalKind = "info" | "success" | "warning" | "error";
 
@@ -582,7 +580,7 @@ function SuccessScreen({ onClose, theme }: { onClose: () => void; theme: any }) 
         Demande envoyée
       </Text>
       <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: theme.textMuted, textAlign: "center", lineHeight: 21 }}>
-        Notre équipe vous contactera sur WhatsApp très prochainement pour finaliser votre commande.
+        Notre équipe vous contactera très prochainement pour finaliser votre commande.
       </Text>
       <Pressable
         style={({ pressed }) => [ms.submitBtn, { marginTop: 6 }, pressed && { transform: [{ scale: 0.97 }] }]}
@@ -705,7 +703,7 @@ function ServiceInfoModal({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Modale info abonnement à vie
+//  Modale info abonnement à vie — sans détails techniques
 // ═══════════════════════════════════════════════════════════════
 function LifetimeInfoModal({
   visible, onClose, sub, theme, priceFmt,
@@ -764,7 +762,7 @@ function LifetimeInfoModal({
           </View>
 
           {sub.info.note ? (
-            <View style={{ backgroundColor: WARNING + "15", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: WARNING + "30", flexDirection: "row", gap: 10 }}>
+            <View style={{ backgroundColor: WARNING + "12", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: WARNING + "28", flexDirection: "row", gap: 10 }}>
               <Feather name="info" size={14} color={WARNING} style={{ marginTop: 2 }} />
               <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 12, color: WARNING, lineHeight: 17 }}>
                 {sub.info.note}
@@ -787,7 +785,7 @@ function LifetimeInfoModal({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Modale d'achat abonnement à vie (débit du solde + notif admin)
+//  Modale d'achat abonnement à vie — textes épurés
 // ═══════════════════════════════════════════════════════════════
 function LifetimePurchaseModal({
   visible, onClose, sub, theme, priceFmt, onSuccess,
@@ -810,11 +808,9 @@ function LifetimePurchaseModal({
 
   useEffect(() => {
     if (visible && user) {
-      // Pré-remplir avec le nom et le téléphone du profil si disponible
       if (!fullName && user.name) setFullName(user.name);
       if (!waPhone && user.phone) {
         const p = String(user.phone).trim();
-        // Extraire indicatif + numéro si possible
         const match = p.match(/^(\+\d{1,4})\s*(.+)$/);
         if (match) {
           setWaCode(match[1]);
@@ -843,7 +839,7 @@ function LifetimePurchaseModal({
       return;
     }
     if (!waPhone.trim()) {
-      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp pour être contacté." });
+      showModal({ kind: "warning", title: "Numéro requis", message: "Entrez votre numéro de contact." });
       return;
     }
     if (!canAfford) {
@@ -862,15 +858,13 @@ function LifetimePurchaseModal({
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      // 1) Débiter le solde
-      const ok = await deductBalance(sub.fcfa);
+      const ok = await deductBalance(sub.fcfa, { server: true });
       if (!ok) {
-        showModal({ kind: "error", title: "Échec du débit", message: "Votre solde n'a pas pu être débité. Réessayez." });
+        showModal({ kind: "error", title: "Échec de l'achat", message: "Votre solde n'a pas pu être débité. Réessayez." });
         setLoading(false);
         return;
       }
 
-      // 2) Envoyer la notification à l'admin via le même circuit que les autres services
       const r = await postServiceRequest(
         "subscription",
         {
@@ -886,12 +880,10 @@ function LifetimePurchaseModal({
       );
 
       if (!r?.success) {
-        // Le solde est déjà débité, mais on n'a pas pu envoyer à l'admin.
-        // On remonte quand même le succès mais on prévient l'utilisateur.
         showModal({
           kind: "warning",
           title: "Commande enregistrée",
-          message: `Votre paiement a été débité. Notre équipe vous contactera sur WhatsApp. Si vous ne recevez rien sous 24h, contactez le support.`,
+          message: `Votre paiement a été débité. Notre équipe vous contactera prochainement. Si vous ne recevez rien sous 24h, contactez le support.`,
         });
         setSuccess(true);
         refreshUser().catch(() => {});
@@ -956,9 +948,8 @@ function LifetimePurchaseModal({
               )}
             </View>
 
-            {/* Formulaire de contact */}
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: theme.textMuted, lineHeight: 19 }}>
-              Remplissez ces informations pour que notre équipe puisse vous livrer votre accès via WhatsApp.
+              Renseignez vos coordonnées pour que nous puissions vous contacter.
             </Text>
 
             <FieldInput
@@ -971,7 +962,6 @@ function LifetimePurchaseModal({
 
             <WaField waCode={waCode} setWaCode={setWaCode} waPhone={waPhone} setWaPhone={setWaPhone} theme={theme} />
 
-            {/* Boutons */}
             {canAfford ? (
               <Pressable
                 style={({ pressed }) => [ms.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
@@ -1002,7 +992,7 @@ function LifetimePurchaseModal({
             )}
 
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11.5, color: theme.textMuted, textAlign: "center", lineHeight: 16 }}>
-              Votre solde sera débité immédiatement. Livraison via WhatsApp.
+              Le montant sera débité à la réception de votre accès.
             </Text>
           </>
         )}
@@ -1043,7 +1033,7 @@ const WebsiteModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps
       return;
     }
     if (!waPhone.trim()) {
-      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      showModal({ kind: "warning", title: "Numéro requis", message: "Entrez votre numéro de contact." });
       return;
     }
     setLoading(true);
@@ -1202,7 +1192,7 @@ const AppModal2 = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =
       return;
     }
     if (!waPhone.trim()) {
-      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      showModal({ kind: "warning", title: "Numéro requis", message: "Entrez votre numéro de contact." });
       return;
     }
     setLoading(true);
@@ -1316,7 +1306,7 @@ const AdsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProps) =>
       return;
     }
     if (!waPhone.trim()) {
-      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      showModal({ kind: "warning", title: "Numéro requis", message: "Entrez votre numéro de contact." });
       return;
     }
     setLoading(true);
@@ -1426,7 +1416,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
 
   const submit = async () => {
     if (!waPhone.trim()) {
-      showModal({ kind: "warning", title: "WhatsApp requis", message: "Entrez votre numéro WhatsApp." });
+      showModal({ kind: "warning", title: "Numéro requis", message: "Entrez votre numéro de contact." });
       return;
     }
     const allFields: Record<string, string> = {
@@ -1644,7 +1634,7 @@ const AccountsModal = memo(({ visible, onClose, theme, priceFmt }: ModalBaseProp
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  Carte service externe (avec animation spring)
+//  Carte service externe
 // ═══════════════════════════════════════════════════════════════
 function FeaturedCard({
   svc, theme, isDark, onPress, onInfo,
@@ -1703,7 +1693,7 @@ function FeaturedCard({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Carte abonnement à vie
+//  Carte abonnement à vie — AVEC FOND DÉCORATIF SUBTIL
 // ═══════════════════════════════════════════════════════════════
 function LifetimeSubscriptionCard({
   sub, theme, isDark, onPress, onInfo, priceLabel,
@@ -1718,54 +1708,92 @@ function LifetimeSubscriptionCard({
   const { scale, onPressIn, onPressOut } = usePressSpring();
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => { onPressIn(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-        onPressOut={onPressOut}
-        style={[
-          ms.featuredCard,
-          {
-            backgroundColor: theme.surface,
-            borderColor: sub.accent + "35",
-            shadowColor: isDark ? "#000" : NAVY,
-            shadowOpacity: isDark ? 0.30 : 0.06,
-          },
-        ]}
+      <View
+        style={{
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: sub.accent + "35",
+          backgroundColor: theme.surface,
+          overflow: "hidden",
+          position: "relative",
+          shadowColor: isDark ? "#000" : NAVY,
+          shadowOffset: { width: 0, height: 4 },
+          shadowRadius: 14,
+          shadowOpacity: isDark ? 0.30 : 0.06,
+          elevation: 2,
+        }}
       >
-        <View style={[ms.featuredIconBox, { backgroundColor: sub.accent + "18", borderColor: sub.accent + "45" }]}>
-          <Feather name={sub.icon} size={20} color={sub.accent} />
+        {/* ─── Fond décoratif : dégradé diagonal subtil ─── */}
+        <LinearGradient
+          colors={[sub.accent + (isDark ? "18" : "0D"), sub.accent + (isDark ? "08" : "04"), "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+
+        {/* ─── Fond décoratif : icône géante en filigrane ─── */}
+        <View
+          style={{
+            position: "absolute",
+            right: -38,
+            bottom: -38,
+            opacity: isDark ? 0.10 : 0.06,
+          }}
+          pointerEvents="none"
+        >
+          <Feather name={sub.icon} size={160} color={sub.accent} />
         </View>
 
-        <View style={ms.featuredRight}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <Text style={[ms.featuredTitle, { color: theme.text }]} numberOfLines={1}>
-              {sub.label}
+        {/* ─── Contenu ─── */}
+        <Pressable
+          onPress={onPress}
+          onPressIn={() => { onPressIn(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          onPressOut={onPressOut}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingVertical: 16,
+            paddingLeft: 16,
+            paddingRight: 12,
+            gap: 14,
+          }}
+        >
+          <View style={[ms.featuredIconBox, { backgroundColor: sub.accent + "18", borderColor: sub.accent + "45" }]}>
+            <Feather name={sub.icon} size={20} color={sub.accent} />
+          </View>
+
+          <View style={ms.featuredRight}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <Text style={[ms.featuredTitle, { color: theme.text }]} numberOfLines={1}>
+                {sub.label}
+              </Text>
+              <View style={[ms.featuredBadge, { borderColor: sub.accent + "45", backgroundColor: sub.accent + "12" }]}>
+                <Text style={[ms.featuredBadgeText, { color: sub.accent }]}>
+                  {sub.badge}
+                </Text>
+              </View>
+            </View>
+            <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
+              {sub.sub}
             </Text>
-            <View style={[ms.featuredBadge, { borderColor: sub.accent + "45", backgroundColor: sub.accent + "12" }]}>
-              <Text style={[ms.featuredBadgeText, { color: sub.accent }]}>
-                {sub.badge}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
+              <Feather name="tag" size={11} color={theme.accentIcon} />
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: theme.accentIcon }}>
+                {priceLabel}
               </Text>
             </View>
           </View>
-          <Text style={[ms.featuredSub, { color: theme.textMuted }]} numberOfLines={1}>
-            {sub.sub}
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
-            <Feather name="tag" size={11} color={theme.accentIcon} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: theme.accentIcon }}>
-              {priceLabel}
-            </Text>
-          </View>
-        </View>
 
-        <Pressable
-          style={ms.infoBtn}
-          hitSlop={12}
-          onPress={(e) => { e.stopPropagation?.(); Haptics.selectionAsync(); onInfo(); }}
-        >
-          <Feather name="help-circle" size={18} color={theme.textMuted} />
+          <Pressable
+            style={ms.infoBtn}
+            hitSlop={12}
+            onPress={(e) => { e.stopPropagation?.(); Haptics.selectionAsync(); onInfo(); }}
+          >
+            <Feather name="help-circle" size={18} color={theme.textMuted} />
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </View>
     </Animated.View>
   );
 }
@@ -1900,7 +1928,7 @@ export default function OtherServicesSection() {
           />
         ))}
 
-        {/* ─── Abonnements à vie (2 nouveaux services) ─── */}
+        {/* ─── Abonnements à vie (Canal+ et Netflix) ─── */}
         {LIFETIME_SUBSCRIPTIONS.map((sub) => (
           <LifetimeSubscriptionCard
             key={sub.id}
@@ -1957,7 +1985,7 @@ export default function OtherServicesSection() {
         sub={purchaseLifetime}
         theme={theme}
         priceFmt={priceFmt}
-        onSuccess={() => { /* Rien à faire côté parent, l'utilisateur est déjà rafraîchi */ }}
+        onSuccess={() => {}}
       />
     </View>
   );

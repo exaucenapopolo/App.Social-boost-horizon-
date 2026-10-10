@@ -61,19 +61,15 @@ interface AuthContextType {
    *
    * @param amount  Montant à débiter.
    * @param opts    Options optionnelles.
-   *   - `{ server: true }` → effectue un débit RÉEL côté serveur via
-   *     `/api/wallet/deduct` (utilisé pour les achats directs comme
-   *     les abonnements à vie qui ne passent par aucun flux commande).
+   *   - `{ server: true }` → débit RÉEL côté serveur via
+   *     `/api/wallet/deduct` (achats directs : abonnements à vie).
    *   - omis ou `{ server: false }` → mise à jour optimiste LOCALE
-   *     uniquement (utilisé par new-order.tsx où le backend a déjà débité).
+   *     (utilisé par new-order.tsx où le backend a déjà débité).
    */
   deductBalance: (amount: number, opts?: { server?: boolean }) => Promise<boolean>;
   refreshUser: () => Promise<void>;
 }
 
-// ── Persistent profile cache (AsyncStorage) ────────────────────────────────
-// This allows the app to display the user profile instantly on startup
-// without waiting for Firebase init or a network call.
 const PROFILE_CACHE_KEY = "@sbh_user_profile_v2";
 
 async function saveProfileToCache(u: User): Promise<void> {
@@ -123,17 +119,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Prevents onAuthStateChanged from making a duplicate /api/me call
-  // when login() or register() has already fetched and set the user.
   const loginFlowActive = useRef(false);
 
-  // ── Save user + persist to AsyncStorage ───────────────────────────────────
   const applyUser = useCallback((userData: User) => {
     setUser(userData);
     saveProfileToCache(userData);
   }, []);
 
-  // ── Load profile from API ─────────────────────────────────────────────────
   const loadUserFromApi = useCallback(async (): Promise<User | null> => {
     const res = await apiClient.me.get();
     if (res.success && res.data) {
@@ -142,12 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, []);
 
-  // ── Auth state listener + instant cache restore ────────────────────────────
   useEffect(() => {
     let mounted = true;
 
-    // STEP 1 — Restore from AsyncStorage immediately (< 50ms, no network)
-    // This makes the app usable instantly on every open.
     loadProfileFromCache().then((cached) => {
       if (cached && mounted && !user) {
         setUser(cached);
@@ -155,34 +144,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // STEP 2 — Wait for Firebase auth state, then refresh from API in background
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (!mounted) return;
 
       if (firebaseUser) {
         try {
-          // Always force-refresh the token to avoid using an expired one
           const token = await firebaseUser.getIdToken(true);
           await saveToken(token, firebaseUser.uid);
 
-          // Skip API call if login() / register() already handled it
           if (loginFlowActive.current) {
             loginFlowActive.current = false;
             setIsLoading(false);
             return;
           }
 
-          // Background refresh: update user from API without blocking UI
           const userData = await loadUserFromApi();
           if (userData && mounted) {
             applyUser(userData);
           }
         } catch (e) {
           console.warn("[AuthContext] onAuthStateChanged error:", e);
-          // Don't clear user on transient error — keep cached profile visible
         }
       } else {
-        // Explicit sign-out from Firebase
         await clearToken();
         await clearProfileCache();
         if (mounted) setUser(null);
@@ -195,9 +178,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       unsubscribe();
     };
-  }, []); // run once on mount
+  }, []);
 
-  // ── refreshUser (manual pull-to-refresh) ──────────────────────────────────
   const refreshUser = useCallback(async () => {
     const token = await getFreshToken();
     if (!token) return;
@@ -205,18 +187,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (userData) applyUser(userData);
   }, [loadUserFromApi, applyUser]);
 
-  // ── login ─────────────────────────────────────────────────────────────────
   const login = useCallback(async (email: string, password: string) => {
     loginFlowActive.current = true;
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-      // Force-refresh token to ensure it's valid and not expired
       const token = await cred.user.getIdToken(true);
       await saveToken(token, cred.user.uid);
 
       let res = await apiClient.me.get();
 
-      // Profile doesn't exist → create it automatically
       if (!res.success && res.error === "Profil introuvable") {
         const rawName = cred.user.displayName ?? email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "");
         const name = rawName || "Utilisateur";
@@ -251,7 +230,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applyUser]);
 
-  // ── register ──────────────────────────────────────────────────────────────
   const register = useCallback(
     async (name: string, email: string, password: string, phone?: string, referredBy?: string, country?: string) => {
       loginFlowActive.current = true;
@@ -273,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!registerRes.success) {
           loginFlowActive.current = false;
-          try { await cred.user.delete(); } catch { /* ignore cleanup error */ }
+          try { await cred.user.delete(); } catch { /* ignore */ }
           return { success: false, error: registerRes.error ?? "Erreur lors de la création du profil." };
         }
 
@@ -300,7 +278,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [loadUserFromApi, applyUser]
   );
 
-  // ── loginWithGoogle ───────────────────────────────────────────────────────
   const loginWithGoogle = useCallback(async () => {
     loginFlowActive.current = true;
     try {
@@ -338,7 +315,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [loadUserFromApi, applyUser]);
 
-  // ── logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     await signOut(auth);
     await clearToken();
@@ -346,7 +322,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  // ── updateUser ────────────────────────────────────────────────────────────
   const updateUser = useCallback(
     async (updates: Partial<User>) => {
       if (!user) return;
@@ -365,7 +340,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
-  // ── addBalance ────────────────────────────────────────────────────────────
   const addBalance = useCallback(
     async (amount: number) => {
       if (!user) return;
@@ -377,33 +351,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  deductBalance — MODIFIÉ
+  //  deductBalance — CORRIGÉ
   // ══════════════════════════════════════════════════════════════════════════
-  //  Deux modes :
-  //
-  //  1) Local (par défaut) — mise à jour optimiste du state.
-  //     Utilisé par new-order.tsx où le backend a DÉJÀ débité via les
-  //     endpoints /api/*/order. Le flag { server: true } NE doit PAS être
-  //     utilisé dans ce cas (sinon double débit).
-  //
-  //  2) Serveur — { server: true } — appel à /api/wallet/deduct qui
-  //     effectue le débit atomiquement côté backend, puis refreshUser()
-  //     pour synchroniser le solde réel. Utilisé par les achats directs
-  //     (abonnements à vie Canal+ / Netflix).
+  //  FIX : le path serveur est `/api/wallet/deduct` (avec préfixe /api),
+  //        pas `/wallet/deduct`. Le client mobile tapait sur
+  //        `${BASE_URL}wallet/deduct` → 404 systématique → aucun débit.
   // ══════════════════════════════════════════════════════════════════════════
   const deductBalance = useCallback(
     async (amount: number, opts?: { server?: boolean }): Promise<boolean> => {
       if (!user) return false;
       if ((user.balance ?? 0) < amount) return false;
 
-      // ── Mode serveur : débite réellement côté backend ─────────────────────
       if (opts?.server) {
         try {
-          const res = await apiClient.post<{ newBalance?: number }>("/wallet/deduct", {
+          const res = await apiClient.post<{ newBalance?: number }>("/api/wallet/deduct", {
             amount,
           });
           if (res.success) {
-            // Rafraîchit pour récupérer le vrai solde renvoyé par le serveur
             await refreshUser();
             return true;
           }
@@ -415,7 +379,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // ── Mode local (par défaut) : mise à jour optimiste uniquement ────────
       const updated = { ...user, balance: (user.balance ?? 0) - amount };
       setUser(updated);
       saveProfileToCache(updated);
