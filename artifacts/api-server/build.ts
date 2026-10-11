@@ -63,6 +63,7 @@ async function buildAll() {
     define: {
       "process.env.NODE_ENV": '"production"',
     },
+    loader: { ".md": "text" },
     minify: true,
     external: externals,
     logLevel: "info",

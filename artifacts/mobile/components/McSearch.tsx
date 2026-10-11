@@ -471,6 +471,14 @@ function normalizeText(s: string): string {
     .replace(/['']/g, "'");
 }
 
+function mcServiceKey(svc: any): string {
+  const provider = String(svc?._provider ?? svc?.provider ?? svc?._providerKey ?? svc?._platformKey ?? svc?._platformLabel ?? "catalog")
+    .trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40) || "catalog";
+  const id = String(svc?.id ?? svc?.serviceId ?? svc?.name ?? "unknown")
+    .trim().replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 50) || "unknown";
+  return provider + ":" + id;
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  Moteur de recherche intelligent LOCAL
 //  Priorité absolue : trouve les services AVANT d'appeler l'IA
@@ -705,6 +713,8 @@ interface McSearchProps {
   C: any;
   isDark: boolean;
   fmt: (n: number) => string;
+  initialPrompt?: string;
+  initialService?: any;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -719,6 +729,8 @@ export default function McSearch({
   C,
   isDark,
   fmt,
+  initialPrompt,
+  initialService,
 }: McSearchProps) {
   const [messages, setMessages] = useState<McMessage[]>([]);
   const [input, setInput] = useState("");
@@ -748,90 +760,107 @@ export default function McSearch({
     }
   }, [visible]);
 
-  // ═══════════════════════════════════════════════════════════════
-  //  Catalogue résumé pour l'IA
-  // ═══════════════════════════════════════════════════════════════
-  const catalogSummary = useMemo(() => {
-    const byPlatform: Record<string, any[]> = {};
-    for (const s of allServices) {
-      const key = s._platformKey ?? "other";
-      if (!byPlatform[key]) byPlatform[key] = [];
-      if (byPlatform[key].length < 20) byPlatform[key].push(s);
+  const lastAppliedInitialPromptRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!visible) {
+      if (!initialPrompt) lastAppliedInitialPromptRef.current = null;
+      return;
     }
-    const lines: string[] = [];
-    for (const [platform, svcs] of Object.entries(byPlatform)) {
-      const sample = svcs.slice(0, 8).map((s: any) =>
-        `[${s.id}] ${(s.name || "").slice(0, 55)} — ${Math.round(s.priceXAF)} FCFA (min ${s.min})`
-      ).join("\n");
-      lines.push(`### ${platform}\n${sample}`);
+    if (initialPrompt && lastAppliedInitialPromptRef.current !== initialPrompt) {
+      lastAppliedInitialPromptRef.current = initialPrompt;
+      setMessages([]);
+      setInput(initialPrompt);
+      setSearchMode("ia");
+      setShowStarters(false);
+      setTimeout(() => inputRef.current?.focus(), 120);
     }
-    return lines.join("\n\n").slice(0, 9000);
-  }, [allServices]);
+  }, [visible, initialPrompt]);
 
   // ═══════════════════════════════════════════════════════════════
-  //  Appel IA avec fallback local intelligent
+  //  Appel IA : recherche locale d'abord, puis 6 candidats maximum au serveur
   // ═══════════════════════════════════════════════════════════════
   const callAI = useCallback(
     async (userMessages: McMessage[], lastUserQuery: string): Promise<{ reply: string; recommendations: any[] }> => {
-      // 1. Toujours faire d'abord une recherche locale — c'est instantané
       const localResult = searchServices(allServices, lastUserQuery);
+      const asksForAdvice = /\b(compare|comparaison|difference|explique|detail|meilleur|meilleure|lequel|laquelle|conseille|conseil|recommande|recommandation|garantie|garanti|delai|qualite|fonctionne|comment|pourquoi|quel|quelle|entre|vaut|avantage|risque|limite|conditions|livraison|option|choisir|choix)\b/i.test(normalizeText(lastUserQuery));
 
-      // 2. Si la confiance locale est HAUTE, on répond directement (pas d'appel IA)
-      //    Ça évite une latence inutile et donne un résultat rapide et fiable.
-      if (localResult.confidence === "high" && localResult.results.length >= 3) {
-        const reply = buildLocalResponse(lastUserQuery, localResult, userName);
+      // Une recherche évidente reste locale et ne consomme aucun appel IA.
+      // Une demande d'explication/comparaison, ou un service explicitement sélectionné,
+      // passe par Mč pour utiliser la base métier et les caractéristiques exactes.
+      if (!initialService && !asksForAdvice && localResult.confidence === "high" && localResult.results.length >= 3) {
         return {
-          reply,
-          recommendations: localResult.results.slice(0, 8).map(r => r.svc),
+          reply: buildLocalResponse(lastUserQuery, localResult, userName),
+          recommendations: localResult.results.slice(0, 6).map((r) => r.svc),
         };
       }
 
-      // 3. Sinon, on appelle l'IA pour enrichir
+      const localCandidates = localResult.results.slice(0, 8).map((r) => r.svc);
+      const shortlist = (initialService
+        ? [initialService, ...localCandidates.filter((svc: any) => mcServiceKey(svc) !== mcServiceKey(initialService))]
+        : localCandidates
+      ).slice(0, 6);
+
+      const candidateServices = shortlist.map((svc: any) => ({
+        key: mcServiceKey(svc),
+        id: String(svc?.id ?? svc?.serviceId ?? ""),
+        provider: String(svc?._provider ?? svc?.provider ?? svc?._providerKey ?? "").slice(0, 60),
+        name: String(svc?.name ?? "").slice(0, 180),
+        platform: String(svc?._platformLabel ?? svc?.platform ?? svc?._platformKey ?? "").slice(0, 80),
+        category: String(svc?.category ?? "").slice(0, 80),
+        type: String(svc?.type ?? "").slice(0, 60),
+        priceXAF: svc?.priceXAF != null && Number.isFinite(Number(svc.priceXAF)) ? Number(svc.priceXAF) : null,
+        min: svc?.min != null && Number.isFinite(Number(svc.min)) ? Number(svc.min) : null,
+        max: svc?.max != null && Number.isFinite(Number(svc.max)) ? Number(svc.max) : null,
+        refill: typeof svc?.refill === "boolean" ? svc.refill : null,
+        cancel: typeof svc?.cancel === "boolean" ? svc.cancel : null,
+        isPackage: typeof svc?.isPackage === "boolean" ? svc.isPackage : null,
+        isPerOne: typeof svc?.isPerOne === "boolean" ? svc.isPerOne : null,
+        averageTime: String(svc?.averageTime ?? "").slice(0, 80),
+        description: String(svc?.description ?? "").slice(0, 260),
+      }));
+      const exactContext = initialService
+        ? candidateServices.find((svc: any) => svc.key === mcServiceKey(initialService)) ?? null
+        : null;
+
       try {
         const res = await fetch(`${BASE_URL}api/mc/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: userMessages.map(m => ({ role: m.role, content: m.content })),
-            catalogSummary,
+            messages: userMessages.slice(-8).map((m) => ({ role: m.role, content: m.content.slice(0, 1500) })),
+            candidateServices,
+            serviceContext: exactContext,
           }),
         });
-        if (!res.ok) throw new Error("AI unavailable");
+        if (!res.ok) throw new Error(`Mč unavailable (${res.status})`);
         const data = await res.json();
         if (!data.success) throw new Error(data.error ?? "AI error");
 
-        const recIds: number[] = data.recommendations ?? [];
-        const recSvcs = recIds
-          .map((id: number) => allServices.find(s => Number(s.id) === Number(id)))
+        const validKeys: string[] = Array.isArray(data.recommendationKeys)
+          ? data.recommendationKeys.filter((key: unknown) => typeof key === "string")
+          : [];
+        const recSvcs = validKeys
+          .map((key) => shortlist.find((svc: any) => mcServiceKey(svc) === key))
           .filter(Boolean);
 
-        // Si l'IA ne donne rien de pertinent, compléter avec les résultats locaux
-        if (recSvcs.length < 3 && localResult.results.length > 0) {
-          const existing = new Set(recSvcs.map((s: any) => s.id));
-          const additional = localResult.results
-            .filter(r => !existing.has(r.svc.id))
-            .slice(0, 8 - recSvcs.length)
-            .map(r => r.svc);
-          return {
-            reply: data.reply || buildLocalResponse(lastUserQuery, localResult, userName),
-            recommendations: [...recSvcs, ...additional],
-          };
+        if (recSvcs.length > 0) {
+          return { reply: data.reply || "Voici les éléments disponibles dans le catalogue.", recommendations: recSvcs };
         }
 
+        // Si Mč n'a sélectionné aucune clé valide, ne jamais convertir un ID ambigu
+        // en offre : on revient aux candidats que la recherche locale a réellement trouvés.
         return {
-          reply: data.reply || "Voilà ce que j'ai trouvé pour toi 👇",
-          recommendations: recSvcs,
+          reply: data.reply || buildLocalResponse(lastUserQuery, localResult, userName),
+          recommendations: shortlist.length ? shortlist.slice(0, initialService ? 1 : 5) : localResult.results.slice(0, 5).map((r) => r.svc),
         };
       } catch (e) {
-        // 4. Fallback total : réponse locale intelligente
-        const reply = buildLocalResponse(lastUserQuery, localResult, userName);
         return {
-          reply,
-          recommendations: localResult.results.slice(0, 8).map(r => r.svc),
+          reply: buildLocalResponse(lastUserQuery, localResult, userName),
+          recommendations: initialService ? [initialService] : localResult.results.slice(0, 6).map((r) => r.svc),
         };
       }
     },
-    [allServices, catalogSummary, userName]
+    [allServices, userName, initialService]
   );
 
   // ═══════════════════════════════════════════════════════════════

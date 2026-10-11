@@ -426,53 +426,113 @@ const RESELLER_LEVELS = [
 function generateServiceDescription(svcName: string, platform: string): {
   what: string; desc: string; linkType: string; howItWorks: string; warning?: string; quality: string[];
 } {
-  const n = svcName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/['']/g, "'");
+  const n = (svcName || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const plt = platform || "la plateforme";
-  const isLive = n.includes("live") || n.includes("en direct");
+  const isLive = n.includes("live") || n.includes("direct");
   const isStory = n.includes("story") || n.includes("stories");
   const isReel = n.includes("reel");
   const isShort = n.includes("short");
   const isVideo = n.includes("video") || n.includes("clip");
   const isPost = n.includes("post") || n.includes("publication");
+  const target = isStory ? "story" : isReel ? "Reel" : isShort ? "Short" : isVideo ? "vidéo" : isPost ? "publication" : "contenu";
+  // Les libellés de qualité fournisseur ne sont pas transformés en garanties.
   const quality: string[] = [];
-  if (n.includes("premium")) quality.push("Premium");
-  if (n.includes("hq") || n.includes("high quality") || n.includes("haute")) quality.push("Haute qualité");
-  if (n.includes("reel") && n.includes("non") && n.includes("drop")) quality.push("Non-drop");
-  if (n.includes("instant")) quality.push("Livraison instantanée");
-  if (n.includes("garanti") || n.includes("guarantee")) quality.push("Garanti");
-  const target = isStory ? "story" : isReel ? "reel" : isShort ? "Short" : isVideo ? "vidéo" : isPost ? "publication" : "contenu";
 
-  if (n.includes("traffic") || n.includes("seo") || n.includes("backlink") || n.includes("web visit")) {
-    return { what: "Traffic Web / SEO", desc: `Génère du trafic qualifié vers votre site web. Améliore votre SEO et votre visibilité sur les moteurs de recherche.`, linkType: "URL complète de votre site web", howItWorks: "Collez l'URL de votre site. Le trafic provient de sources réelles et naturelles.", quality };
+  if (n.includes("traffic") || n.includes("seo") || n.includes("backlink") || n.includes("web visit") || n.includes("trafic")) {
+    return {
+      what: "Trafic web / SEO",
+      desc: "Cette offre concerne le trafic vers un site ou des éléments liés au référencement. Le nom seul ne permet pas de confirmer la provenance, la qualité des visites ni un effet sur le classement des moteurs de recherche.",
+      linkType: "URL complète du site ou de la page concernée",
+      howItWorks: "Vérifiez les détails de l'offre dans le catalogue avant la commande, puis indiquez l'URL correspondant au service.",
+      warning: "Aucun classement Google, trafic qualifié ou résultat commercial n'est garanti par cette description.",
+      quality,
+    };
   }
-  if (isLive && (n.includes("viewer") || n.includes("spectateur"))) {
-    return { what: "Téléspectateurs en direct", desc: `Envoie des téléspectateurs sur votre live ${plt}, augmentant votre compteur visible en temps réel. Plus votre live semble populaire, plus il est suggéré.`, linkType: "Lien de votre LIVE en cours (pas une vidéo déjà publiée)", howItWorks: "Lancez votre live AVANT de passer la commande, puis collez le lien direct de la diffusion.", warning: "Ne fonctionne QUE sur un live actif. Vérifiez que votre live est bien démarré avant de commander.", quality };
+  if (isLive && (n.includes("viewer") || n.includes("spectateur") || n.includes("viewers"))) {
+    return {
+      what: "Spectateurs / vues de live",
+      desc: `Le nom indique une offre associée aux spectateurs ou aux vues d'un direct ${plt}. Les données disponibles ici ne suffisent pas à confirmer les conditions techniques de livraison.`,
+      linkType: "Lien du direct, si les détails de l'offre l'exigent",
+      howItWorks: "Vérifiez les conditions de l'offre et que le lien correspond bien au contenu demandé.",
+      warning: "Le libellé ne permet pas, à lui seul, de garantir le fonctionnement sur un live actif ni une diffusion par la plateforme.",
+      quality,
+    };
   }
-  if (n.includes("follower") || n.includes("abonn") || n.includes("subscriber") || n.includes("fans") || n.includes("membre") || n.includes("watch")) {
-    return { what: "Abonnés / Followers", desc: `Ajoute des abonnés ${plt} sur votre compte, améliorant votre crédibilité et votre visibilité.`, linkType: `URL de votre profil ${plt} (assurez-vous qu'il est PUBLIC)`, howItWorks: "Rendez votre compte public avant de commander, puis collez le lien de votre profil.", warning: "Compte PRIVÉ non supporté. Rendez votre profil public avant de passer la commande.", quality };
+  if (n.includes("follower") || n.includes("abonn") || n.includes("subscriber") || n.includes("fans") || n.includes("membre") || n.includes("members")) {
+    return {
+      what: "Abonnés / followers",
+      desc: `Cette offre concerne l'ajout d'abonnés ou de followers sur ${plt}. Elle ne garantit ni interactions, ni prospects, ni ventes, ni amélioration de la portée algorithmique.`,
+      linkType: `URL du profil ${plt}`,
+      howItWorks: "Copiez l'adresse du profil visé et vérifiez les conditions indiquées pour l'offre choisie.",
+      warning: "La nécessité d'un profil public et les éventuelles conditions de recharge doivent être vérifiées dans les détails de l'offre.",
+      quality,
+    };
   }
   if (n.includes("like") || n.includes("j'aime") || n.includes("jaime") || n.includes("heart") || n.includes("coeur")) {
-    return { what: `Likes / J'aime sur votre ${target}`, desc: `Augmente le nombre de likes sur votre ${target} ${plt}. Plus de likes = meilleure visibilité dans l'algorithme.`, linkType: `URL directe de votre ${target} ${plt}`, howItWorks: `Copiez le lien direct de votre ${target} et collez-le ici. Les likes arrivent progressivement.`, quality };
+    return {
+      what: `Likes / mentions J'aime`,
+      desc: `Cette offre concerne les likes du ${target} sur ${plt}. Un compteur de likes plus élevé ne garantit pas une meilleure recommandation algorithmique ni des résultats commerciaux.`,
+      linkType: `URL directe du ${target} concerné`,
+      howItWorks: "Vérifiez le contenu visé et les limites/minimums affichés avant de commander.",
+      quality,
+    };
   }
   if (n.includes("view") || n.includes("vue") || n.includes("visionnage") || n.includes("impression")) {
-    return { what: `Vues / Visionnages`, desc: `Augmente le compteur de vues de votre ${target} ${plt}. Plus de vues booste votre contenu dans les recommandations.`, linkType: `URL directe de votre ${target}`, howItWorks: "Collez le lien direct de votre contenu. Le compteur augmente progressivement.", quality };
+    return {
+      what: "Vues / visionnages",
+      desc: `Cette offre concerne le compteur de vues ou d'impressions du contenu. Le libellé seul ne précise pas la provenance des vues ni leur effet éventuel sur la portée.`,
+      linkType: `URL directe du ${target} concerné`,
+      howItWorks: "Vérifiez les caractéristiques de l'offre et fournissez l'adresse exacte du contenu.",
+      quality,
+    };
   }
   if (n.includes("commentaire") || n.includes("comment")) {
     const isCustom = n.includes("personnalis") || n.includes("custom");
-    return { what: isCustom ? "Commentaires personnalisés" : "Commentaires", desc: isCustom ? `Publie vos propres commentaires sur votre ${target} ${plt}. Chaque ligne = un commentaire unique.` : `Ajoute des commentaires sur votre ${target} ${plt} pour booster l'engagement.`, linkType: `URL directe de votre ${target}`, howItWorks: isCustom ? "Entrez chaque commentaire sur une ligne séparée. Minimum 10 commentaires." : "Les commentaires sont postés progressivement sur votre contenu.", quality };
+    return {
+      what: isCustom ? "Commentaires personnalisés" : "Commentaires",
+      desc: isCustom
+        ? `Cette offre permet de fournir des commentaires personnalisés pour le contenu ${plt}. Chaque ligne saisie correspond à un commentaire dans le formulaire.`
+        : `Cette offre concerne les commentaires associés au contenu ${plt}. Le libellé ne garantit ni leur pertinence ni des interactions supplémentaires.`,
+      linkType: `URL directe du ${target} concerné`,
+      howItWorks: isCustom ? "Saisissez les commentaires dans le champ prévu, un par ligne. Le formulaire impose un minimum de 10 lignes pour cette catégorie." : "Vérifiez le minimum, le maximum et les conditions affichés pour l'offre.",
+      quality,
+    };
   }
   if (n.includes("partage") || n.includes("share") || n.includes("retweet") || n.includes("repost")) {
-    return { what: "Partages / Retweets", desc: `Génère des partages de votre ${target} ${plt}, augmentant sa portée à de nouvelles audiences.`, linkType: `URL directe de votre ${target}`, howItWorks: "Votre contenu sera partagé progressivement, attirant de nouveaux spectateurs.", quality };
+    return {
+      what: "Partages / republications",
+      desc: `Cette offre concerne les partages ou republications du ${target}. Elle ne permet pas de garantir l'arrivée d'une nouvelle audience ni un accroissement de portée.`,
+      linkType: `URL directe du ${target} concerné`,
+      howItWorks: "Vérifiez les détails et l'URL demandée par l'offre choisie.",
+      quality,
+    };
   }
   if (n.includes("save") || n.includes("enregistr") || n.includes("bookmark")) {
-    return { what: "Enregistrements / Sauvegardes", desc: `Ajoute des sauvegardes à votre ${target} ${plt}. Signal puissant pour l'algorithme.`, linkType: `URL directe de votre ${target}`, howItWorks: "Collez le lien de votre contenu.", quality };
+    return {
+      what: "Enregistrements / sauvegardes",
+      desc: `Cette offre concerne les enregistrements du ${target}. Le nom ne permet pas de confirmer un effet sur l'algorithme ou la portée.`,
+      linkType: `URL directe du ${target} concerné`,
+      howItWorks: "Vérifiez les minimums et maximums indiqués pour l'offre.",
+      quality,
+    };
   }
   if (n.includes("play") || n.includes("ecoute") || n.includes("stream") || n.includes("lecture")) {
-    return { what: "Lectures / Streams", desc: `Augmente le nombre de lectures/streams de votre contenu sur ${plt}.`, linkType: "URL directe de votre morceau/podcast/contenu", howItWorks: "Collez le lien direct de votre contenu audio/vidéo.", quality };
+    return {
+      what: "Lectures / écoutes",
+      desc: `Cette offre concerne les lectures ou écoutes d'un contenu sur ${plt}. La méthode de livraison et la provenance ne peuvent pas être déduites du seul nom.`,
+      linkType: "URL directe du morceau, podcast ou contenu concerné",
+      howItWorks: "Utilisez le lien exact du contenu et consultez les conditions du service avant de commander.",
+      quality,
+    };
   }
-  return { what: "Service de promotion", desc: `Service SMM pour booster votre présence sur ${plt}.`, linkType: "URL de votre page ou contenu", howItWorks: "Fournissez le lien direct de votre contenu et passez la commande.", quality };
+  return {
+    what: "Informations sur le service",
+    desc: `Le nom de cette offre ne suffit pas à établir toutes ses caractéristiques. Mč peut expliquer les détails disponibles dans le catalogue et signaler ce qui reste à vérifier.`,
+    linkType: "URL de la page ou du contenu indiqué dans les détails de l'offre",
+    howItWorks: "Consultez les caractéristiques affichées, notamment le prix, le minimum, le maximum et les conditions connues.",
+    quality,
+  };
 }
-
 // ═══════════════════════════════════════════════════════════════
 //  PLATFORM_META — 200+ plateformes
 // ═══════════════════════════════════════════════════════════════
@@ -1501,6 +1561,13 @@ export default function NewOrderScreen() {
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
   const [missingAmount, setMissingAmount] = useState(0);
   const [showMcSearch, setShowMcSearch] = useState(false);
+  const [mcInitialPrompt, setMcInitialPrompt] = useState<string | undefined>(undefined);
+  const [mcInitialService, setMcInitialService] = useState<any | null>(null);
+  const openMcSearch = (prompt?: string, service?: any) => {
+    setMcInitialPrompt(prompt);
+    setMcInitialService(service ?? null);
+    setShowMcSearch(true);
+  };
 
   // ═══ Recherche globale de services (toutes plateformes) ═══
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
@@ -2463,7 +2530,6 @@ export default function NewOrderScreen() {
               selectedCategory={selectedCategory}
               onSelect={handleSelectCategory}
               platformLabel={selectedPlatform.label}
-              onOpenAi={() => setShowMcSearch(true)}
               C={C}
               isDark={isDark}
             />
@@ -2483,6 +2549,10 @@ export default function NewOrderScreen() {
               referralOrdersUsed={user?.referralOrdersUsed ?? 0}
               fmt={fmt}
               onOpenServiceModal={() => setShowServiceModal(true)}
+              onOpenAi={() => openMcSearch(
+                "Explique-moi ce service précis : ses caractéristiques confirmées, son utilisation, ses limites et les différences éventuelles avec les offres similaires. N'invente ni garantie ni délai absent du catalogue.",
+                { ...selectedService, _platformKey: selectedPlatform?.key, _platformLabel: selectedPlatform?.label }
+              )}
               onSubmit={handleSubmit}
               submitting={submitting}
               isFavorite={isFavorite(selectedService.id)}
@@ -2631,18 +2701,22 @@ export default function NewOrderScreen() {
       {/* ═══ Mč — Bouton flottant Recherche IA ═══ */}
       <McFloatingButton
         visible={!showMcSearch}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowMcSearch(true); }}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); openMcSearch(); }}
         bottomInset={insets.bottom}
         isDark={isDark}
       />
 
       <McSearch
         visible={showMcSearch}
-        onClose={() => setShowMcSearch(false)}
+        onClose={() => { setShowMcSearch(false); setMcInitialPrompt(undefined); setMcInitialService(null); }}
+        initialPrompt={mcInitialPrompt}
+        initialService={mcInitialService}
         allServices={mcSearchServices}
         userName={user?.name ?? (user as any)?.displayName ?? (user as any)?.username ?? "utilisateur"}
         onSelectService={(svc) => {
           setShowMcSearch(false);
+          setMcInitialPrompt(undefined);
+          setMcInitialService(null);
           const plat = platforms.find(p => p.key === svc._platformKey);
           if (plat) {
             setSelectedPlatform(plat);
@@ -2696,120 +2770,8 @@ function GlobalSearchBar({
   isDark: boolean;
   fmt: (n: number) => string;
 }) {
-  const pulse = useRef(new Animated.Value(0.85)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.05, duration: 1100, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.85, duration: 1100, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-
-  const glow = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 1500, useNativeDriver: false }),
-        Animated.timing(glow, { toValue: 0, duration: 1500, useNativeDriver: false }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-
-  const glowShadow = glow.interpolate({
-    inputRange: [0, 1],
-    outputRange: [10, 24],
-  });
-
   return (
     <View style={{ gap: 12 }}>
-      {/* ═══ GROS BOUTON IA — TRÈS VISIBLE ═══ */}
-      <Animated.View
-        style={{
-          transform: [{ scale: pulse }],
-          shadowColor: PURPLE,
-          shadowOpacity: 0.5,
-          shadowRadius: 14,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 10,
-        }}
-      >
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            onOpenAi();
-          }}
-          style={({ pressed }) => [{ borderRadius: 18, overflow: "hidden" }, pressed && { opacity: 0.9 }]}
-        >
-          <LinearGradient
-            colors={[PURPLE, GOLD]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
-              paddingVertical: 15,
-              paddingHorizontal: 18,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <View
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 21,
-                backgroundColor: "rgba(255,255,255,0.22)",
-                alignItems: "center",
-                justifyContent: "center",
-                borderWidth: 1.5,
-                borderColor: "rgba(255,255,255,0.5)",
-              }}
-            >
-              <Feather name="zap" size={22} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text
-                  style={{
-                    fontFamily: "Inter_800ExtraBold",
-                    fontSize: 15,
-                    color: "#fff",
-                    letterSpacing: 0.3,
-                  }}
-                >
-                  RECHERCHE IA — Mč
-                </Text>
-                <View
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.28)",
-                    borderRadius: 5,
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                  }}
-                >
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#fff" }}>BÊTA</Text>
-                </View>
-              </View>
-              <Text
-                style={{
-                  fontFamily: "Inter_400Regular",
-                  fontSize: 11.5,
-                  color: "rgba(255,255,255,0.92)",
-                  marginTop: 2,
-                }}
-              >
-                Dis-moi juste ce que tu cherches, je trouve pour toi
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={22} color="#fff" />
-          </LinearGradient>
-        </Pressable>
-      </Animated.View>
-
       {/* ═══ Barre de recherche globale ═══ */}
       <View
         style={{
@@ -3010,81 +2972,7 @@ function GlobalSearchBar({
         </View>
       )}
 
-      {/* ═══ Encart invitation IA si aucun résultat ═══ */}
-      {isSearching && resultCount === 0 && (
-        <View
-          style={{
-            borderRadius: 14,
-            padding: 16,
-            backgroundColor: isDark ? "rgba(139,92,246,0.10)" : "rgba(139,92,246,0.06)",
-            borderWidth: 1,
-            borderColor: PURPLE + "40",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <View
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              backgroundColor: PURPLE + "20",
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 1.5,
-              borderColor: PURPLE + "50",
-            }}
-          >
-            <Text style={{ fontSize: 24 }}>🤖</Text>
-          </View>
-          <Text
-            style={{
-              fontFamily: "Inter_700Bold",
-              fontSize: 14,
-              color: C.text,
-              textAlign: "center",
-              lineHeight: 19,
-            }}
-          >
-            Rien trouvé pour « {query} » ? 🤔
-          </Text>
-          <Text
-            style={{
-              fontFamily: "Inter_400Regular",
-              fontSize: 12.5,
-              color: C.textSecondary,
-              textAlign: "center",
-              lineHeight: 18,
-              paddingHorizontal: 8,
-            }}
-          >
-            Essaie une formulation plus simple, ou laisse notre IA te guider : elle comprend
-            ce que tu veux même si tu ne connais pas le nom exact du service.
-          </Text>
-          <Pressable
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onOpenAi(); }}
-            style={({ pressed }) => [{ borderRadius: 30, overflow: "hidden" }, pressed && { opacity: 0.9 }]}
-          >
-            <LinearGradient
-              colors={[PURPLE, GOLD]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{
-                paddingHorizontal: 22,
-                paddingVertical: 12,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <Feather name="zap" size={15} color="#fff" />
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#fff" }}>
-                Demander à l'IA Mč
-              </Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
-      )}
+
     </View>
   );
 }
@@ -3571,35 +3459,14 @@ function PlatformSection({
 //  CategorySection — avec bouton IA intégré
 // ═══════════════════════════════════════════════════════════════
 function CategorySection({
-  categorized, selectedCategory, onSelect, platformLabel, onOpenAi, C, isDark,
+  categorized, selectedCategory, onSelect, platformLabel, C,
 }: any) {
   return (
     <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
       <View style={styles.sectionHeaderRow}>
         <View style={[styles.accentBar, { backgroundColor: GOLD }]} />
         <Text style={[styles.sectionLabel, { color: C.text, flex: 1 }]}>Catégorie — {platformLabel}</Text>
-        <Pressable
-          onPress={() => { Haptics.selectionAsync(); onOpenAi(); }}
-          style={({ pressed }) => [
-            {
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 5,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 14,
-              backgroundColor: PURPLE + "18",
-              borderWidth: 1,
-              borderColor: PURPLE + "45",
-            },
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <Feather name="zap" size={11} color={PURPLE} />
-          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10.5, color: PURPLE }}>
-            IA
-          </Text>
-        </Pressable>
+
       </View>
       <View style={styles.categoryGrid}>
         {Object.entries(categorized).map(([cat, svcs]: any) => {
@@ -3637,46 +3504,7 @@ function CategorySection({
         })}
       </View>
 
-      {/* ═══ Mini-invitation IA sous les catégories ═══ */}
-      <Pressable
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onOpenAi(); }}
-        style={({ pressed }) => [
-          {
-            marginTop: 4,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            padding: 11,
-            borderRadius: 12,
-            backgroundColor: isDark ? "rgba(139,92,246,0.10)" : "rgba(139,92,246,0.06)",
-            borderWidth: 1,
-            borderColor: PURPLE + "30",
-          },
-          pressed && { opacity: 0.88 },
-        ]}
-      >
-        <View
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: PURPLE + "22",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Text style={{ fontSize: 16 }}>🤖</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: C.text }}>
-            Pas trouvé ton service ici ?
-          </Text>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10.5, color: C.textMuted, marginTop: 1 }}>
-            Laisse l'IA Mč te guider en 1 phrase
-          </Text>
-        </View>
-        <Feather name="chevron-right" size={16} color={PURPLE} />
-      </Pressable>
+
     </View>
   );
 }
@@ -3688,7 +3516,7 @@ function SelectedServiceForm({
   selectedService, selectedPlatform, selectedOrderType, catMeta,
   link, setLink, quantity, setQuantity, customComments, setCustomComments,
   userBalance, hasReferral, referralOrdersUsed,
-  fmt, onOpenServiceModal, onSubmit, submitting,
+  fmt, onOpenServiceModal, onOpenAi, onSubmit, submitting,
   isFavorite, onToggleFavorite,
   C, isDark,
 }: any) {
@@ -3825,6 +3653,31 @@ function SelectedServiceForm({
               </Text>
             </View>
           )}
+          <Pressable
+            onPress={onOpenAi}
+            style={({ pressed }) => [
+              {
+                marginTop: 10,
+                alignSelf: "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 7,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: C.accent + "55",
+                backgroundColor: C.accent + "12",
+              },
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <Feather name="info" size={14} color={C.accent} />
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: C.accent }}>
+              En savoir plus avec Mč
+            </Text>
+            <Feather name="arrow-up-right" size={13} color={C.accent} />
+          </Pressable>
         </View>
       </Animated.View>
 
