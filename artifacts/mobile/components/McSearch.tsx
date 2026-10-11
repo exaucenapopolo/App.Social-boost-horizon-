@@ -479,6 +479,16 @@ function mcServiceKey(svc: any): string {
   return provider + ":" + id;
 }
 
+function mcPublicText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/\b(?:smm\s*wiz|smmwiz|mtp|exo|afrique\s*boost|afriqueboost|africa\s*boost|africaboost)\b/gi, "")
+    .replace(/[|·:—–-]{2,}/g, " ")
+    .replace(/^\s*[|·:—–-]+|\s*[|·:—–-]+\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  Moteur de recherche intelligent LOCAL
 //  Priorité absolue : trouve les services AVANT d'appeler l'IA
@@ -715,6 +725,7 @@ interface McSearchProps {
   fmt: (n: number) => string;
   initialPrompt?: string;
   initialService?: any;
+  initialServices?: any[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -731,6 +742,7 @@ export default function McSearch({
   fmt,
   initialPrompt,
   initialService,
+  initialServices,
 }: McSearchProps) {
   const [messages, setMessages] = useState<McMessage[]>([]);
   const [input, setInput] = useState("");
@@ -751,9 +763,9 @@ export default function McSearch({
         {
           role: "assistant",
           content:
-            `Salut ${firstName || "toi"} ! 👋 Je suis **Mč**, ton assistant personnel.\n\n` +
-            `Dis-moi juste ce que tu cherches en **une phrase** et je te trouve directement les meilleurs services. Pas de blabla, pas de questions inutiles. 🎯\n\n` +
-            `Exemple : *"abonnés Instagram"*, *"écoutes Spotify"*, *"trafic SEO"*…`,
+            `Bonjour ${firstName || "à toi"} ! Je suis **Mč**, l’assistant de Social Boost Horizon.\n\n` +
+            `Je peux expliquer un service, clarifier ses conditions, comparer deux offres sélectionnées et t’aider à choisir. Je réponds d’abord à ta question ; je ne propose des services que lorsque c’est utile.\n\n` +
+            `Tu peux demander, par exemple : *"Que signifie cette option ?"*, *"Quelles sont les limites de ce service ?"* ou *"Compare ces deux offres"*.`,
           isGreeting: true,
         },
       ]);
@@ -777,37 +789,46 @@ export default function McSearch({
   }, [visible, initialPrompt]);
 
   // ═══════════════════════════════════════════════════════════════
-  //  Appel IA : recherche locale d'abord, puis 6 candidats maximum au serveur
+  //  Mč : contexte exact, candidats limités et recommandations pertinentes
   // ═══════════════════════════════════════════════════════════════
   const callAI = useCallback(
     async (userMessages: McMessage[], lastUserQuery: string): Promise<{ reply: string; recommendations: any[] }> => {
       const localResult = searchServices(allServices, lastUserQuery);
-      const asksForAdvice = /\b(compare|comparaison|difference|explique|detail|meilleur|meilleure|lequel|laquelle|conseille|conseil|recommande|recommandation|garantie|garanti|delai|qualite|fonctionne|comment|pourquoi|quel|quelle|entre|vaut|avantage|risque|limite|conditions|livraison|option|choisir|choix)\b/i.test(normalizeText(lastUserQuery));
+      const normalizedQuery = normalizeText(lastUserQuery);
+      const suppliedServices = Array.isArray(initialServices) && initialServices.length > 0
+        ? initialServices.slice(0, 2)
+        : (initialService ? [initialService] : []);
+      const isCompareContext = suppliedServices.length >= 2;
+      const asksForCatalog = /\b(cherche|chercher|trouve|trouver|recherche|rechercher|propose|proposer|liste|catalogue|offre|offres|alternative|alternatives|prix|tarif|combien|abonne|abonnes|followers|likes|vue|vues|views|commentaire|commentaires|ecoute|ecoutes|plays|traffic|trafic|membre|membres|partage|partages|comparer|compare|comparaison)\b/i.test(normalizedQuery);
+      const asksForExplanation = /\b(explique|expliquer|information|informations|details|detail|fonctionne|fonctionnement|condition|conditions|limite|limites|garantie|garanties|qualite|difference|differences|avantage|avantages|risque|risques|comment|pourquoi|signifie|sert|utiliser|utilisation|definition|signification|explique|explique|parle|cest|quoi|pourrait)\b/i.test(normalizedQuery);
+      const asksForAlternatives = /\b(compare|comparer|comparaison|alternative|alternatives|autres offres|autres options|recommande|recommander|meilleur|meilleure|lequel|laquelle)\b/i.test(normalizedQuery);
 
-      // Une recherche évidente reste locale et ne consomme aucun appel IA.
-      // Une demande d'explication/comparaison, ou un service explicitement sélectionné,
-      // passe par Mč pour utiliser la base métier et les caractéristiques exactes.
-      if (!initialService && !asksForAdvice && localResult.confidence === "high" && localResult.results.length >= 3) {
+      // Recherche simple : répondre localement, sans appel IA. N'afficher des cartes
+      // que si le client cherche réellement des services/offres.
+      if (!suppliedServices.length && !asksForExplanation && localResult.confidence === "high" && localResult.results.length >= 3) {
         return {
-          reply: buildLocalResponse(lastUserQuery, localResult, userName),
-          recommendations: localResult.results.slice(0, 6).map((r) => r.svc),
+          reply: mcPublicText(buildLocalResponse(lastUserQuery, localResult, userName)),
+          recommendations: asksForCatalog ? localResult.results.slice(0, 6).map((r) => r.svc) : [],
         };
       }
 
       const localCandidates = localResult.results.slice(0, 8).map((r) => r.svc);
-      const shortlist = (initialService
-        ? [initialService, ...localCandidates.filter((svc: any) => mcServiceKey(svc) !== mcServiceKey(initialService))]
-        : localCandidates
-      ).slice(0, 6);
+      const shortlist: any[] = [];
+      for (const svc of [...suppliedServices, ...localCandidates]) {
+        const key = mcServiceKey(svc);
+        if (!shortlist.some((existing) => mcServiceKey(existing) === key)) shortlist.push(svc);
+        if (shortlist.length >= 6) break;
+      }
 
-      const candidateServices = shortlist.map((svc: any) => ({
-        key: mcServiceKey(svc),
+      // Les références envoyées au modèle sont opaques (candidate_1, candidate_2).
+      // Les identifiants du service sont conservés, mais le nom du fournisseur ne lui est pas transmis.
+      const candidateServices = shortlist.map((svc: any, index: number) => ({
+        key: `candidate_${index + 1}`,
         id: String(svc?.id ?? svc?.serviceId ?? ""),
-        provider: String(svc?._provider ?? svc?.provider ?? svc?._providerKey ?? "").slice(0, 60),
-        name: String(svc?.name ?? "").slice(0, 180),
-        platform: String(svc?._platformLabel ?? svc?.platform ?? svc?._platformKey ?? "").slice(0, 80),
-        category: String(svc?.category ?? "").slice(0, 80),
-        type: String(svc?.type ?? "").slice(0, 60),
+        name: mcPublicText(svc?.name).slice(0, 180),
+        platform: mcPublicText(svc?._platformLabel ?? svc?.platform ?? svc?._platformKey ?? "").slice(0, 80),
+        category: mcPublicText(svc?.category ?? "").slice(0, 80),
+        type: mcPublicText(svc?.type ?? "").slice(0, 60),
         priceXAF: svc?.priceXAF != null && Number.isFinite(Number(svc.priceXAF)) ? Number(svc.priceXAF) : null,
         min: svc?.min != null && Number.isFinite(Number(svc.min)) ? Number(svc.min) : null,
         max: svc?.max != null && Number.isFinite(Number(svc.max)) ? Number(svc.max) : null,
@@ -815,52 +836,75 @@ export default function McSearch({
         cancel: typeof svc?.cancel === "boolean" ? svc.cancel : null,
         isPackage: typeof svc?.isPackage === "boolean" ? svc.isPackage : null,
         isPerOne: typeof svc?.isPerOne === "boolean" ? svc.isPerOne : null,
-        averageTime: String(svc?.averageTime ?? "").slice(0, 80),
-        description: String(svc?.description ?? "").slice(0, 260),
+        description: mcPublicText(svc?.description ?? "").slice(0, 260),
       }));
-      const exactContext = initialService
-        ? candidateServices.find((svc: any) => svc.key === mcServiceKey(initialService)) ?? null
-        : null;
+      const firstContext = initialService
+        ? candidateServices[0] ?? null
+        : (isCompareContext ? null : null);
 
       try {
         const res = await fetch(`${BASE_URL}api/mc/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: userMessages.slice(-8).map((m) => ({ role: m.role, content: m.content.slice(0, 1500) })),
+            messages: userMessages.slice(-8).map((m) => ({ role: m.role, content: mcPublicText(m.content).slice(0, 1500) })),
             candidateServices,
-            serviceContext: exactContext,
+            serviceContext: firstContext,
+            comparisonRefs: isCompareContext ? candidateServices.slice(0, 2).map((svc: any) => svc.key) : [],
           }),
         });
         if (!res.ok) throw new Error(`Mč unavailable (${res.status})`);
         const data = await res.json();
         if (!data.success) throw new Error(data.error ?? "AI error");
 
-        const validKeys: string[] = Array.isArray(data.recommendationKeys)
-          ? data.recommendationKeys.filter((key: unknown) => typeof key === "string")
-          : [];
-        const recSvcs = validKeys
-          .map((key) => shortlist.find((svc: any) => mcServiceKey(svc) === key))
+        const validRefs: string[] = Array.isArray(data.recommendationRefs)
+          ? data.recommendationRefs.filter((ref: unknown) => typeof ref === "string")
+          : (Array.isArray(data.recommendationKeys) ? data.recommendationKeys.filter((key: unknown) => typeof key === "string") : []);
+        const recSvcs = validRefs
+          .map((ref) => {
+            const idx = Number(String(ref).match(/^candidate_(\d+)$/)?.[1] ?? NaN) - 1;
+            if (Number.isInteger(idx) && idx >= 0 && idx < shortlist.length) return shortlist[idx];
+            // Compatibilité temporaire avec l'ancien format clé fournisseur:id.
+            return shortlist.find((svc: any) => mcServiceKey(svc) === ref);
+          })
           .filter(Boolean);
 
-        if (recSvcs.length > 0) {
-          return { reply: data.reply || "Voici les éléments disponibles dans le catalogue.", recommendations: recSvcs };
+        let recommendations: any[] = [];
+        if (isCompareContext) {
+          // Dans une comparaison demandée par le client, montrer uniquement les deux offres choisies.
+          recommendations = suppliedServices;
+        } else if (asksForCatalog && ((!asksForExplanation && !suppliedServices.length) || asksForAlternatives)) {
+          recommendations = recSvcs.length
+            ? recSvcs.slice(0, 5)
+            : (localResult.confidence !== "low" ? localResult.results.slice(0, 5).map((r) => r.svc) : []);
         }
 
-        // Si Mč n'a sélectionné aucune clé valide, ne jamais convertir un ID ambigu
-        // en offre : on revient aux candidats que la recherche locale a réellement trouvés.
         return {
-          reply: data.reply || buildLocalResponse(lastUserQuery, localResult, userName),
-          recommendations: shortlist.length ? shortlist.slice(0, initialService ? 1 : 5) : localResult.results.slice(0, 5).map((r) => r.svc),
+          reply: mcPublicText(data.reply || "Voici ce que les informations disponibles permettent de confirmer."),
+          recommendations,
         };
-      } catch (e) {
+      } catch (_error) {
+        if (isCompareContext) {
+          return {
+            reply: "Je n’ai pas pu joindre l’assistant pour analyser ces deux offres. Les deux services restent sélectionnés ; réessaie lorsque la connexion sera rétablie.",
+            recommendations: suppliedServices,
+          };
+        }
+        if (asksForExplanation || (suppliedServices.length > 0 && !asksForAlternatives)) {
+          return {
+            reply: "Je n’ai pas pu obtenir une réponse fiable pour le moment. Réessaie lorsque la connexion sera rétablie ; je préfère te le dire plutôt que d’inventer des caractéristiques ou de proposer des services au hasard.",
+            recommendations: [],
+          };
+        }
         return {
-          reply: buildLocalResponse(lastUserQuery, localResult, userName),
-          recommendations: initialService ? [initialService] : localResult.results.slice(0, 6).map((r) => r.svc),
+          reply: mcPublicText(buildLocalResponse(lastUserQuery, localResult, userName)),
+          recommendations: asksForCatalog && (!asksForExplanation || asksForAlternatives) && (!suppliedServices.length || asksForAlternatives) && localResult.confidence !== "low"
+            ? localResult.results.slice(0, 5).map((r) => r.svc)
+            : [],
         };
       }
     },
-    [allServices, userName, initialService]
+    [allServices, userName, initialService, initialServices]
   );
 
   // ═══════════════════════════════════════════════════════════════
@@ -880,7 +924,8 @@ export default function McSearch({
 
     try {
       const { reply, recommendations } = await callAI(nextMessages, text);
-      setMessages(prev => [...prev, { role: "assistant", content: reply, recommendations }]);
+      const publicReply = mcPublicText(reply);
+      setMessages(prev => [...prev, { role: "assistant", content: publicReply, recommendations }]);
     } catch (e: any) {
       setMessages(prev => [
         ...prev,
@@ -1051,7 +1096,7 @@ export default function McSearch({
             }}
             numberOfLines={2}
           >
-            {svc.name}
+            {mcPublicText(svc.name)}
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
             {platformLabel ? (
@@ -1159,7 +1204,7 @@ export default function McSearch({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <Pressable style={styles.backdrop} onPress={onClose}>
           <Animated.View
@@ -1342,7 +1387,7 @@ export default function McSearch({
                 onChangeText={setInput}
                 multiline
                 numberOfLines={3}
-                maxLength={200}
+                maxLength={600}
                 onSubmitEditing={() => {
                   if (searchMode === "ia") handleSend();
                   else handleTextSearch();
@@ -1394,7 +1439,8 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    height: "88%",
+    height: "92%",
+    maxHeight: "94%",
     paddingTop: 10,
     shadowColor: "#000",
     shadowOpacity: 0.45,
@@ -1428,7 +1474,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: Platform.OS === "ios" ? 26 : 14,
+    paddingBottom: Platform.OS === "ios" ? 18 : 10,
     borderTopWidth: 1,
   },
   input: {

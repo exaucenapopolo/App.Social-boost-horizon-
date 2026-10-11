@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import StarBackground from "@/components/StarBackground";
 import McSearch from "@/components/McSearch";
+import McServiceCompareModal from "@/components/McServiceCompareModal";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useOrders } from "@/context/OrdersContext";
@@ -1273,7 +1274,7 @@ function ConfusedPersonIllustration() {
 //  ServiceActionSheet
 // ═══════════════════════════════════════════════════════════════
 function ServiceActionSheet({
-  visible, service, platform, isFavorite, onClose, onToggleFavorite, onSelect, C, isDark, fmt,
+  visible, service, platform, isFavorite, onClose, onToggleFavorite, onSelect, onAskAI, onCompare, C, isDark, fmt,
 }: {
   visible: boolean;
   service: ExoService | null;
@@ -1282,6 +1283,8 @@ function ServiceActionSheet({
   onClose: () => void;
   onToggleFavorite: () => void;
   onSelect: () => void;
+  onAskAI: (prompt: string) => void;
+  onCompare: () => void;
   C: any;
   isDark: boolean;
   fmt: (n: number) => string;
@@ -1371,6 +1374,55 @@ function ServiceActionSheet({
               </Text>
             </View>
             <Feather name={isFavorite ? "x" : "plus"} size={18} color={isFavorite ? GOLD : C.textMuted} />
+          </Pressable>
+
+
+          {[
+            {
+              icon: "info",
+              title: "Comprendre ce service avec Mč",
+              description: "Explication, usage et caractéristiques confirmées",
+              prompt: "Explique-moi ce service précis à partir des informations disponibles dans le catalogue SBH. Dis à quoi il sert, comment l'utiliser, ce qui est confirmé et ce qui reste inconnu. Ne suppose rien et termine après avoir expliqué ce qui est confirmé et ce qui reste inconnu."
+            },
+            {
+              icon: "shield",
+              title: "Vérifier ses conditions et limites",
+              description: "Points à vérifier avant de passer commande",
+              prompt: "Analyse les conditions connues de ce service précis : plateforme, lien à fournir, minimum, maximum, unité, options de recharge et d'annulation si elles sont renseignées. Distingue les faits confirmés des informations absentes. N'invente aucune garantie, aucun délai et ne cite aucun fournisseur."
+            },
+          ].map((option) => (
+            <Pressable
+              key={option.title}
+              onPress={() => { Haptics.selectionAsync(); onAskAI(option.prompt); }}
+              style={({ pressed }) => [
+                sheetStyles.actionBtn,
+                { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(10,28,58,0.03)", borderColor: C.border },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <View style={[sheetStyles.actionIcon, { backgroundColor: PURPLE + "18" }]}>
+                <Feather name={option.icon as any} size={18} color={PURPLE} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13.5, color: C.text }}>{option.title}</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 }}>{option.description}</Text>
+              </View>
+              <Feather name="chevron-right" size={17} color={C.textMuted} />
+            </Pressable>
+          ))}
+
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); onCompare(); }}
+            style={({ pressed }) => [sheetStyles.actionBtn, { backgroundColor: C.accent + "10", borderColor: C.accent + "50" }, pressed && { opacity: 0.85 }]}
+          >
+            <View style={[sheetStyles.actionIcon, { backgroundColor: C.accent + "18" }]}>
+              <Feather name="git-merge" size={18} color={C.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13.5, color: C.text }}>Comparer à une autre offre</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 }}>Ce service sera déjà sélectionné comme premier choix.</Text>
+            </View>
+            <Feather name="chevron-right" size={17} color={C.textMuted} />
           </Pressable>
 
           <Pressable
@@ -1563,9 +1615,13 @@ export default function NewOrderScreen() {
   const [showMcSearch, setShowMcSearch] = useState(false);
   const [mcInitialPrompt, setMcInitialPrompt] = useState<string | undefined>(undefined);
   const [mcInitialService, setMcInitialService] = useState<any | null>(null);
-  const openMcSearch = (prompt?: string, service?: any) => {
+  const [mcInitialServices, setMcInitialServices] = useState<any[]>([]);
+  const [showCompareServices, setShowCompareServices] = useState(false);
+  const [compareInitialService, setCompareInitialService] = useState<any | null>(null);
+  const openMcSearch = (prompt?: string, service?: any, services?: any[]) => {
     setMcInitialPrompt(prompt);
     setMcInitialService(service ?? null);
+    setMcInitialServices(services ?? []);
     setShowMcSearch(true);
   };
 
@@ -2530,6 +2586,7 @@ export default function NewOrderScreen() {
               selectedCategory={selectedCategory}
               onSelect={handleSelectCategory}
               platformLabel={selectedPlatform.label}
+              onCompare={() => { setCompareInitialService(null); setShowCompareServices(true); }}
               C={C}
               isDark={isDark}
             />
@@ -2627,6 +2684,18 @@ export default function NewOrderScreen() {
           setActionTarget(null);
           setShowServiceModal(false);
         }}
+        onAskAI={(prompt) => {
+          const target = actionTarget;
+          setActionTarget(null);
+          if (target) openMcSearch(prompt, { ...target.service, _platformKey: target.platform?.key, _platformLabel: target.platform?.label });
+        }}
+        onCompare={() => {
+          const target = actionTarget;
+          setActionTarget(null);
+          if (target) setCompareInitialService({ ...target.service, _platformKey: target.platform?.key, _platformLabel: target.platform?.label });
+          else setCompareInitialService(null);
+          setShowCompareServices(true);
+        }}
         C={C}
         isDark={isDark}
         fmt={fmt}
@@ -2706,17 +2775,34 @@ export default function NewOrderScreen() {
         isDark={isDark}
       />
 
+      <McServiceCompareModal
+        visible={showCompareServices}
+        allServices={mcSearchServices}
+        initialService={compareInitialService}
+        onClose={() => { setShowCompareServices(false); setCompareInitialService(null); }}
+        onCompare={(first, second) => {
+          setShowCompareServices(false);
+          setCompareInitialService(null);
+          openMcSearch("Compare précisément les deux services que je viens de sélectionner. Présente leurs différences vérifiables : action, plateforme, prix et unité, minimum, maximum, options de recharge et d'annulation lorsqu'elles sont indiquées. Explique ce que ces différences changent pour l'utilisateur, signale les informations inconnues et conclus selon des critères objectifs. N'invente rien et ne cite aucun fournisseur.", undefined, [first, second]);
+        }}
+        C={C}
+        isDark={isDark}
+        fmt={fmt}
+      />
+
       <McSearch
         visible={showMcSearch}
-        onClose={() => { setShowMcSearch(false); setMcInitialPrompt(undefined); setMcInitialService(null); }}
+        onClose={() => { setShowMcSearch(false); setMcInitialPrompt(undefined); setMcInitialService(null); setMcInitialServices([]); }}
         initialPrompt={mcInitialPrompt}
         initialService={mcInitialService}
+        initialServices={mcInitialServices}
         allServices={mcSearchServices}
         userName={user?.name ?? (user as any)?.displayName ?? (user as any)?.username ?? "utilisateur"}
         onSelectService={(svc) => {
           setShowMcSearch(false);
           setMcInitialPrompt(undefined);
           setMcInitialService(null);
+          setMcInitialServices([]);
           const plat = platforms.find(p => p.key === svc._platformKey);
           if (plat) {
             setSelectedPlatform(plat);
@@ -3459,7 +3545,7 @@ function PlatformSection({
 //  CategorySection — avec bouton IA intégré
 // ═══════════════════════════════════════════════════════════════
 function CategorySection({
-  categorized, selectedCategory, onSelect, platformLabel, C,
+  categorized, selectedCategory, onSelect, platformLabel, onCompare, C,
 }: any) {
   return (
     <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -3504,6 +3590,24 @@ function CategorySection({
         })}
       </View>
 
+      <Pressable
+        onPress={onCompare}
+        style={({ pressed }) => [{
+          marginTop: 12, flexDirection: "row", alignItems: "center", gap: 11,
+          paddingHorizontal: 14, paddingVertical: 13, borderRadius: 13,
+          borderWidth: 1.5, borderColor: C.accent + "55",
+          backgroundColor: C.accent + "10", opacity: pressed ? 0.82 : 1,
+        }]}
+      >
+        <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: C.accent + "18", alignItems: "center", justifyContent: "center" }}>
+          <Feather name="git-merge" size={17} color={C.accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: C.text }}>Comparer deux services</Text>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 }}>Choisissez deux offres puis demandez à Mč de comparer leurs différences.</Text>
+        </View>
+        <Feather name="chevron-right" size={18} color={C.accent} />
+      </Pressable>
 
     </View>
   );
