@@ -2728,7 +2728,7 @@ function GlobalSearchBar({
           transform: [{ scale: pulse }],
           shadowColor: PURPLE,
           shadowOpacity: 0.5,
-          shadowRadius: glowShadow as any,
+          shadowRadius: 14,
           shadowOffset: { width: 0, height: 6 },
           elevation: 10,
         }}

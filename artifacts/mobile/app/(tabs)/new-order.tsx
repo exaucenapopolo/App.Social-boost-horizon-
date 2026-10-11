@@ -2238,6 +2238,17 @@ export default function NewOrderScreen() {
     }
   };
 
+  // ═══ FIX : Mémoïsation pour éviter le crash mémoire (12k+ services) ═══
+  const mcSearchServices = useMemo(() => {
+    return platforms.flatMap(p => p.services.map(s => ({
+      ...s,
+      _platformKey: p.key,
+      _platformLabel: p.label,
+      _platformIcon: p.iconUrl,
+      _platformColor: p.color,
+    })));
+  }, [platforms]);
+
   // ═══════════════════════════════════════════════════════════════
   //  RENDER
   // ═══════════════════════════════════════════════════════════════
@@ -2628,13 +2639,7 @@ export default function NewOrderScreen() {
       <McSearch
         visible={showMcSearch}
         onClose={() => setShowMcSearch(false)}
-        allServices={platforms.flatMap(p => p.services.map(s => ({
-          ...s,
-          _platformKey: p.key,
-          _platformLabel: p.label,
-          _platformIcon: p.iconUrl,
-          _platformColor: p.color,
-        })))}
+        allServices={mcSearchServices}
         userName={user?.name ?? (user as any)?.displayName ?? (user as any)?.username ?? "utilisateur"}
         onSelectService={(svc) => {
           setShowMcSearch(false);

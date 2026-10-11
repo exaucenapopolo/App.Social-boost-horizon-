@@ -2510,13 +2510,13 @@ export default function NewOrderScreen() {
         onClose={() => setShowServiceModal(false)}
         services={categoryServices}
         selectedService={selectedService}
-        onSelect={(svc) => {
+        onSelect={(svc: ExoService) => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           pendingSubmissionRef.current = null;
           setSelectedService(svc);
           setShowServiceModal(false);
         }}
-        onLongPressService={(svc) => handleLongPressService(svc, selectedPlatform)}
+        onLongPressService={(svc: ExoService) => handleLongPressService(svc, selectedPlatform)}
         orderType={selectedOrderType}
         catMeta={catMeta}
         fmt={fmt}
@@ -2578,12 +2578,12 @@ export default function NewOrderScreen() {
         data={successData}
         onClose={() => setSuccessData(null)}
         onViewOrders={() => { setSuccessData(null); router.push("/(tabs)/orders"); }}
-        onOrderRecommended={(svc) => {
+        onOrderRecommended={(svc: ExoService) => {
           pendingSubmissionRef.current = null;
           setSuccessData(null);
           if (selectedPlatform) setSelectedService(svc);
         }}
-        onToggleFavorite={(svc) => {
+        onToggleFavorite={(svc: ExoService) => {
           if (selectedPlatform) toggleFavorite(svc, selectedPlatform);
         }}
         isFavorite={isFavorite}
@@ -2728,7 +2728,7 @@ function GlobalSearchBar({
           transform: [{ scale: pulse }],
           shadowColor: PURPLE,
           shadowOpacity: 0.5,
-          shadowRadius: glowShadow as any,
+          shadowRadius: 14,
           shadowOffset: { width: 0, height: 6 },
           elevation: 10,
         }}
@@ -3907,7 +3907,7 @@ function SelectedServiceForm({
                 <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11.5, color: WARNING, lineHeight: 16 }}>
                   Ce lien semble appartenir à{" "}
                   <Text style={{ fontFamily: "Inter_700Bold" }}>
-                    {PLATFORM_META[detectedLinkPlatform]?.label ?? detectedLinkPlatform}
+                    {(detectedLinkPlatform && PLATFORM_META[detectedLinkPlatform]?.label) || detectedLinkPlatform || "une autre plateforme"}
                   </Text>
                   {", "}mais ce service concerne{" "}
                   <Text style={{ fontFamily: "Inter_700Bold" }}>{selectedPlatform.label}</Text>.
@@ -3929,7 +3929,7 @@ function SelectedServiceForm({
             >
               <Feather name="check-circle" size={12} color={SUCCESS} />
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11.5, color: SUCCESS }}>
-                Lien {PLATFORM_META[detectedLinkPlatform]?.label ?? detectedLinkPlatform} détecté — compatible avec ce service
+                Lien {(detectedLinkPlatform && PLATFORM_META[detectedLinkPlatform]?.label) || detectedLinkPlatform || "une autre plateforme"} détecté — compatible avec ce service
               </Text>
             </View>
           )}
