@@ -4,8 +4,100 @@ import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore } from "firebase-admin/firestore";
 import mcKnowledge from "../knowledge/mc-knowledge.fr.md";
+import { invalidateProfileCache } from "./me.js";
+import { invalidateWalletCache } from "./wallet.js";
 
 const router: ReturnType<typeof Router> = Router();
+
+
+// MC_BILLING_V1 — facturation et quota quotidien côté serveur.
+// Le solde réel reste en XAF; le prix USD est un affichage approximatif uniquement.
+const MC_USD_XAF_RATE = 585.5;
+type McBillingReservation = {
+  uid: string; requestId: string; dayKey: string; isFree: boolean;
+  baseXAF: number; reservedXAF: number; startedAtMs: number; active: boolean;
+};
+function getMcDayKey(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Douala", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return pick("year") + "-" + pick("month") + "-" + pick("day");
+}
+function estimateMcPrice(messageText: string, isComparison: boolean, hasServiceContext: boolean): { baseXAF: number; reserveXAF: number } {
+  const text = String(messageText ?? "").trim();
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  let baseXAF = 50;
+  if (isComparison) baseXAF = 100;
+  else if (hasServiceContext || /conseil|conseille|strategie|pourquoi|baisse|perte|garantie|refill|reappro|optimis|amelior|plan|explique|comprendre|information|condition/.test(normalized)) baseXAF = 75;
+  if (text.length > 220) baseXAF = Math.max(baseXAF, 100);
+  if (text.length > 500) baseXAF = Math.max(baseXAF, 125);
+  if (text.length > 1000) baseXAF = 150;
+  baseXAF = Math.max(50, Math.min(150, Math.round(baseXAF)));
+  return { baseXAF, reserveXAF: Math.min(150, baseXAF + (baseXAF >= 100 ? 50 : 25)) };
+}
+function finalMcPrice(baseXAF: number, reserveXAF: number, durationMs: number): number {
+  const timeSurcharge = durationMs < 2500 ? 0 : durationMs < 7000 ? 10 : durationMs < 15000 ? 25 : 50;
+  return Math.max(50, Math.min(150, reserveXAF, baseXAF + timeSurcharge));
+}
+async function rollbackMcReservation(reservation: McBillingReservation): Promise<void> {
+  if (!reservation.active) return;
+  const db = getFirestore();
+  const userRef = db.doc("users/" + reservation.uid);
+  const dailyRef = userRef.collection("mcDailyUsage").doc(reservation.dayKey);
+  const requestRef = userRef.collection("mcRequests").doc(reservation.requestId);
+  await db.runTransaction(async (tx) => {
+    const [userSnap, dailySnap, requestSnap] = await Promise.all([tx.get(userRef), tx.get(dailyRef), tx.get(requestRef)]);
+    if (!requestSnap.exists) return;
+    const requestData = requestSnap.data() ?? {};
+    if (requestData.status !== "processing") return;
+    const daily = dailySnap.data() ?? {};
+    if (requestData.free === true) {
+      if (daily.freeRequestId === reservation.requestId) tx.set(dailyRef, { freeUsed: false, freeRequestId: null, totalRequests: Math.max(0, (Number(daily.totalRequests) || 0) - 1), updatedAt: new Date().toISOString() }, { merge: true });
+    } else if (userSnap.exists) {
+      const balance = Math.max(0, Number(userSnap.data()?.balance ?? 0) || 0);
+      const reserved = Math.max(0, Number(requestData.reservedXAF ?? reservation.reservedXAF) || 0);
+      tx.update(userRef, { balance: balance + reserved });
+      tx.set(dailyRef, {
+        paidRequests: Math.max(0, (Number(daily.paidRequests) || 0) - 1),
+        totalRequests: Math.max(0, (Number(daily.totalRequests) || 0) - 1), updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    }
+    tx.update(requestRef, { status: "failed_refunded", reservedXAF: 0, chargedXAF: 0, failedAt: new Date().toISOString() });
+  });
+  reservation.active = false;
+  invalidateProfileCache(reservation.uid);
+  invalidateWalletCache(reservation.uid);
+}
+async function settleMcReservation(reservation: McBillingReservation, durationMs: number): Promise<{
+  chargedXAF: number; balanceXAF: number; freeRequestsRemaining: number; paidRequestsToday: number;
+}> {
+  const chargedXAF = reservation.isFree ? 0 : finalMcPrice(reservation.baseXAF, reservation.reservedXAF, durationMs);
+  const db = getFirestore();
+  const userRef = db.doc("users/" + reservation.uid);
+  const dailyRef = userRef.collection("mcDailyUsage").doc(reservation.dayKey);
+  const requestRef = userRef.collection("mcRequests").doc(reservation.requestId);
+  const activityRef = db.collection("activites").doc("mc-" + reservation.uid + "-" + reservation.requestId);
+  const result = await db.runTransaction(async (tx) => {
+    const [userSnap, dailySnap, requestSnap] = await Promise.all([tx.get(userRef), tx.get(dailyRef), tx.get(requestRef)]);
+    if (!userSnap.exists || !requestSnap.exists || requestSnap.data()?.status !== "processing") throw new Error("État de facturation Mč incohérent.");
+    const daily = dailySnap.data() ?? {};
+    const balance = Math.max(0, Number(userSnap.data()?.balance ?? 0) || 0);
+    const refund = Math.max(0, reservation.reservedXAF - chargedXAF);
+    const settledBalance = balance + refund;
+    if (refund > 0) tx.update(userRef, { balance: settledBalance });
+    tx.update(requestRef, { status: "completed", reservedXAF: 0, chargedXAF, durationMs, completedAt: new Date().toISOString(), pricingVersion: 1 });
+    tx.set(dailyRef, { totalChargedXAF: Math.max(0, Number(daily.totalChargedXAF) || 0) + chargedXAF, updatedAt: new Date().toISOString() }, { merge: true });
+    if (chargedXAF > 0) tx.set(activityRef, {
+      userId: reservation.uid, type: "commande", label: "Demande à Mč", amount: chargedXAF,
+      status: "completed", createdAt: new Date().toISOString(), source: "mc", mcRequestId: reservation.requestId, durationMs,
+    });
+    return { balanceXAF: settledBalance, freeRequestsRemaining: 0, paidRequestsToday: Math.max(0, Number(daily.paidRequests) || 0) };
+  });
+  reservation.active = false;
+  invalidateProfileCache(reservation.uid);
+  invalidateWalletCache(reservation.uid);
+  return { chargedXAF, ...result };
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // Helpers d'ordre utilisateur
@@ -605,7 +697,116 @@ async function smmPanelOrder(
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
 
-router.post("/mc/chat", async (req: Request, res: ExpressResponse) => {
+// MC_PROMPT_OPT_V2 — plafonds de contexte, cache opportuniste et sélection de connaissance.
+const MC_CONTEXT_MAX_CHARS = 2200;
+const MC_CACHE_TTL_MS = 30 * 60 * 1000;
+const MC_CACHE_MAX_ENTRIES = 120;
+const mcAnswerCache = new Map<string, { reply: string; expiresAt: number }>();
+
+function normalizeMcCacheText(value: string): string {
+  return String(value ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function selectRelevantMcKnowledge(question: string, maxChars = MC_CONTEXT_MAX_CHARS): string {
+  const source = String(mcKnowledge ?? "");
+  const sections = source.split(/(?=^##\s)/m).map((section) => section.trim()).filter(Boolean);
+  if (!sections.length) return source.slice(0, maxChars);
+
+  const stopWords = new Set(["avec", "dans", "pour", "comment", "pourquoi", "quelle", "quelles", "quel", "quels", "estce", "etre", "avoir", "faire", "plus", "moins", "cela", "cette", "celui", "client", "service", "services", "social", "boost", "horizon", "moi", "mon", "mes", "notre", "votre", "vous", "nous", "leurs", "elles", "eux", "sur", "que", "qui", "quoi", "quand", "donc", "alors", "aussi", "tres", "bien", "peut", "peux", "veux", "veut", "sont", "comme", "mais", "sans", "une", "des", "les", "aux", "par", "pas", "est", "son", "ses", "the", "and", "how", "what", "when", "with"]);
+  const queryTerms = [...new Set(normalizeMcCacheText(question).split(" ").filter((word) => word.length >= 4 && !stopWords.has(word)))].slice(0, 24);
+
+  const ranked = sections.map((section, index) => {
+    const heading = (section.match(/^##+[^\n]*/m)?.[0] ?? "").toLowerCase();
+    const normalizedSection = normalizeMcCacheText(section);
+    let score = 0;
+    for (const term of queryTerms) {
+      if (heading.includes(term)) score += 5;
+      const occurrences = normalizedSection.split(term).length - 1;
+      score += Math.min(occurrences, 3);
+    }
+    // Fondations courtes, utiles même si la question emploie peu de mots métier.
+    if (/^##\s*1[. ]/.test(heading)) score += 2;
+    if (/^##\s*3[. ]/.test(heading)) score += 2;
+    if (/^##\s*13[. ]/.test(heading)) score += 1;
+    return { section, index, score };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+
+  const chosen: string[] = [];
+  let used = 0;
+  for (const item of ranked) {
+    if (chosen.length >= 4 || used >= maxChars) break;
+    if (chosen.length > 0 && item.score === 0) continue;
+    const remaining = maxChars - used;
+    if (remaining < 180) break;
+    const piece = item.section.length <= remaining ? item.section : item.section.slice(0, remaining).replace(/\s+\S*$/, "") + " …";
+    if (piece.trim()) {
+      chosen.push(piece);
+      used += piece.length;
+    }
+  }
+  if (!chosen.length) return source.slice(0, maxChars);
+  return chosen.join("\n\n[... extrait pertinent ...]\n\n").slice(0, maxChars);
+}
+
+function getMcCachedAnswer(key: string | null): string | null {
+  if (!key) return null;
+  const entry = mcAnswerCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    mcAnswerCache.delete(key);
+    return null;
+  }
+  // L'entrée est replacée en fin de Map pour appliquer une éviction LRU simple.
+  mcAnswerCache.delete(key);
+  mcAnswerCache.set(key, entry);
+  return entry.reply;
+}
+
+function setMcCachedAnswer(key: string | null, reply: string): void {
+  if (!key || !reply.trim()) return;
+  mcAnswerCache.set(key, { reply, expiresAt: Date.now() + MC_CACHE_TTL_MS });
+  while (mcAnswerCache.size > MC_CACHE_MAX_ENTRIES) {
+    const oldestKey = mcAnswerCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    mcAnswerCache.delete(oldestKey);
+  }
+}
+
+function makeMcCacheKey(question: string): string | null {
+  const normalized = normalizeMcCacheText(question);
+  if (normalized.length < 12 || normalized.length > 220) return null;
+  return "mc-prompt-opt-v2:" + normalized;
+}
+
+router.get("/mc/usage", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
+  try {
+    getFirebaseAdmin();
+    const db = getFirestore();
+    const uid = req.uid!;
+    const dayKey = getMcDayKey();
+    const userRef = db.doc("users/" + uid);
+    const dailyRef = userRef.collection("mcDailyUsage").doc(dayKey);
+    const [userSnap, dailySnap] = await Promise.all([userRef.get(), dailyRef.get()]);
+    if (!userSnap.exists) { res.status(404).json({ success: false, error: "Profil utilisateur introuvable." }); return; }
+    const daily = dailySnap.data() ?? {};
+    const user = userSnap.data() ?? {};
+    res.json({ success: true, data: {
+      dateKey: dayKey,
+      freeRequestsRemaining: daily.freeUsed === true ? 0 : 1,
+      paidRequestsToday: Math.max(0, Number(daily.paidRequests) || 0),
+      balanceXAF: Math.max(0, Number(user.balance) || 0),
+      usdXafRate: MC_USD_XAF_RATE,
+    }});
+  } catch (error) {
+    console.error("[mc/usage] Erreur:", error);
+    res.status(500).json({ success: false, error: "Impossible de vérifier le quota Mč." });
+  }
+});
+
+router.post("/mc/chat", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
+  let mcBillingReservation: McBillingReservation | null = null;
   try {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
@@ -626,8 +827,8 @@ router.post("/mc/chat", async (req: Request, res: ExpressResponse) => {
 
     const messages = rawMessages
       .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-      .slice(-8)
-      .map((m: any) => ({ role: m.role as "user" | "assistant", content: String(m.content).trim().slice(0, 1500) }))
+      .slice(-4)
+      .map((m: any) => ({ role: m.role as "user" | "assistant", content: String(m.content).trim().slice(0, 900) }))
       .filter((m: { role: string; content: string }) => m.content.length > 0);
 
     if (!messages.some((m: { role: string }) => m.role === "user")) {
@@ -688,7 +889,7 @@ router.post("/mc/chat", async (req: Request, res: ExpressResponse) => {
     const safeCandidates = candidateServices.slice(0, 6);
 
     // Utilisé uniquement par les anciennes versions mobiles pendant la transition.
-    const legacyCatalog = typeof body.catalogSummary === "string" ? hideMcSupplierNames(body.catalogSummary.slice(0, 9000)) : "";
+    const legacyCatalog = typeof body.catalogSummary === "string" ? hideMcSupplierNames(body.catalogSummary.slice(0, 2200)) : "";
     const promptCandidates = safeCandidates.map((s, index) => ({
       ref: `candidate_${index + 1}`,
       id: s.id,
@@ -725,90 +926,158 @@ router.post("/mc/chat", async (req: Request, res: ExpressResponse) => {
       isPerOne: serviceContext.isPerOne, averageTime: serviceContext.averageTime, description: serviceContext.description,
     }) : "Aucun service unique n’a été explicitement sélectionné.";
 
-    const systemPrompt = `Tu es Mč, l’assistant d’accompagnement client de Social Boost Horizon (SBH).
+    // Ce message reste strictement stable : Groq peut réutiliser son préfixe via le prompt caching automatique.
+    const systemPrompt = `Tu es Mč, l’assistant de Social Boost Horizon (SBH). Réponds en français naturel, directement à la personne en la tutoyant. Tu es un conseiller compétent, humain, calme et précis, jamais un rapport technique. Réponds d’abord à la question réelle. Fais des paragraphes courts ; généralement 2 à 5 suffisent. Ne salue pas à chaque tour, ne répète pas le prénom et ne termine pas systématiquement par une question.
 
+PÉRIMÈTRE ET FIABILITÉ
+Tu aides à comprendre les services, les prix, les conditions, les commandes et les problèmes liés à Social Boost Horizon. Si une question sort du périmètre, précise brièvement ta spécialité mais aide quand même si une explication générale est utile et sûre. N’invente jamais de prix, de délai, de garantie, de qualité certifiée, de compatibilité ou de résultat. Une baisse d’interactions peut dépendre de la plateforme ; ne garantis jamais l’absence de baisse. Un badge de réapprovisionnement indique une possibilité soumise aux conditions et à la période prévues, pas une garantie absolue.
+
+SERVICES ET RECOMMANDATIONS
+Les fiches de services dans le contexte sont prioritaires sur tes connaissances générales. Lorsqu’un service est sélectionné, explique celui-là directement sans demander son nom ou son identifiant. Lorsqu’exactement deux offres sont fournies pour comparaison, compare uniquement ces deux offres dans l’ordre A puis B, explique la différence pratique et donne un conseil concret. Les références candidate_1, candidate_2, les identifiants numériques et toutes les clés techniques sont strictement internes : ne les affiche jamais. Ne montre une carte de service que si une offre est recherchée, recommandée ou réellement utile. Une demande d’explication, de définition, de dépannage ou de conseil ne déclenche pas automatiquement une liste d’offres. N’invente pas de ratio universel entre vues, likes et commentaires.
+
+CONFIDENTIALITÉ COMMERCIALE
+Ne révèle jamais les noms, abréviations, identifiants ni systèmes internes des fournisseurs. Parle uniquement des offres SBH. Traduis les termes de catalogue en conséquences simples pour le client ; signale une interprétation comme telle si le nom seul ne permet pas de l’affirmer.
+
+FORMAT TECHNIQUE OBLIGATOIRE
+À la fin, écris RECOMMENDATION_KEYS_JSON avec un tableau JSON de références candidate exactes, ou [] si aucune recommandation ne se justifie. Si seuls des éléments de catalogue hérités sont fournis sans candidats structurés, utilise RECOMMENDATIONS: [identifiants numériques exacts] uniquement lorsqu’une recommandation est réellement demandée. Écris également SUGGESTIONS_JSON avec 0 à 4 choix courts et utiles ; sinon []. Ces lignes sont internes et ne doivent jamais être présentées comme du texte visible. N’ajoute aucun commentaire après ces lignes.`;
+
+    // Toutes les données variables sont après les consignes stables pour favoriser les préfixes de cache.
+    const latestQuestion = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const selectedKnowledge = selectRelevantMcKnowledge(latestQuestion, MC_CONTEXT_MAX_CHARS);
+    const dynamicPromptContext = `CONTEXTE VARIABLE POUR CETTE DEMANDE
 PERSONNE À AIDER
-${displayName ? "Le prénom affiché est " + displayName + ". Utilise-le seulement si cela rend la réponse naturelle, pas à chaque message." : "Aucun prénom n’est fourni."}
+${displayName ? "Prénom affiché : " + displayName + ". Utilise-le seulement si cela rend la réponse naturelle." : "Aucun prénom fourni."}
 
-TON ET CONVERSATION
-- Parle directement à la personne en utilisant « tu » et « ton/ta ». Ne dis jamais « l’utilisateur doit », « le client doit » ou « selon les données disponibles » comme dans un compte rendu technique.
-- Réponds comme un conseiller compétent et humain : chaleureux, calme, naturel et précis. Ne joue pas au meilleur ami et n’abuse pas des familiarités.
-- Ne salue pas à chaque réponse. Salue seulement si la personne vient de saluer ou au début réel d’une nouvelle conversation. Ne répète pas son prénom pour rien.
-- Commence par la réponse utile. Explique les choses à la place de la personne au lieu de lui réciter les champs d’une fiche.
-- Utilise des paragraphes courts séparés par une ligne vide. En général, 2 à 5 petits paragraphes suffisent. Les puces sont réservées aux listes qui aident réellement. Pas de titres Markdown avec dièses, pas de longues listes mécaniques, pas d’étoiles décoratives, pas de jargon interne. Un ou deux emojis peuvent aider, mais n’en ajoute pas partout.
-- Ne termine pas automatiquement chaque réponse par une question. Propose la prochaine étape seulement quand cela aide vraiment.
-
-LE CONTEXTE EXACT DU SERVICE SÉLECTIONNÉ
+SERVICE EXPLICITEMENT SÉLECTIONNÉ
 ${serviceContextJson}
-Si ce contexte contient un service, c’est le sujet principal de la demande. N’oblige jamais la personne à retaper son nom ou à renvoyer son identifiant. Explique directement cette offre en utilisant son nom, sa plateforme et les éléments qu’elle contient.
 
 LES DEUX OFFRES À COMPARER
 ${comparisonJson}
-Si deux offres sont listées ci-dessus, compare exclusivement celles-là et garde l’ordre Offre A / Offre B. Ne remplace aucune des deux par un autre service. Ne renvoie pas un rapport d’audit. Explique naturellement ce que la différence signifie pour la personne, et finis par un conseil concret adapté à son objectif.
 
-CANDIDATS DU CATALOGUE
-Les références candidate_1, candidate_2, etc. sont des clés techniques qui ne doivent jamais être vues par la personne. Elles servent uniquement à relier une recommandation à une fiche précise.
+CANDIDATS STRUCTURÉS DU CATALOGUE
+Les clés candidate_1, candidate_2, etc. sont uniquement des références internes.
 ${candidateJson}
 
-ANCIEN RÉSUMÉ DE CATALOGUE (compatibilité avec les anciennes versions mobiles)
-${legacyCatalog || "Aucun résumé transmis par une version antérieure."}
-Si aucun candidat structuré n’est fourni mais que ce résumé contient des offres, tu peux en utiliser les identifiants numériques uniquement pour une recommandation réellement demandée. Ne mélange jamais ces identifiants avec les références candidate_1.
+ANCIEN RÉSUMÉ DE CATALOGUE (compatibilité uniquement)
+${legacyCatalog || "Aucun résumé transmis."}
+N’utilise ce résumé que s’il apporte des éléments absents des candidats structurés, sans mélanger leurs identifiants.
 
-BASE MÉTIER
-${mcKnowledge}
-
-RÈGLES DE FOND
-1. Réponds à la vraie question. Une explication générale, une demande de conseil ou une question sur les baisses ne doit pas déclencher une liste d’offres aléatoires.
-2. Ne donne une carte de service que si la personne cherche une offre, demande une recommandation ou si montrer l’offre est réellement utile. Ne ramène pas toutes les questions à Instagram.
-3. Utilise le nom du service pour en comprendre le sens, y compris lorsqu’il est en anglais. Explique simplement les mots comme « medium quality », « high quality », « refill », « non-drop », « vote option A », « live viewers », « members » ou les autres termes lisibles dans l’intitulé. Présente une interprétation comme telle lorsque le nom seul ne suffit pas à en faire une garantie.
-4. Pour un vote « Option A » ou « Option B », explique que le service semble viser le choix portant ce nom dans le sondage. Il faut que l’option de la commande corresponde bien à l’option affichée dans le sondage. Ne présente pas cela comme un identifiant magique indépendant des options réelles.
-5. Si une offre porte un badge de réapprovisionnement (« refill »), explique simplement que ce mécanisme peut permettre de demander le réapprovisionnement des interactions perdues via l’historique des commandes, pendant la période prévue pour l’offre. Précise que ce n’est pas une promesse qu’aucune baisse n’arrivera et n’invente pas la durée si elle n’est pas indiquée.
-6. En cas de baisse, explique calmement qu’une plateforme peut retirer des interactions et que le maintien n’est pas identique sur toutes les offres. Conseille de vérifier l’état et la période de l’offre, puis d’utiliser l’option de réapprovisionnement si elle est disponible. Ne garantis jamais un résultat.
-7. Pour des conseils de cohérence, suggère des quantités proportionnées entre vues, mentions J’aime et commentaires, sans annoncer de ratio universel. Les vues sont généralement plus nombreuses que les likes, mais cela dépend du contenu et de la plateforme. Une proportion cohérente ne garantit ni authenticité ni absence de baisse.
-8. Ne révèle jamais le nom d’un fournisseur, ni ses abréviations, ni son système interne, ni une référence d’approvisionnement. Parle uniquement des offres du catalogue Social Boost Horizon. N’affiche jamais les ID numériques ou refs candidate_1.
-9. N’invente jamais un délai, une garantie, une qualité certifiée, une origine de trafic, un effet algorithmique, une compatibilité ou une promesse commerciale. Si la fiche est incomplète, réfléchis d’abord à ce que le nom permet raisonnablement de comprendre. Ne dis pas froidement « description absente » ou « champ non renseigné » : explique ce qu’on peut en déduire simplement, et indique discrètement la limite seulement si elle change la décision.
-10. En comparaison, commence par le résultat compréhensible : « La différence principale, c’est… ». Traduis les étiquettes en conséquences pratiques. N’énumère prix, minimum, maximum et cases internes que si cela aide réellement. Si les deux noms disent « qualité moyenne » et « haute qualité », explique la nuance sans prétendre qu’elle est certifiée. Si l’écart est minime, dis-le clairement.
-11. Pose au maximum une question de clarification, seulement si tu ne peux pas aider correctement sans elle. Lorsque tu poses une question de choix, produis aussi 2 à 4 choix courts et directement sélectionnables dans SUGGESTIONS_JSON.
-12. Si la demande est hors du périmètre SBH, dis avec tact que tu es spécialisé dans l’aide sur SBH, puis donne l’explication générale utile si elle est sûre et pertinente.
-13. La demande d’information ne constitue pas une demande de recherche. Les demandes de comparaison, d’explication, de conseils, de définition, de conditions ou de dépannage ne doivent pas forcer des recommandations.
-14. Ne demande pas au client de fournir un nom/identifiant de service quand les fiches ci-dessus l’identifient déjà.
-
-SORTIE TECHNIQUE (NE JAMAIS L’AFFICHER DANS LA RÉPONSE VISIBLE)
-À la toute fin, si des candidats structurés sont fournis, écris une ligne RECOMMENDATION_KEYS_JSON contenant un tableau JSON de références candidate exactes. Mets [] si aucune carte de service ne se justifie. Si aucun candidat structuré n’est fourni mais que l’ancien résumé contient des offres, utilise à la place la ligne héritée RECOMMENDATIONS: [identifiants numériques exacts] uniquement si une recommandation est réellement demandée.
-Écris aussi une ligne SUGGESTIONS_JSON contenant un tableau JSON de 0 à 4 réponses courtes à cliquer, uniquement si elles aident à préciser le choix ou à poursuivre. Ne mets pas de question à cliquer qui demande de recopier la même question. Dans les autres cas, mets [].
-Exemples de lignes techniques :
-RECOMMENDATION_KEYS_JSON: ["candidate_1"]
-SUGGESTIONS_JSON: ["Je veux connaître les conditions", "Je veux comparer les prix"]
-Ces lignes ne font pas partie du texte destiné à la personne.`;
+EXTRAIT PERTINENT DE LA BASE MÉTIER SBH
+${selectedKnowledge}`;
 
 
-    const groqRes = await fetch(GROQ_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        temperature: 0.25,
-        max_tokens: 850,
-      }),
-      signal: AbortSignal.timeout(20000),
+
+    // Identité et quota contrôlés exclusivement côté serveur.
+    const requestId = typeof body.requestId === "string" ? body.requestId.trim() : "";
+    if (!/^[A-Za-z0-9_-]{12,100}$/.test(requestId)) { res.status(400).json({ success: false, error: "Identifiant de demande invalide." }); return; }
+    getFirebaseAdmin();
+    const billingDb = getFirestore();
+    const uid = req.uid!;
+    const dayKey = getMcDayKey();
+    const userRef = billingDb.doc("users/" + uid);
+    const dailyRef = userRef.collection("mcDailyUsage").doc(dayKey);
+    const requestRef = userRef.collection("mcRequests").doc(requestId);
+    const lastUserText = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const isComparisonRequest = comparisonCandidates.length === 2 || requestedComparisonRefs.length === 2 || /compare|comparaison|difference|différence|comparer/i.test(lastUserText);
+    const pricePlan = estimateMcPrice(lastUserText, isComparisonRequest, Boolean(serviceContext));
+    const reservationResult: any = await billingDb.runTransaction(async (tx) => {
+      const [userSnap, dailySnap, requestSnap] = await Promise.all([tx.get(userRef), tx.get(dailyRef), tx.get(requestRef)]);
+      if (!userSnap.exists) return { kind: "missing_user" };
+      if (requestSnap.exists) return { kind: "duplicate_request" };
+      const user = userSnap.data() ?? {};
+      const daily = dailySnap.data() ?? {};
+      const balanceXAF = Math.max(0, Number(user.balance) || 0);
+      const isFree = daily.freeUsed !== true;
+      const reservedXAF = isFree ? 0 : pricePlan.reserveXAF;
+      if (!isFree && balanceXAF < reservedXAF) return { kind: "insufficient_balance", balanceXAF };
+      if (!isFree) tx.update(userRef, { balance: balanceXAF - reservedXAF });
+      tx.set(dailyRef, {
+        dateKey: dayKey, freeUsed: true, freeRequestId: isFree ? requestId : (daily.freeRequestId ?? null),
+        paidRequests: (Number(daily.paidRequests) || 0) + (isFree ? 0 : 1),
+        totalRequests: (Number(daily.totalRequests) || 0) + 1, updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      tx.create(requestRef, {
+        requestId, userId: uid, dateKey: dayKey, status: "processing", free: isFree,
+        baseXAF: isFree ? 0 : pricePlan.baseXAF, reservedXAF, chargedXAF: 0, createdAt: new Date().toISOString(),
+      });
+      return { kind: "reserved", isFree, baseXAF: isFree ? 0 : pricePlan.baseXAF, reservedXAF };
     });
-
-    if (!groqRes.ok) {
-      const errText = await groqRes.text().catch(() => "");
-      console.error("[mc/chat] Groq error:", groqRes.status, errText.slice(0, 500));
-      res.status(502).json({ success: false, error: `Erreur IA (HTTP ${groqRes.status})` });
+    if (reservationResult.kind === "missing_user") { res.status(404).json({ success: false, error: "Profil utilisateur introuvable." }); return; }
+    if (reservationResult.kind === "duplicate_request") { res.status(409).json({ success: false, error: "Cette demande a déjà été traitée; elle ne sera pas débitée une seconde fois." }); return; }
+    if (reservationResult.kind === "insufficient_balance") {
+      res.status(402).json({ success: false, code: "MC_INSUFFICIENT_BALANCE", error: "Ton solde ne suffit pas pour cette demande. Aucune somme n'a été débitée. Recharge ton solde puis réessaie.", balanceXAF: reservationResult.balanceXAF });
       return;
     }
+    mcBillingReservation = {
+      uid, requestId, dayKey, isFree: reservationResult.isFree, baseXAF: reservationResult.baseXAF,
+      reservedXAF: reservationResult.reservedXAF, startedAtMs: Date.now(), active: true,
+    };
+    if (!mcBillingReservation.isFree) { invalidateProfileCache(uid); invalidateWalletCache(uid); }
 
-    const groqData = await groqRes.json() as any;
-    const rawReply = String(groqData?.choices?.[0]?.message?.content ?? "").trim();
+    // Cache de réponse très prudent : uniquement question isolée, sans service/catalogue/personnalisation.
+    // Il est opportuniste (mémoire du processus) ; le prompt caching Groq reste automatique côté fournisseur.
+    const cacheAllowed = messages.length === 1 && !displayName && !serviceContext && safeCandidates.length === 0
+      && !legacyCatalog && requestedComparisonRefs.length === 0 && latestQuestion.length <= 220;
+    const answerCacheKey = cacheAllowed ? makeMcCacheKey(latestQuestion) : null;
+    const cachedReply = getMcCachedAnswer(answerCacheKey);
+    let rawReply = "";
+    let groqData: any = null;
+
+    if (cachedReply) {
+      rawReply = cachedReply;
+      console.info("[mc/chat] Réponse servie depuis le cache mémoire.");
+    } else {
+      const groqMessages = [
+        { role: "system" as const, content: systemPrompt },
+        { role: "system" as const, content: dynamicPromptContext },
+        ...messages,
+      ];
+      const groqPayload = {
+        model: GROQ_MODEL,
+        messages: groqMessages,
+        temperature: 0.25,
+        reasoning_effort: "low",
+        include_reasoning: false,
+        max_tokens: 500,
+      };
+      const serializedPayload = JSON.stringify(groqPayload);
+      const payloadBytes = Buffer.byteLength(serializedPayload, "utf8");
+      console.info("[mc/chat] prompt-size", JSON.stringify({ payloadBytes, contextChars: dynamicPromptContext.length, historyMessages: messages.length, maxOutputTokens: 500 }));
+      if (payloadBytes > 28000) {
+        throw new Error("Le contexte de Mč dépasse la taille de sécurité. Réduisez les données de catalogue envoyées.");
+      }
+
+      const groqRes = await fetch(GROQ_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: serializedPayload,
+        signal: AbortSignal.timeout(20000),
+      });
+
+      if (!groqRes.ok) {
+        const errText = await groqRes.text().catch(() => "");
+        console.error("[mc/chat] Groq error:", groqRes.status, errText.slice(0, 500));
+        if (groqRes.status === 413) throw new Error("La demande envoyée à Mč est trop volumineuse. Elle a été annulée sans frais ; réessaie avec une question plus courte.");
+        if (groqRes.status === 429) throw new Error("Le service d’intelligence artificielle est temporairement très sollicité. Réessaie dans quelques instants.");
+        throw new Error("Mč est temporairement indisponible.");
+      }
+
+      groqData = await groqRes.json() as any;
+      rawReply = String(groqData?.choices?.[0]?.message?.content ?? "").trim();
+      const usage = groqData?.usage;
+      console.info("[mc/chat] token-usage", JSON.stringify({
+        model: GROQ_MODEL,
+        promptTokens: Number(usage?.prompt_tokens) || 0,
+        cachedPromptTokens: Number(usage?.prompt_tokens_details?.cached_tokens) || 0,
+        completionTokens: Number(usage?.completion_tokens) || 0,
+        totalTokens: Number(usage?.total_tokens) || 0,
+        payloadBytes,
+      }));
+      if (answerCacheKey && rawReply) setMcCachedAnswer(answerCacheKey, rawReply);
+    }
 
     const allowedRefs = new Set(promptCandidates.map((s) => s.ref));
     const keyMatch = rawReply.match(/RECOMMENDATION_KEYS_JSON:\s*(\[[\s\S]*?\])/i);
@@ -862,6 +1131,22 @@ Ces lignes ne font pas partie du texte destiné à la personne.`;
       .replace(/SUGGESTIONS_JSON:\s*\[[\s\S]*?\]/gi, "")
       .trim());
 
+    if (!mcBillingReservation) throw new Error("Réservation de facturation manquante.");
+    const mcDurationMs = Math.max(0, Date.now() - mcBillingReservation.startedAtMs);
+    const mcChargedXAF = mcBillingReservation.isFree ? 0 : finalMcPrice(mcBillingReservation.baseXAF, mcBillingReservation.reservedXAF, mcDurationMs);
+    const mcSettlement = await settleMcReservation(mcBillingReservation, mcDurationMs);
+    mcBillingReservation.active = false;
+    const mcBilling = {
+      isFree: mcBillingReservation.isFree,
+      chargedXAF: mcChargedXAF,
+      chargedUSD: Number((mcChargedXAF / MC_USD_XAF_RATE).toFixed(2)),
+      balanceXAF: mcSettlement.balanceXAF,
+      freeRequestsRemaining: mcSettlement.freeRequestsRemaining,
+      paidRequestsToday: mcSettlement.paidRequestsToday,
+      durationMs: mcDurationMs,
+      usdXafRate: MC_USD_XAF_RATE,
+    };
+
     const idsFromKeys = recommendationKeys
       .map((key) => safeCandidates.find((s) => s.key === key)?.id ?? "")
       .map((id) => Number(id))
@@ -875,10 +1160,27 @@ Ces lignes ne font pas partie du texte destiné à la personne.`;
       suggestions,
       // Champ numérique conservé pour ne pas casser les anciennes versions mobiles.
       recommendations: legacyIds.length ? legacyIds : idsFromKeys,
+      billing: mcBilling,
     });
   } catch (e: any) {
+    if (mcBillingReservation?.active) {
+      try { await rollbackMcReservation(mcBillingReservation); }
+      catch (refundError) { console.error("[mc/chat] Remboursement de sécurité impossible:", refundError); }
+    }
     console.error("[mc/chat] Erreur:", e?.message);
-    res.status(500).json({ success: false, error: "Une erreur est survenue pendant la réponse de Mč." });
+    const wasReserved = Boolean(mcBillingReservation);
+    const errorText = String(e?.message ?? "");
+    const isPayloadError = /trop volumineuse|taille de sécurité/i.test(errorText);
+    const isRateLimitError = /temporairement très sollicité/i.test(errorText);
+    const statusCode = wasReserved ? (isPayloadError ? 413 : isRateLimitError ? 429 : 502) : 500;
+    res.status(statusCode).json({
+      success: false,
+      error: wasReserved && (isPayloadError || isRateLimitError)
+        ? errorText + " Aucun frais n’est conservé pour cette tentative."
+        : wasReserved
+          ? "Mč est temporairement indisponible. La réservation a été annulée lorsque cela a été possible; vérifie ton solde avant de réessayer."
+          : "Une erreur est survenue pendant la préparation de la demande Mč.",
+    });
   }
 });
 

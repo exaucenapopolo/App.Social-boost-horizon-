@@ -3,6 +3,7 @@ import type { Response as ExpressResponse } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin, asString, asNumber } from "../lib/firebase-admin.js";
 import { sendConsolidatedAdminReport } from "../lib/email.js";
+import { getProviderPricing } from "../lib/providerPricing.js";
 
 const router: ReturnType<typeof Router> = Router();
 
@@ -13,16 +14,24 @@ const MULTIPLIERS: Record<string, number> = {
   standard:           2,
   revendeur:          2,
   automatique_mtp:    3,
-  automatique_smmwiz: 3.5, // remplace automatique_smmgen (continuité de marge)
-  automatique_smmgen: 3.5, // legacy — commandes historiques
+  automatique_smmwiz: 3.5, // ancien coefficient pour les commandes non versionnées
+  automatique_smmgen: 3.5, // legacy
   avancée:            1.82,
-  avancee:            1.82,
-  advanced:           1.82,
+  avancee:             1.82,
+  advanced:            1.82,
 };
 
-function getMultiplier(type: string, provider: string): number {
+function getMultiplier(type: string, provider: string, pricingVersion = 1): number {
   const t = (type ?? "").toLowerCase();
   const p = (provider ?? "").toLowerCase();
+  if (pricingVersion >= 2) {
+    if (t === "automatique" || t === "auto") {
+      if (p === "smmwiz") return getProviderPricing("smmwiz").multiplier;
+      return getProviderPricing("mtp").multiplier;
+    }
+    if (t === "avancée" || t === "avancee" || t === "advanced") return getProviderPricing("afriqueboost").multiplier;
+    return getProviderPricing("exo").multiplier;
+  }
   if (t === "automatique" || t === "auto") {
     if (p === "smmwiz") return MULTIPLIERS.automatique_smmwiz;
     if (p === "smmgen") return MULTIPLIERS.automatique_smmgen;
@@ -31,8 +40,8 @@ function getMultiplier(type: string, provider: string): number {
   return MULTIPLIERS[t] ?? 2;
 }
 
-function calcCostAndProfit(revenue: number, type: string, provider: string): { cost: number; profit: number; margin: number } {
-  const mult   = getMultiplier(type, provider);
+function calcCostAndProfit(revenue: number, type: string, provider: string, pricingVersion = 1): { cost: number; profit: number; margin: number } {
+  const mult   = getMultiplier(type, provider, pricingVersion);
   const cost   = Math.round(revenue / mult);
   const profit = revenue - cost;
   const margin = revenue > 0 ? Math.round((profit / revenue) * 1000) / 10 : 0;
@@ -132,7 +141,7 @@ function startOfMonthWAT(): Date {
 function f(n: number): string { return n.toLocaleString("fr-FR"); }
 
 interface Order {
-  type?: string; provider?: string;
+  type?: string; provider?: string; pricingVersion?: number;
   price?: number; finalCost?: number; totalCost?: number;
   status?: string; platform?: string; userId?: string;
 }
@@ -173,7 +182,7 @@ function buildOrderStats(orders: Order[]): OrderStats {
     const t   = (o.type ?? "standard").toLowerCase();
     const p   = (o.provider ?? "").toLowerCase();
     const rev = asNumber(o.price ?? o.finalCost ?? o.totalCost);
-    const { cost, profit } = calcCostAndProfit(rev, t, p);
+    const { cost, profit } = calcCostAndProfit(rev, t, p, Number(o.pricingVersion ?? 1));
 
     totalRevenue += rev;
     totalCost    += cost;

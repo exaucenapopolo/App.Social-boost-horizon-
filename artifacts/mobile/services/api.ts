@@ -43,6 +43,7 @@ export interface CreateOrderPayload {
   provider?: string;
   comments?: string;
   referralDiscountApplied?: boolean;
+  pricingVersion?: 1 | 2;
 }
 
 export interface RemoteOrder {
@@ -54,6 +55,7 @@ export interface RemoteOrder {
   type: string;
   quantity: number;
   price: number;
+  pricingVersion?: 1 | 2;
   link: string;
   status: string;
   createdAt: string;

@@ -406,7 +406,7 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: ExpressRespons
   const {
     serviceId, serviceName, platform, platformColor, type, quantity,
     price, link, orderId: providerOrderId, comments, provider,
-    referralDiscountApplied,
+    referralDiscountApplied, pricingVersion,
   } = req.body;
 
   if (!serviceId || !serviceName || !platform || !quantity || !price || !link) {
@@ -417,6 +417,15 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: ExpressRespons
   const uid        = req.uid!;
   const idToken    = req.idToken!;
   const orderPrice = Number(price);
+  const orderQuantity = Number(quantity);
+  if (!Number.isSafeInteger(orderPrice) || orderPrice <= 0) {
+    res.status(400).json({ success: false, error: "Montant de commande invalide." });
+    return;
+  }
+  if (!Number.isSafeInteger(orderQuantity) || orderQuantity <= 0) {
+    res.status(400).json({ success: false, error: "Quantité de commande invalide." });
+    return;
+  }
 
   let balanceCheckError: string | null = null;
 
@@ -486,6 +495,7 @@ router.post("/orders", requireAuth, async (req: AuthRequest, res: ExpressRespons
     type: type ?? "standard",
     quantity: Number(quantity),
     price: Number(price),
+    pricingVersion: Number(pricingVersion) === 2 ? 2 : 1,
     link,
     userId: uid,
     status: "En attente",

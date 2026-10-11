@@ -6,6 +6,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import mcKnowledge from "../knowledge/mc-knowledge.fr.md";
 import { invalidateProfileCache } from "./me.js";
 import { invalidateWalletCache } from "./wallet.js";
+import { calculateProviderPriceXAF, getProviderPricingMode, type ProviderPricingMode } from "../lib/providerPricing.js";
 
 const router: ReturnType<typeof Router> = Router();
 
@@ -141,8 +142,10 @@ const SMMGEN_BASE = "https://smmgen.com/api/v2";
 const AFB_BASE    = "https://afriqueboost.com/api/v2";
 const FAPSHI_BASE = "https://live.fapshi.com";
 
-const USD_TO_XAF      = 1230;
-const USD_TO_XAF_AUTO = 1845;
+// Compatibilité temporaire : prix historique réservé aux anciennes versions mobiles.
+const LEGACY_EXO_RATE_XAF = 1230;
+const LEGACY_AUTO_RATE_XAF = 1845;
+const LEGACY_AFB_RATE_XAF = 1;
 
 // ═══════════════════════════════════════════════════════════════
 //  IDEMPOTENCE — Cache en mémoire (TTL 10 min)
@@ -202,6 +205,8 @@ type FormattedSvc = {
   category: string;
   type: string;
   priceXAF: number;
+  salePriceXAF: number;
+  pricingMode: ProviderPricingMode;
   min: number;
   max: number;
   refill: boolean;
@@ -561,9 +566,13 @@ function detectPlatform(svc: RawSvc): string {
   return "other";
 }
 
-function formatService(raw: RawSvc, provider?: string, xafRate: number = USD_TO_XAF): FormattedSvc {
+function formatService(raw: RawSvc, provider = "exo"): FormattedSvc {
   const rate    = parseFloat(String(raw.rate ?? "0")) || 0;
-  const priceXAF = Math.round(rate * xafRate);
+  const providerKey = provider;
+  const pricingMode = getProviderPricingMode(providerKey, raw.type ?? "", raw.name ?? "");
+  const legacyRateXAF = providerKey === "exo" ? LEGACY_EXO_RATE_XAF : providerKey === "afriqueboost" ? LEGACY_AFB_RATE_XAF : LEGACY_AUTO_RATE_XAF;
+  const priceXAF = Math.round(rate * legacyRateXAF);
+  const salePriceXAF = calculateProviderPriceXAF(rate, providerKey);
   const min     = Number(raw.min ?? 10);
   const max     = Number(raw.max ?? 100000);
   const nameL   = (raw.name ?? "").toLowerCase();
@@ -588,6 +597,8 @@ function formatService(raw: RawSvc, provider?: string, xafRate: number = USD_TO_
     category:        raw.category ?? "",
     type:            raw.type ?? "Default",
     priceXAF,
+    salePriceXAF,
+    pricingMode,
     min,
     max,
     refill:          raw.refill ?? false,
@@ -599,7 +610,7 @@ function formatService(raw: RawSvc, provider?: string, xafRate: number = USD_TO_
     description:     String(raw.description ?? ""),
     platform,
     _isTraffic:      isTraffic,
-    ...(provider ? { _provider: provider } : {}),
+    _provider: providerKey,
   };
 }
 
@@ -1191,7 +1202,7 @@ ${selectedKnowledge}`;
 router.get("/exo-services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${EXO_BASE}?key=${encodeURIComponent(EXO_KEY)}&action=services`);
-    const svcs = raw.map((s) => formatService(s));
+    const svcs = raw.map((s) => formatService(s, "exo"));
     res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
   } catch (e: any) {
     res.status(502).json({ success: false, error: "Fournisseur Exo inaccessible: " + e?.message });
@@ -1230,7 +1241,7 @@ router.post("/order-exo", requireAuth, async (req: AuthRequest, res: ExpressResp
 router.get("/mtp/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${MTP_BASE}?key=${encodeURIComponent(MTP_KEY)}&action=services`);
-    const svcs = raw.map((s) => formatService(s, "mtp", USD_TO_XAF_AUTO));
+    const svcs = raw.map((s) => formatService(s, "mtp"));
     res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
   } catch (e: any) {
     res.status(502).json({ success: false, error: "Fournisseur MTP inaccessible: " + e?.message });
@@ -1269,7 +1280,7 @@ router.post("/mtp/order", requireAuth, async (req: AuthRequest, res: ExpressResp
 router.get("/smmwiz/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${SMMWIZ_BASE}?key=${encodeURIComponent(SMMWIZ_KEY)}&action=services`);
-    const svcs = raw.map((s) => formatService(s, "smmwiz", USD_TO_XAF_AUTO));
+    const svcs = raw.map((s) => formatService(s, "smmwiz"));
     res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
   } catch (e: any) {
     res.status(502).json({ success: false, error: "Fournisseur SMMWiz inaccessible: " + e?.message });
@@ -1308,7 +1319,7 @@ router.post("/smmwiz/order", requireAuth, async (req: AuthRequest, res: ExpressR
 router.get("/afriqueboost/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${AFB_BASE}?key=${encodeURIComponent(AFB_KEY)}&action=services`);
-    const svcs = raw.map((s) => formatService(s, "afriqueboost", 1));
+    const svcs = raw.map((s) => formatService(s, "afriqueboost"));
     res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
   } catch (e: any) {
     res.status(502).json({ success: false, error: "Fournisseur Afriqueboost inaccessible: " + e?.message });
@@ -1356,17 +1367,17 @@ router.get("/services/auto", async (_req: Request, res: ExpressResponse) => {
     const providers: string[] = [];
 
     if (mtpRes.status === "fulfilled") {
-      allServices = allServices.concat(mtpRes.value.map((s) => formatService(s, "mtp", USD_TO_XAF_AUTO)));
+      allServices = allServices.concat(mtpRes.value.map((s) => formatService(s, "mtp")));
       if (mtpRes.value.length > 0) providers.push("MTP");
     }
     if (smmwizRes.status === "fulfilled") {
-      allServices = allServices.concat(smmwizRes.value.map((s) => formatService(s, "smmwiz", USD_TO_XAF_AUTO)));
+      allServices = allServices.concat(smmwizRes.value.map((s) => formatService(s, "smmwiz")));
       if (smmwizRes.value.length > 0) providers.push("SMMWiz");
     }
 
     if (allServices.length === 0) {
       const raw = await fetchServices(`${EXO_BASE}?key=${encodeURIComponent(EXO_KEY)}&action=services`);
-      const svcs = raw.map((s) => formatService(s));
+      const svcs = raw.map((s) => formatService(s, "exo"));
       res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs, providers: ["Exo"] });
       return;
     }
@@ -1384,7 +1395,7 @@ router.get("/services/auto", async (_req: Request, res: ExpressResponse) => {
 router.get("/smmgen/services", async (_req: Request, res: ExpressResponse) => {
   try {
     const raw = await fetchServices(`${SMMWIZ_BASE}?key=${encodeURIComponent(SMMWIZ_KEY)}&action=services`);
-    const svcs = raw.map((s) => formatService(s, "smmwiz", USD_TO_XAF_AUTO));
+    const svcs = raw.map((s) => formatService(s, "smmwiz"));
     res.json({ success: true, platforms: groupByPlatform(svcs), services: svcs });
   } catch (e: any) {
     res.status(502).json({ success: false, error: "Catalogue indisponible: " + e?.message });

@@ -122,6 +122,9 @@ interface ExoService {
   category?: string;
   priceXAF: number;
   originalPriceXAF?: number;
+  salePriceXAF?: number;
+  pricingMode?: "per_1000" | "per_unit" | "package";
+  pricingVersion?: 1 | 2;
   min: number;
   max: number;
   averageTime?: string;
@@ -2010,11 +2013,17 @@ export default function NewOrderScreen() {
       const list: PlatformData[] = [];
       Object.entries(platformsData).forEach(([key, svcs]) => {
         if (!Array.isArray(svcs) || svcs.length === 0) return;
-        const processed = svcs.map((s) => ({
-          ...s,
-          originalPriceXAF: discount > 0 ? s.priceXAF : undefined,
-          priceXAF: discount > 0 ? Math.round(s.priceXAF * (1 - discount)) : s.priceXAF,
-        }));
+        const processed = svcs.map((s) => {
+          const serverSalePrice = Number((s as any).salePriceXAF);
+          const hasServerSalePrice = Number.isFinite(serverSalePrice) && serverSalePrice >= 0 && typeof (s as any).pricingMode === "string";
+          const sourcePriceXAF = hasServerSalePrice ? Math.round(serverSalePrice) : s.priceXAF;
+          return {
+            ...s,
+            originalPriceXAF: discount > 0 ? sourcePriceXAF : undefined,
+            priceXAF: discount > 0 ? Math.round(sourcePriceXAF * (1 - discount)) : sourcePriceXAF,
+            pricingVersion: (hasServerSalePrice ? 2 : 1) as 1 | 2,
+          };
+        });
         total += processed.length;
         const keyLow = key.toLowerCase();
         const meta = PLATFORM_META[keyLow] ?? {
@@ -2151,10 +2160,16 @@ export default function NewOrderScreen() {
 
   function computeActualPrice(svc: ExoService, qty: number, orderType?: string | null): number {
     if (!svc || qty <= 0) return 0;
-    const perUnit = svc.isPerOne || svc.isPackage;
-    const base = perUnit ? svc.priceXAF : svc.priceXAF / 1000;
-    const margin = orderType === "automatique" ? 1.0 : 1.15;
-    return Math.ceil(base * qty * margin);
+    if (svc.pricingVersion !== 2) {
+      const perUnit = svc.isPerOne || svc.isPackage;
+      const base = perUnit ? svc.priceXAF : svc.priceXAF / 1000;
+      const legacyMargin = orderType === "automatique" ? 1.0 : 1.15;
+      return Math.ceil(base * qty * legacyMargin);
+    }
+    const mode = svc.pricingMode ?? (svc.isPackage ? "package" : svc.isPerOne ? "per_unit" : "per_1000");
+    if (mode === "package") return Math.max(1, Math.round(svc.priceXAF));
+    const total = mode === "per_unit" ? svc.priceXAF * qty : (svc.priceXAF / 1000) * qty;
+    return Math.max(1, Math.round(total));
   }
 
   function getOrderEndpoint(typeKey: string, provider?: string): string {
@@ -2221,6 +2236,8 @@ export default function NewOrderScreen() {
         Alert.alert("Minimum requis", `Vous devez saisir au moins 10 commentaires (un par ligne).\n\nActuellement: ${qty} commentaire${qty > 1 ? "s" : ""}`);
         return;
       }
+    } else if (selectedService.pricingVersion === 2 && selectedService.pricingMode === "package" && !isAccountSale) {
+      qty = 1;
     } else if (isAccountSale) {
       qty = 1;
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -2322,6 +2339,7 @@ export default function NewOrderScreen() {
         type: selectedOrderType ?? "standard",
         quantity: qty,
         price: actualPrice,
+        pricingVersion: selectedService.pricingVersion === 2 ? 2 : 1,
         link: link.trim(),
         userId: user!.id,
         ...(comments ? { comments } : {}),
@@ -3047,7 +3065,7 @@ function GlobalSearchBar({
                     {fmt(svc.priceXAF)}
                   </Text>
                   <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9.5, color: C.textMuted }}>
-                    {svc.isPerOne || svc.isPackage ? "/u" : "/1k"}
+                    {(svc.pricingVersion === 2 ? (svc.pricingMode === "package" ? "/forfait" : svc.pricingMode === "per_unit" ? "/u" : "/1k") : (svc.isPerOne || svc.isPackage ? "/u" : "/1k"))}
                   </Text>
                 </View>
 
@@ -3629,15 +3647,24 @@ function SelectedServiceForm({
   const svcDesc = generateServiceDescription(selectedService.name, selectedPlatform?.label ?? "");
   const commentLines = customComments.trim().split("\n").filter((l: string) => l.trim().length > 0);
   const commentCount = commentLines.length;
-  const qty = isCustom ? commentCount : isAccountSale ? 1 : (parseInt(quantity) || 0);
-  const pricePerUnit = selectedService.isPerOne || selectedService.isPackage;
+  const qty = isCustom ? commentCount : (isAccountSale || (selectedService.pricingVersion === 2 && selectedService.pricingMode === "package")) ? 1 : (parseInt(quantity) || 0);
+  const pricingMode = selectedService.pricingMode ?? (selectedService.isPackage ? "package" : selectedService.isPerOne ? "per_unit" : "per_1000");
+  const pricePerUnit = pricingMode !== "per_1000";
   const unitPrice = pricePerUnit ? selectedService.priceXAF : selectedService.priceXAF / 1000;
-  const autoMargin = selectedOrderType === "automatique" ? 1.0 : 1.15;
-  const baseComputedPrice = qty > 0 ? Math.ceil(unitPrice * qty * autoMargin) : 0;
+  const legacyMargin = selectedOrderType === "automatique" ? 1.0 : 1.15;
+  const baseComputedPrice = qty > 0
+    ? (selectedService.pricingVersion === 2
+        ? (pricingMode === "package" ? Math.max(1, Math.round(selectedService.priceXAF)) : Math.max(1, Math.round(unitPrice * qty)))
+        : Math.ceil(unitPrice * qty * legacyMargin))
+    : 0;
   const liveComputedPrice = (hasReferral && qty > 0) ? Math.ceil(baseComputedPrice * 0.9) : baseComputedPrice;
   const isReseller = selectedOrderType === "revendeur";
   const origPrice = selectedService.originalPriceXAF;
-  const origComputedPrice = origPrice && qty > 0 ? Math.ceil((pricePerUnit ? origPrice : origPrice / 1000) * qty * autoMargin) : 0;
+  const origComputedPrice = origPrice && qty > 0
+    ? (selectedService.pricingVersion === 2
+        ? (pricingMode === "package" ? Math.round(origPrice) : Math.max(1, Math.round((pricePerUnit ? origPrice : origPrice / 1000) * qty)))
+        : Math.ceil((pricePerUnit ? origPrice : origPrice / 1000) * qty * legacyMargin))
+    : 0;
   const savings = origComputedPrice > 0 && liveComputedPrice > 0 ? origComputedPrice - liveComputedPrice : 0;
 
   const detectedLinkPlatform = useMemo(() => {
@@ -3712,7 +3739,7 @@ function SelectedServiceForm({
 
         <View style={styles.serviceInfoGrid}>
           {[
-            { label: "Prix", value: `${fmt(selectedService.priceXAF)}/${pricePerUnit ? "u" : "1k"}`, color: SUCCESS },
+            { label: "Prix", value: `${fmt(selectedService.priceXAF)}/${selectedService.pricingVersion === 2 && pricingMode === "package" ? "forfait" : pricePerUnit ? "u" : "1k"}`, color: SUCCESS },
             { label: "Min",  value: isCustom ? "10" : selectedService.min.toLocaleString(), color: C.text },
             { label: "Max",  value: isCustom ? "∞" : selectedService.max.toLocaleString(), color: C.text },
             { label: "Délai", value: selectedService.averageTime ?? "Rapide", color: C.text },
@@ -3900,11 +3927,11 @@ function SelectedServiceForm({
         {!isCustom && (
           <View style={{ gap: 6 }}>
             <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>Quantité *</Text>
-            {isAccountSale ? (
+            {(isAccountSale || (selectedService.pricingVersion === 2 && selectedService.pricingMode === "package")) ? (
               <View style={[styles.inputRow, { backgroundColor: SUCCESS + "12", borderColor: SUCCESS + "50" }]}>
                 <Feather name="hash" size={16} color={SUCCESS} />
                 <Text style={[styles.input, { color: SUCCESS, fontFamily: "Inter_700Bold" }]}>
-                  1 (fixe — compte exclusif)
+                  {isAccountSale ? "1 (fixe — compte exclusif)" : "1 (forfait fixe)"}
                 </Text>
               </View>
             ) : (
@@ -4258,7 +4285,7 @@ function ServiceModal({
                           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
                             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: SUCCESS }}>{fmt(svc.priceXAF)}</Text>
                             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
-                              {svc.isPerOne || svc.isPackage ? "/u" : "/1k"}
+                              {(svc.pricingVersion === 2 ? (svc.pricingMode === "package" ? "/forfait" : svc.pricingMode === "per_unit" ? "/u" : "/1k") : (svc.isPerOne || svc.isPackage ? "/u" : "/1k"))}
                             </Text>
                           </View>
                         </Pressable>
@@ -4311,7 +4338,7 @@ function ServiceModal({
                             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FF6B35" }}>
                               {fmt(svc.priceXAF)}
                               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
-                                {" "}{svc.isPerOne || svc.isPackage ? "/u" : "/1k"}
+                                {" "}{(svc.pricingVersion === 2 ? (svc.pricingMode === "package" ? "/forfait" : svc.pricingMode === "per_unit" ? "/u" : "/1k") : (svc.isPerOne || svc.isPackage ? "/u" : "/1k"))}
                               </Text>
                             </Text>
                           </View>
@@ -4358,7 +4385,7 @@ function ServiceModal({
                             <View style={{ alignItems: "flex-end", gap: 3 }}>
                               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: SUCCESS }}>{fmt(svc.priceXAF)}</Text>
                               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
-                                {svc.isPerOne || svc.isPackage ? "/unité" : "/1000"}
+                                {(svc.pricingVersion === 2 ? (svc.pricingMode === "package" ? "/forfait" : svc.pricingMode === "per_unit" ? "/unité" : "/1000") : (svc.isPerOne || svc.isPackage ? "/unité" : "/1000"))}
                               </Text>
                             </View>
                           </Pressable>

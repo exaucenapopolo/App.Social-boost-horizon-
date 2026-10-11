@@ -26,6 +26,7 @@ export interface Order {
   type: string;
   quantity: number;
   price: number;
+  pricingVersion?: 1 | 2;
   link: string;
   status: OrderStatus;
   createdAt: string;
@@ -111,6 +112,7 @@ function mapRemoteOrder(r: RemoteOrder & { providerOrderId?: string; provider?: 
     type: r.type,
     quantity: r.quantity,
     price: r.price,
+    pricingVersion: r.pricingVersion,
     link: r.link,
     status,
     createdAt: r.createdAt,
@@ -180,6 +182,7 @@ export function OrdersProvider({
         type: orderData.type,
         quantity: orderData.quantity,
         price: orderData.price,
+        ...(orderData.pricingVersion ? { pricingVersion: orderData.pricingVersion } : {}),
         link: orderData.link,
         ...(orderData.orderId   ? { orderId:   orderData.orderId   } : {}),
         ...(orderData.provider  ? { provider:  orderData.provider  } : {}),
