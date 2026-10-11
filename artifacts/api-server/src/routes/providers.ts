@@ -600,7 +600,7 @@ async function smmPanelOrder(
 //  Mč — Assistant IA conversationnel (Groq)
 // ═══════════════════════════════════════════════════════════════
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GROQ_MODEL = "openai/gpt-oss-120b";
 
 router.post("/mc/chat", async (req: Request, res: ExpressResponse) => {
   try {
