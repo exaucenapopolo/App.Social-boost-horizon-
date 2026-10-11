@@ -484,8 +484,22 @@ function mcPublicText(value: unknown): string {
     .replace(/\b(?:smm\s*wiz|smmwiz|mtp|exo|afrique\s*boost|afriqueboost|africa\s*boost|africaboost)\b/gi, "")
     .replace(/[|·:—–-]{2,}/g, " ")
     .replace(/^\s*[|·:—–-]+|\s*[|·:—–-]+\s*$/g, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+([,.;:!?])/g, "$1")
+    .trim();
+}
+
+function formatMcReply(value: unknown): string {
+  return mcPublicText(value)
+    .replace(/\r\n?/g, "\n")
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
+    .replace(/^[ \t]*[-*+][ \t]+/gm, "• ")
+    .replace(/^[ \t]*\d+[.)][ \t]+/gm, "• ")
+    .replace(/^[ \t]*[|]{1,}[ \t]*$/gm, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -704,6 +718,13 @@ const QUICK_STARTERS = [
   { emoji: "💼", label: "Followers LinkedIn", query: "followers LinkedIn" },
 ];
 
+const MC_LOADING_STAGES = [
+  "Je comprends ta demande…",
+  "Je vérifie les informations utiles…",
+  "Je compare les éléments pertinents…",
+  "Je prépare une réponse claire…",
+];
+
 // ═══════════════════════════════════════════════════════════════
 //  Types
 // ═══════════════════════════════════════════════════════════════
@@ -711,6 +732,7 @@ interface McMessage {
   role: "user" | "assistant";
   content: string;
   recommendations?: any[];
+  suggestions?: string[];
   isGreeting?: boolean;
 }
 
@@ -747,12 +769,21 @@ export default function McSearch({
   const [messages, setMessages] = useState<McMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState(0);
   const [searchMode, setSearchMode] = useState<"ia" | "text">("ia");
   const [showStarters, setShowStarters] = useState(true);
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
 
   const firstName = (userName || "").split(" ")[0] || "";
+
+  useEffect(() => {
+    if (!loading) { setLoadingStage(0); return; }
+    const loadingStageTimer = setInterval(() => {
+      setLoadingStage((current) => (current + 1) % MC_LOADING_STAGES.length);
+    }, 1450);
+    return () => clearInterval(loadingStageTimer);
+  }, [loading]);
 
   // ═══════════════════════════════════════════════════════════════
   //  Message d'accueil — 1 seule fois, avec suggestions cliquables
@@ -792,7 +823,7 @@ export default function McSearch({
   //  Mč : contexte exact, candidats limités et recommandations pertinentes
   // ═══════════════════════════════════════════════════════════════
   const callAI = useCallback(
-    async (userMessages: McMessage[], lastUserQuery: string): Promise<{ reply: string; recommendations: any[] }> => {
+    async (userMessages: McMessage[], lastUserQuery: string): Promise<{ reply: string; recommendations: any[]; suggestions?: string[] }> => {
       const localResult = searchServices(allServices, lastUserQuery);
       const normalizedQuery = normalizeText(lastUserQuery);
       const suppliedServices = Array.isArray(initialServices) && initialServices.length > 0
@@ -800,7 +831,7 @@ export default function McSearch({
         : (initialService ? [initialService] : []);
       const isCompareContext = suppliedServices.length >= 2;
       const asksForCatalog = /\b(cherche|chercher|trouve|trouver|recherche|rechercher|propose|proposer|liste|catalogue|offre|offres|alternative|alternatives|prix|tarif|combien|abonne|abonnes|followers|likes|vue|vues|views|commentaire|commentaires|ecoute|ecoutes|plays|traffic|trafic|membre|membres|partage|partages|comparer|compare|comparaison)\b/i.test(normalizedQuery);
-      const asksForExplanation = /\b(explique|expliquer|information|informations|details|detail|fonctionne|fonctionnement|condition|conditions|limite|limites|garantie|garanties|qualite|difference|differences|avantage|avantages|risque|risques|comment|pourquoi|signifie|sert|utiliser|utilisation|definition|signification|explique|explique|parle|cest|quoi|pourrait)\b/i.test(normalizedQuery);
+      const asksForExplanation = /\b(explique|expliquer|information|informations|details|detail|fonctionne|fonctionnement|condition|conditions|limite|limites|garantie|garanties|qualite|difference|differences|avantage|avantages|risque|risques|comment|pourquoi|signifie|sert|utiliser|utilisation|definition|signification|parle|cest|quoi|pourrait|astuce|astuces|conseil|conseils|baisse|baisses|chute|chutes|perdu|perte|retention|drop|refill|recharge|organique|ratio|equilibre|engagement|vote|votes|sondage|option|ameliore|ameliorer|amelioration|pourquoi|bug|disparait|disparaisse)\b/i.test(normalizedQuery);
       const asksForAlternatives = /\b(compare|comparer|comparaison|alternative|alternatives|autres offres|autres options|recommande|recommander|meilleur|meilleure|lequel|laquelle)\b/i.test(normalizedQuery);
 
       // Recherche simple : répondre localement, sans appel IA. N'afficher des cartes
@@ -847,7 +878,8 @@ export default function McSearch({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: userMessages.slice(-8).map((m) => ({ role: m.role, content: mcPublicText(m.content).slice(0, 1500) })),
+            messages: userMessages.slice(-8).map((m) => ({ role: m.role, content: String(m.content ?? "").slice(0, 1500) })),
+            displayName: firstName,
             candidateServices,
             serviceContext: firstContext,
             comparisonRefs: isCompareContext ? candidateServices.slice(0, 2).map((svc: any) => svc.key) : [],
@@ -856,6 +888,13 @@ export default function McSearch({
         if (!res.ok) throw new Error(`Mč unavailable (${res.status})`);
         const data = await res.json();
         if (!data.success) throw new Error(data.error ?? "AI error");
+        const responseSuggestions: string[] = Array.isArray(data.suggestions)
+          ? data.suggestions
+              .filter((value: unknown): value is string => typeof value === "string")
+              .map((value: string) => formatMcReply(value).slice(0, 90))
+              .filter((value: string) => value.length > 0)
+              .slice(0, 4)
+          : [];
 
         const validRefs: string[] = Array.isArray(data.recommendationRefs)
           ? data.recommendationRefs.filter((ref: unknown) => typeof ref === "string")
@@ -880,8 +919,9 @@ export default function McSearch({
         }
 
         return {
-          reply: mcPublicText(data.reply || "Voici ce que les informations disponibles permettent de confirmer."),
+          reply: formatMcReply(data.reply || "Voici ce que les informations disponibles permettent de confirmer."),
           recommendations,
+          suggestions: responseSuggestions,
         };
       } catch (_error) {
         if (isCompareContext) {
@@ -923,9 +963,9 @@ export default function McSearch({
     setLoading(true);
 
     try {
-      const { reply, recommendations } = await callAI(nextMessages, text);
-      const publicReply = mcPublicText(reply);
-      setMessages(prev => [...prev, { role: "assistant", content: publicReply, recommendations }]);
+      const { reply, recommendations, suggestions } = await callAI(nextMessages, text);
+      const publicReply = formatMcReply(reply);
+      setMessages(prev => [...prev, { role: "assistant", content: publicReply, recommendations, suggestions }]);
     } catch (e: any) {
       setMessages(prev => [
         ...prev,
@@ -949,7 +989,7 @@ export default function McSearch({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const localResult = searchServices(allServices, text);
-    const reply = buildLocalResponse(text, localResult, userName);
+    const reply = formatMcReply(buildLocalResponse(text, localResult, userName));
 
     setMessages(prev => [
       ...prev,
@@ -984,6 +1024,7 @@ export default function McSearch({
   //  Rendu d'un message assistant (avec markdown léger)
   // ═══════════════════════════════════════════════════════════════
   const renderMessageContent = (content: string, isUser: boolean) => {
+    const cleanContent = formatMcReply(content);
     const textColor = isUser
       ? (isDark ? NAVY : "#fff")
       : (isDark ? "#F8F9FA" : "#1A202C");
@@ -994,9 +1035,9 @@ export default function McSearch({
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = regex.exec(cleanContent)) !== null) {
       if (match.index > lastIndex) {
-        parts.push({ type: "text", value: content.slice(lastIndex, match.index) });
+        parts.push({ type: "text", value: cleanContent.slice(lastIndex, match.index) });
       }
       const token = match[0];
       if (token.startsWith("**")) {
@@ -1006,8 +1047,8 @@ export default function McSearch({
       }
       lastIndex = match.index + token.length;
     }
-    if (lastIndex < content.length) {
-      parts.push({ type: "text", value: content.slice(lastIndex) });
+    if (lastIndex < cleanContent.length) {
+      parts.push({ type: "text", value: cleanContent.slice(lastIndex) });
     }
 
     return (
@@ -1193,6 +1234,28 @@ export default function McSearch({
             {msg.recommendations.map((svc: any, i: number) => renderServiceCard(svc, i))}
           </View>
         )}
+        {!isUser && msg.suggestions && msg.suggestions.length > 0 && (
+          <View style={{ width: "100%", marginTop: 8, gap: 7 }}>
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: isDark ? "rgba(255,255,255,0.55)" : "rgba(10,28,58,0.55)" }}>Tu peux choisir une option :</Text>
+            {msg.suggestions.map((suggestion, suggestionIndex) => (
+              <Pressable
+                key={`${idx}-suggestion-${suggestionIndex}`}
+                onPress={() => handleSend(suggestion)}
+                disabled={loading}
+                style={({ pressed }) => ({
+                  alignSelf: "flex-start", maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 8,
+                  paddingVertical: 9, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1,
+                  borderColor: isDark ? "rgba(212,175,55,0.35)" : "rgba(10,28,58,0.12)",
+                  backgroundColor: isDark ? "rgba(212,175,55,0.08)" : "rgba(10,28,58,0.035)",
+                  opacity: pressed ? 0.78 : 1,
+                })}
+              >
+                <Feather name="arrow-up-right" size={13} color={GOLD} />
+                <Text style={{ flexShrink: 1, fontFamily: "Inter_600SemiBold", fontSize: 12, lineHeight: 17, color: isDark ? "#F8F9FA" : "#1A202C" }}>{suggestion}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -1206,7 +1269,8 @@ export default function McSearch({
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <Pressable style={styles.backdrop} onPress={onClose}>
+        <View style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
           <Animated.View
             style={[
               styles.sheet,
@@ -1215,7 +1279,6 @@ export default function McSearch({
                 transform: [{ translateY }],
               },
             ]}
-            onStartShouldSetResponder={() => true}
           >
             {/* ─── Header ─── */}
             <View style={[styles.header, { borderBottomColor: C.separator }]}>
@@ -1290,6 +1353,22 @@ export default function McSearch({
               </Pressable>
             </View>
 
+            {(initialService || (initialServices && initialServices.length > 0)) && (
+              <View style={{ paddingHorizontal: 14, paddingTop: 9 }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10.5, color: C.textMuted, letterSpacing: 0.5, marginBottom: 6 }}>
+                  {initialServices && initialServices.length > 1 ? "OFFRES SÉLECTIONNÉES" : "SERVICE SÉLECTIONNÉ"}
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                  {(initialServices && initialServices.length > 0 ? initialServices.slice(0, 2) : [initialService]).filter(Boolean).map((svc: any, svcIndex: number) => (
+                    <View key={`${svc?._platformKey ?? "service"}-${svc?.id ?? svcIndex}-${svcIndex}`} style={{ maxWidth: "100%", borderRadius: 12, borderWidth: 1, borderColor: C.accent + "55", backgroundColor: C.accent + "0D", paddingHorizontal: 10, paddingVertical: 7 }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: C.accent, marginBottom: 2 }}>{initialServices && initialServices.length > 1 ? (svcIndex === 0 ? "OFFRE A" : "OFFRE B") : "À EXPLIQUER"}</Text>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11.5, lineHeight: 16, color: C.text }} numberOfLines={2}>{mcPublicText(svc?.name) || "Service sélectionné"}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {/* ─── Contenu ─── */}
             <ScrollView
               ref={scrollRef}
@@ -1351,9 +1430,16 @@ export default function McSearch({
               {loading && (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 }}>
                   <ActivityIndicator color={GOLD} size="small" />
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: isDark ? "rgba(255,255,255,0.5)" : "rgba(10,28,58,0.5)" }}>
-                    Mč cherche pour toi…
-                  </Text>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: isDark ? "rgba(255,255,255,0.78)" : "rgba(10,28,58,0.75)" }}>
+                      {MC_LOADING_STAGES[loadingStage]}
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                      {MC_LOADING_STAGES.map((_, stageIndex) => (
+                        <View key={stageIndex} style={{ width: stageIndex === loadingStage ? 22 : 8, height: 4, borderRadius: 3, backgroundColor: stageIndex <= loadingStage ? GOLD : (isDark ? "rgba(255,255,255,0.14)" : "rgba(10,28,58,0.12)") }} />
+                      ))}
+                    </View>
+                  </View>
                 </View>
               )}
             </ScrollView>
@@ -1421,7 +1507,7 @@ export default function McSearch({
               </Pressable>
             </View>
           </Animated.View>
-        </Pressable>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
