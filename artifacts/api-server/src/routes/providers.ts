@@ -4,8 +4,100 @@ import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getFirebaseAdmin } from "../lib/firebase-admin.js";
 import { getFirestore } from "firebase-admin/firestore";
 import mcKnowledge from "../knowledge/mc-knowledge.fr.md";
+import { invalidateProfileCache } from "./me.js";
+import { invalidateWalletCache } from "./wallet.js";
 
 const router: ReturnType<typeof Router> = Router();
+
+
+// MC_BILLING_V1 — facturation et quota quotidien côté serveur.
+// Le solde réel reste en XAF; le prix USD est un affichage approximatif uniquement.
+const MC_USD_XAF_RATE = 585.5;
+type McBillingReservation = {
+  uid: string; requestId: string; dayKey: string; isFree: boolean;
+  baseXAF: number; reservedXAF: number; startedAtMs: number; active: boolean;
+};
+function getMcDayKey(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Douala", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return pick("year") + "-" + pick("month") + "-" + pick("day");
+}
+function estimateMcPrice(messageText: string, isComparison: boolean, hasServiceContext: boolean): { baseXAF: number; reserveXAF: number } {
+  const text = String(messageText ?? "").trim();
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  let baseXAF = 50;
+  if (isComparison) baseXAF = 100;
+  else if (hasServiceContext || /conseil|conseille|strategie|pourquoi|baisse|perte|garantie|refill|reappro|optimis|amelior|plan|explique|comprendre|information|condition/.test(normalized)) baseXAF = 75;
+  if (text.length > 220) baseXAF = Math.max(baseXAF, 100);
+  if (text.length > 500) baseXAF = Math.max(baseXAF, 125);
+  if (text.length > 1000) baseXAF = 150;
+  baseXAF = Math.max(50, Math.min(150, Math.round(baseXAF)));
+  return { baseXAF, reserveXAF: Math.min(150, baseXAF + (baseXAF >= 100 ? 50 : 25)) };
+}
+function finalMcPrice(baseXAF: number, reserveXAF: number, durationMs: number): number {
+  const timeSurcharge = durationMs < 2500 ? 0 : durationMs < 7000 ? 10 : durationMs < 15000 ? 25 : 50;
+  return Math.max(50, Math.min(150, reserveXAF, baseXAF + timeSurcharge));
+}
+async function rollbackMcReservation(reservation: McBillingReservation): Promise<void> {
+  if (!reservation.active) return;
+  const db = getFirestore();
+  const userRef = db.doc("users/" + reservation.uid);
+  const dailyRef = userRef.collection("mcDailyUsage").doc(reservation.dayKey);
+  const requestRef = userRef.collection("mcRequests").doc(reservation.requestId);
+  await db.runTransaction(async (tx) => {
+    const [userSnap, dailySnap, requestSnap] = await Promise.all([tx.get(userRef), tx.get(dailyRef), tx.get(requestRef)]);
+    if (!requestSnap.exists) return;
+    const requestData = requestSnap.data() ?? {};
+    if (requestData.status !== "processing") return;
+    const daily = dailySnap.data() ?? {};
+    if (requestData.free === true) {
+      if (daily.freeRequestId === reservation.requestId) tx.set(dailyRef, { freeUsed: false, freeRequestId: null, totalRequests: Math.max(0, (Number(daily.totalRequests) || 0) - 1), updatedAt: new Date().toISOString() }, { merge: true });
+    } else if (userSnap.exists) {
+      const balance = Math.max(0, Number(userSnap.data()?.balance ?? 0) || 0);
+      const reserved = Math.max(0, Number(requestData.reservedXAF ?? reservation.reservedXAF) || 0);
+      tx.update(userRef, { balance: balance + reserved });
+      tx.set(dailyRef, {
+        paidRequests: Math.max(0, (Number(daily.paidRequests) || 0) - 1),
+        totalRequests: Math.max(0, (Number(daily.totalRequests) || 0) - 1), updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    }
+    tx.update(requestRef, { status: "failed_refunded", reservedXAF: 0, chargedXAF: 0, failedAt: new Date().toISOString() });
+  });
+  reservation.active = false;
+  invalidateProfileCache(reservation.uid);
+  invalidateWalletCache(reservation.uid);
+}
+async function settleMcReservation(reservation: McBillingReservation, durationMs: number): Promise<{
+  chargedXAF: number; balanceXAF: number; freeRequestsRemaining: number; paidRequestsToday: number;
+}> {
+  const chargedXAF = reservation.isFree ? 0 : finalMcPrice(reservation.baseXAF, reservation.reservedXAF, durationMs);
+  const db = getFirestore();
+  const userRef = db.doc("users/" + reservation.uid);
+  const dailyRef = userRef.collection("mcDailyUsage").doc(reservation.dayKey);
+  const requestRef = userRef.collection("mcRequests").doc(reservation.requestId);
+  const activityRef = db.collection("activites").doc("mc-" + reservation.uid + "-" + reservation.requestId);
+  const result = await db.runTransaction(async (tx) => {
+    const [userSnap, dailySnap, requestSnap] = await Promise.all([tx.get(userRef), tx.get(dailyRef), tx.get(requestRef)]);
+    if (!userSnap.exists || !requestSnap.exists || requestSnap.data()?.status !== "processing") throw new Error("État de facturation Mč incohérent.");
+    const daily = dailySnap.data() ?? {};
+    const balance = Math.max(0, Number(userSnap.data()?.balance ?? 0) || 0);
+    const refund = Math.max(0, reservation.reservedXAF - chargedXAF);
+    const settledBalance = balance + refund;
+    if (refund > 0) tx.update(userRef, { balance: settledBalance });
+    tx.update(requestRef, { status: "completed", reservedXAF: 0, chargedXAF, durationMs, completedAt: new Date().toISOString(), pricingVersion: 1 });
+    tx.set(dailyRef, { totalChargedXAF: Math.max(0, Number(daily.totalChargedXAF) || 0) + chargedXAF, updatedAt: new Date().toISOString() }, { merge: true });
+    if (chargedXAF > 0) tx.set(activityRef, {
+      userId: reservation.uid, type: "commande", label: "Demande à Mč", amount: chargedXAF,
+      status: "completed", createdAt: new Date().toISOString(), source: "mc", mcRequestId: reservation.requestId, durationMs,
+    });
+    return { balanceXAF: settledBalance, freeRequestsRemaining: 0, paidRequestsToday: Math.max(0, Number(daily.paidRequests) || 0) };
+  });
+  reservation.active = false;
+  invalidateProfileCache(reservation.uid);
+  invalidateWalletCache(reservation.uid);
+  return { chargedXAF, ...result };
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // Helpers d'ordre utilisateur
@@ -605,7 +697,33 @@ async function smmPanelOrder(
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
 
-router.post("/mc/chat", async (req: Request, res: ExpressResponse) => {
+router.get("/mc/usage", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
+  try {
+    getFirebaseAdmin();
+    const db = getFirestore();
+    const uid = req.uid!;
+    const dayKey = getMcDayKey();
+    const userRef = db.doc("users/" + uid);
+    const dailyRef = userRef.collection("mcDailyUsage").doc(dayKey);
+    const [userSnap, dailySnap] = await Promise.all([userRef.get(), dailyRef.get()]);
+    if (!userSnap.exists) { res.status(404).json({ success: false, error: "Profil utilisateur introuvable." }); return; }
+    const daily = dailySnap.data() ?? {};
+    const user = userSnap.data() ?? {};
+    res.json({ success: true, data: {
+      dateKey: dayKey,
+      freeRequestsRemaining: daily.freeUsed === true ? 0 : 1,
+      paidRequestsToday: Math.max(0, Number(daily.paidRequests) || 0),
+      balanceXAF: Math.max(0, Number(user.balance) || 0),
+      usdXafRate: MC_USD_XAF_RATE,
+    }});
+  } catch (error) {
+    console.error("[mc/usage] Erreur:", error);
+    res.status(500).json({ success: false, error: "Impossible de vérifier le quota Mč." });
+  }
+});
+
+router.post("/mc/chat", requireAuth, async (req: AuthRequest, res: ExpressResponse) => {
+  let mcBillingReservation: McBillingReservation | null = null;
   try {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
@@ -782,6 +900,53 @@ SUGGESTIONS_JSON: ["Je veux connaître les conditions", "Je veux comparer les pr
 Ces lignes ne font pas partie du texte destiné à la personne.`;
 
 
+    // Identité et quota contrôlés exclusivement côté serveur.
+    const requestId = typeof body.requestId === "string" ? body.requestId.trim() : "";
+    if (!/^[A-Za-z0-9_-]{12,100}$/.test(requestId)) { res.status(400).json({ success: false, error: "Identifiant de demande invalide." }); return; }
+    getFirebaseAdmin();
+    const billingDb = getFirestore();
+    const uid = req.uid!;
+    const dayKey = getMcDayKey();
+    const userRef = billingDb.doc("users/" + uid);
+    const dailyRef = userRef.collection("mcDailyUsage").doc(dayKey);
+    const requestRef = userRef.collection("mcRequests").doc(requestId);
+    const lastUserText = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const isComparisonRequest = comparisonCandidates.length === 2 || requestedComparisonRefs.length === 2 || /compare|comparaison|difference|différence|comparer/i.test(lastUserText);
+    const pricePlan = estimateMcPrice(lastUserText, isComparisonRequest, Boolean(serviceContext));
+    const reservationResult: any = await billingDb.runTransaction(async (tx) => {
+      const [userSnap, dailySnap, requestSnap] = await Promise.all([tx.get(userRef), tx.get(dailyRef), tx.get(requestRef)]);
+      if (!userSnap.exists) return { kind: "missing_user" };
+      if (requestSnap.exists) return { kind: "duplicate_request" };
+      const user = userSnap.data() ?? {};
+      const daily = dailySnap.data() ?? {};
+      const balanceXAF = Math.max(0, Number(user.balance) || 0);
+      const isFree = daily.freeUsed !== true;
+      const reservedXAF = isFree ? 0 : pricePlan.reserveXAF;
+      if (!isFree && balanceXAF < reservedXAF) return { kind: "insufficient_balance", balanceXAF };
+      if (!isFree) tx.update(userRef, { balance: balanceXAF - reservedXAF });
+      tx.set(dailyRef, {
+        dateKey: dayKey, freeUsed: true, freeRequestId: isFree ? requestId : (daily.freeRequestId ?? null),
+        paidRequests: (Number(daily.paidRequests) || 0) + (isFree ? 0 : 1),
+        totalRequests: (Number(daily.totalRequests) || 0) + 1, updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      tx.create(requestRef, {
+        requestId, userId: uid, dateKey: dayKey, status: "processing", free: isFree,
+        baseXAF: isFree ? 0 : pricePlan.baseXAF, reservedXAF, chargedXAF: 0, createdAt: new Date().toISOString(),
+      });
+      return { kind: "reserved", isFree, baseXAF: isFree ? 0 : pricePlan.baseXAF, reservedXAF };
+    });
+    if (reservationResult.kind === "missing_user") { res.status(404).json({ success: false, error: "Profil utilisateur introuvable." }); return; }
+    if (reservationResult.kind === "duplicate_request") { res.status(409).json({ success: false, error: "Cette demande a déjà été traitée; elle ne sera pas débitée une seconde fois." }); return; }
+    if (reservationResult.kind === "insufficient_balance") {
+      res.status(402).json({ success: false, code: "MC_INSUFFICIENT_BALANCE", error: "Ton solde ne suffit pas pour cette demande. Aucune somme n'a été débitée. Recharge ton solde puis réessaie.", balanceXAF: reservationResult.balanceXAF });
+      return;
+    }
+    mcBillingReservation = {
+      uid, requestId, dayKey, isFree: reservationResult.isFree, baseXAF: reservationResult.baseXAF,
+      reservedXAF: reservationResult.reservedXAF, startedAtMs: Date.now(), active: true,
+    };
+    if (!mcBillingReservation.isFree) { invalidateProfileCache(uid); invalidateWalletCache(uid); }
+
     const groqRes = await fetch(GROQ_API_URL, {
       method: "POST",
       headers: {
@@ -803,8 +968,7 @@ Ces lignes ne font pas partie du texte destiné à la personne.`;
     if (!groqRes.ok) {
       const errText = await groqRes.text().catch(() => "");
       console.error("[mc/chat] Groq error:", groqRes.status, errText.slice(0, 500));
-      res.status(502).json({ success: false, error: `Erreur IA (HTTP ${groqRes.status})` });
-      return;
+      throw new Error("Mč est temporairement indisponible.");
     }
 
     const groqData = await groqRes.json() as any;
@@ -862,6 +1026,22 @@ Ces lignes ne font pas partie du texte destiné à la personne.`;
       .replace(/SUGGESTIONS_JSON:\s*\[[\s\S]*?\]/gi, "")
       .trim());
 
+    if (!mcBillingReservation) throw new Error("Réservation de facturation manquante.");
+    const mcDurationMs = Math.max(0, Date.now() - mcBillingReservation.startedAtMs);
+    const mcChargedXAF = mcBillingReservation.isFree ? 0 : finalMcPrice(mcBillingReservation.baseXAF, mcBillingReservation.reservedXAF, mcDurationMs);
+    const mcSettlement = await settleMcReservation(mcBillingReservation, mcDurationMs);
+    mcBillingReservation.active = false;
+    const mcBilling = {
+      isFree: mcBillingReservation.isFree,
+      chargedXAF: mcChargedXAF,
+      chargedUSD: Number((mcChargedXAF / MC_USD_XAF_RATE).toFixed(2)),
+      balanceXAF: mcSettlement.balanceXAF,
+      freeRequestsRemaining: mcSettlement.freeRequestsRemaining,
+      paidRequestsToday: mcSettlement.paidRequestsToday,
+      durationMs: mcDurationMs,
+      usdXafRate: MC_USD_XAF_RATE,
+    };
+
     const idsFromKeys = recommendationKeys
       .map((key) => safeCandidates.find((s) => s.key === key)?.id ?? "")
       .map((id) => Number(id))
@@ -875,10 +1055,21 @@ Ces lignes ne font pas partie du texte destiné à la personne.`;
       suggestions,
       // Champ numérique conservé pour ne pas casser les anciennes versions mobiles.
       recommendations: legacyIds.length ? legacyIds : idsFromKeys,
+      billing: mcBilling,
     });
   } catch (e: any) {
+    if (mcBillingReservation?.active) {
+      try { await rollbackMcReservation(mcBillingReservation); }
+      catch (refundError) { console.error("[mc/chat] Remboursement de sécurité impossible:", refundError); }
+    }
     console.error("[mc/chat] Erreur:", e?.message);
-    res.status(500).json({ success: false, error: "Une erreur est survenue pendant la réponse de Mč." });
+    const wasReserved = Boolean(mcBillingReservation);
+    res.status(wasReserved ? 502 : 500).json({
+      success: false,
+      error: wasReserved
+        ? "Mč est temporairement indisponible. La réservation a été annulée lorsque cela a été possible; vérifie ton solde avant de réessayer."
+        : "Une erreur est survenue pendant la préparation de la demande Mč.",
+    });
   }
 });
 

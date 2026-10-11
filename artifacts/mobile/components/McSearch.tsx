@@ -19,6 +19,7 @@ import {
 } from "react-native";
 
 import { BASE_URL } from "@/services/api";
+import { getFreshToken } from "@/services/tokenStore";
 
 // ═══════════════════════════════════════════════════════════════
 //  Constantes de style
@@ -728,11 +729,28 @@ const MC_LOADING_STAGES = [
 // ═══════════════════════════════════════════════════════════════
 //  Types
 // ═══════════════════════════════════════════════════════════════
+interface McBillingInfo {
+  isFree: boolean;
+  chargedXAF: number;
+  chargedUSD: number;
+  balanceXAF: number;
+  freeRequestsRemaining: number;
+  paidRequestsToday: number;
+  durationMs: number;
+  usdXafRate: number;
+}
+interface McUsageInfo {
+  freeRequestsRemaining: number;
+  paidRequestsToday: number;
+  balanceXAF: number;
+  usdXafRate: number;
+}
 interface McMessage {
   role: "user" | "assistant";
   content: string;
   recommendations?: any[];
   suggestions?: string[];
+  billing?: McBillingInfo;
   isGreeting?: boolean;
 }
 
@@ -772,10 +790,40 @@ export default function McSearch({
   const [loadingStage, setLoadingStage] = useState(0);
   const [searchMode, setSearchMode] = useState<"ia" | "text">("ia");
   const [showStarters, setShowStarters] = useState(true);
+  const [mcUsage, setMcUsage] = useState<McUsageInfo | null>(null);
+  const [mcUsageError, setMcUsageError] = useState("");
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
 
   const firstName = (userName || "").split(" ")[0] || "";
+
+  const refreshMcUsage = useCallback(async () => {
+    const token = await getFreshToken();
+    if (!token) {
+      setMcUsageError("Connecte-toi pour consulter tes demandes Mč.");
+      return;
+    }
+    const response = await fetch(BASE_URL + "api/mc/usage", {
+      method: "GET",
+      headers: { Authorization: "Bearer " + token },
+    });
+    const payload = await response.json().catch(() => ({} as any));
+    if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error ?? "Impossible de vérifier tes demandes Mč.");
+    setMcUsage({
+      freeRequestsRemaining: Number(payload.data.freeRequestsRemaining) > 0 ? 1 : 0,
+      paidRequestsToday: Math.max(0, Number(payload.data.paidRequestsToday) || 0),
+      balanceXAF: Math.max(0, Number(payload.data.balanceXAF) || 0),
+      usdXafRate: Number(payload.data.usdXafRate) > 0 ? Number(payload.data.usdXafRate) : 585.5,
+    });
+    setMcUsageError("");
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    refreshMcUsage().catch((error: unknown) => {
+      setMcUsageError(error instanceof Error ? error.message : "Impossible de vérifier les demandes Mč.");
+    });
+  }, [visible, refreshMcUsage]);
 
   useEffect(() => {
     if (!loading) { setLoadingStage(0); return; }
@@ -823,7 +871,7 @@ export default function McSearch({
   //  Mč : contexte exact, candidats limités et recommandations pertinentes
   // ═══════════════════════════════════════════════════════════════
   const callAI = useCallback(
-    async (userMessages: McMessage[], lastUserQuery: string): Promise<{ reply: string; recommendations: any[]; suggestions?: string[] }> => {
+    async (userMessages: McMessage[], lastUserQuery: string): Promise<{ reply: string; recommendations: any[]; suggestions?: string[]; billing?: McBillingInfo }> => {
       const localResult = searchServices(allServices, lastUserQuery);
       const normalizedQuery = normalizeText(lastUserQuery);
       const suppliedServices = Array.isArray(initialServices) && initialServices.length > 0
@@ -833,15 +881,6 @@ export default function McSearch({
       const asksForCatalog = /\b(cherche|chercher|trouve|trouver|recherche|rechercher|propose|proposer|liste|catalogue|offre|offres|alternative|alternatives|prix|tarif|combien|abonne|abonnes|followers|likes|vue|vues|views|commentaire|commentaires|ecoute|ecoutes|plays|traffic|trafic|membre|membres|partage|partages|comparer|compare|comparaison)\b/i.test(normalizedQuery);
       const asksForExplanation = /\b(explique|expliquer|information|informations|details|detail|fonctionne|fonctionnement|condition|conditions|limite|limites|garantie|garanties|qualite|difference|differences|avantage|avantages|risque|risques|comment|pourquoi|signifie|sert|utiliser|utilisation|definition|signification|parle|cest|quoi|pourrait|astuce|astuces|conseil|conseils|baisse|baisses|chute|chutes|perdu|perte|retention|drop|refill|recharge|organique|ratio|equilibre|engagement|vote|votes|sondage|option|ameliore|ameliorer|amelioration|pourquoi|bug|disparait|disparaisse)\b/i.test(normalizedQuery);
       const asksForAlternatives = /\b(compare|comparer|comparaison|alternative|alternatives|autres offres|autres options|recommande|recommander|meilleur|meilleure|lequel|laquelle)\b/i.test(normalizedQuery);
-
-      // Recherche simple : répondre localement, sans appel IA. N'afficher des cartes
-      // que si le client cherche réellement des services/offres.
-      if (!suppliedServices.length && !asksForExplanation && localResult.confidence === "high" && localResult.results.length >= 3) {
-        return {
-          reply: mcPublicText(buildLocalResponse(lastUserQuery, localResult, userName)),
-          recommendations: asksForCatalog ? localResult.results.slice(0, 6).map((r) => r.svc) : [],
-        };
-      }
 
       const localCandidates = localResult.results.slice(0, 8).map((r) => r.svc);
       const shortlist: any[] = [];
@@ -873,11 +912,15 @@ export default function McSearch({
         ? candidateServices[0] ?? null
         : (isCompareContext ? null : null);
 
+      const token = await getFreshToken();
+      if (!token) throw new Error("Reconnecte-toi pour utiliser Mč.");
+      const requestId = "mc-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
       try {
-        const res = await fetch(`${BASE_URL}api/mc/chat`, {
+        const res = await fetch(BASE_URL + "api/mc/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
           body: JSON.stringify({
+            requestId,
             messages: userMessages.slice(-8).map((m) => ({ role: m.role, content: String(m.content ?? "").slice(0, 1500) })),
             displayName: firstName,
             candidateServices,
@@ -885,9 +928,22 @@ export default function McSearch({
             comparisonRefs: isCompareContext ? candidateServices.slice(0, 2).map((svc: any) => svc.key) : [],
           }),
         });
-        if (!res.ok) throw new Error(`Mč unavailable (${res.status})`);
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error ?? "AI error");
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data.success) {
+          const error = new Error(String(data.error ?? ("La demande Mč a échoué (HTTP " + res.status + ").")));
+          (error as Error & { status?: number }).status = res.status;
+          throw error;
+        }
+        if (data.billing) {
+          setMcUsage((previous) => ({
+            ...(previous ?? { freeRequestsRemaining: 0, paidRequestsToday: 0, balanceXAF: 0, usdXafRate: 585.5 }),
+            freeRequestsRemaining: Number(data.billing.freeRequestsRemaining) > 0 ? 1 : 0,
+            paidRequestsToday: Math.max(0, Number(data.billing.paidRequestsToday) || 0),
+            balanceXAF: Math.max(0, Number(data.billing.balanceXAF) || 0),
+            usdXafRate: Number(data.billing.usdXafRate) > 0 ? Number(data.billing.usdXafRate) : 585.5,
+          }));
+          setMcUsageError("");
+        }
         const responseSuggestions: string[] = Array.isArray(data.suggestions)
           ? data.suggestions
               .filter((value: unknown): value is string => typeof value === "string")
@@ -922,26 +978,11 @@ export default function McSearch({
           reply: formatMcReply(data.reply || "Voici ce que les informations disponibles permettent de confirmer."),
           recommendations,
           suggestions: responseSuggestions,
+          billing: data.billing as McBillingInfo | undefined,
         };
-      } catch (_error) {
-        if (isCompareContext) {
-          return {
-            reply: "Je n’ai pas pu joindre l’assistant pour analyser ces deux offres. Les deux services restent sélectionnés ; réessaie lorsque la connexion sera rétablie.",
-            recommendations: suppliedServices,
-          };
-        }
-        if (asksForExplanation || (suppliedServices.length > 0 && !asksForAlternatives)) {
-          return {
-            reply: "Je n’ai pas pu obtenir une réponse fiable pour le moment. Réessaie lorsque la connexion sera rétablie ; je préfère te le dire plutôt que d’inventer des caractéristiques ou de proposer des services au hasard.",
-            recommendations: [],
-          };
-        }
-        return {
-          reply: mcPublicText(buildLocalResponse(lastUserQuery, localResult, userName)),
-          recommendations: asksForCatalog && (!asksForExplanation || asksForAlternatives) && (!suppliedServices.length || asksForAlternatives) && localResult.confidence !== "low"
-            ? localResult.results.slice(0, 5).map((r) => r.svc)
-            : [],
-        };
+      } catch (error) {
+        // La route contrôle la facturation; on ne répond jamais gratuitement par fallback.
+        throw error;
       }
     },
     [allServices, userName, initialService, initialServices]
@@ -963,17 +1004,18 @@ export default function McSearch({
     setLoading(true);
 
     try {
-      const { reply, recommendations, suggestions } = await callAI(nextMessages, text);
+      const { reply, recommendations, suggestions, billing } = await callAI(nextMessages, text);
       const publicReply = formatMcReply(reply);
-      setMessages(prev => [...prev, { role: "assistant", content: publicReply, recommendations, suggestions }]);
+      setMessages(prev => [...prev, { role: "assistant", content: publicReply, recommendations, suggestions, billing }]);
     } catch (e: any) {
-      setMessages(prev => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `😅 Je n'ai pas pu traiter ta demande. Réessaie en une phrase simple (ex: "abonnés Instagram").`,
-        },
-      ]);
+      const errorMessage = e?.status === 402
+        ? "Ton solde ne suffit pas pour cette demande. Aucune somme n'a été débitée. Recharge ton compte, puis réessaie."
+        : e?.status === 401
+        ? "Reconnecte-toi pour utiliser Mč."
+        : (typeof e?.message === "string" && e.message.length < 220
+            ? e.message
+            : "Mč est temporairement indisponible. Aucune somme ne sera conservée pour une demande qui échoue.");
+      setMessages(prev => [...prev, { role: "assistant", content: errorMessage }]);
     } finally {
       setLoading(false);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
@@ -1234,6 +1276,16 @@ export default function McSearch({
             {msg.recommendations.map((svc: any, i: number) => renderServiceCard(svc, i))}
           </View>
         )}
+        {!isUser && msg.billing && (
+          <View style={{ marginTop: 6, marginBottom: 2, paddingHorizontal: 4, flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Feather name={msg.billing.isFree ? "gift" : "credit-card"} size={11} color={C.textMuted} />
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: C.textMuted }}>
+              {msg.billing.isFree
+                ? "Demande gratuite du jour · $0.00"
+                : "Coût de cette réponse : $" + Number(msg.billing.chargedUSD || 0).toFixed(2)}
+            </Text>
+          </View>
+        )}
         {!isUser && msg.suggestions && msg.suggestions.length > 0 && (
           <View style={{ width: "100%", marginTop: 8, gap: 7 }}>
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: isDark ? "rgba(255,255,255,0.55)" : "rgba(10,28,58,0.55)" }}>Tu peux choisir une option :</Text>
@@ -1352,6 +1404,19 @@ export default function McSearch({
                 </Text>
               </Pressable>
             </View>
+
+            {(mcUsage || mcUsageError) && (
+              <View style={{ marginHorizontal: 14, marginTop: 9, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.accent + "35", backgroundColor: C.accent + "0A", flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Feather name={mcUsage && mcUsage.freeRequestsRemaining > 0 ? "gift" : "credit-card"} size={14} color={C.accent} />
+                <Text style={{ flex: 1, fontFamily: "Inter_500Medium", fontSize: 11, lineHeight: 15, color: C.textSecondary }}>
+                  {mcUsage
+                    ? (mcUsage.freeRequestsRemaining > 0
+                        ? "Demande gratuite du jour : 1 restante."
+                        : "Demande gratuite terminée pour aujourd’hui. Les prochaines demandes seront payantes.")
+                    : mcUsageError}
+                </Text>
+              </View>
+            )}
 
             {(initialService || (initialServices && initialServices.length > 0)) && (
               <View style={{ paddingHorizontal: 14, paddingTop: 9 }}>
